@@ -13,6 +13,7 @@ import OrderSuccess from "./pages/OrderSuccess";
 import WholesaleTerms from "./pages/WholesaleTerms";
 import Contacts from "./pages/Contacts";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import Account from "./pages/Account";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
@@ -37,6 +38,7 @@ const App = () => (
           <Route path="/wholesale-terms" element={<WholesaleTerms />} />
           <Route path="/contacts" element={<Contacts />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/account" element={<Account />} />
           <Route path="/account/orders" element={<Account />} />
           <Route path="/admin" element={<Admin />} />
