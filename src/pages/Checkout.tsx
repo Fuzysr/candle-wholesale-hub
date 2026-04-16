@@ -111,7 +111,7 @@ const Checkout = () => {
         phone: form.phone,
         inn: form.inn,
         email: form.email,
-      }])
+      } as never])
       .select()
       .single();
 
