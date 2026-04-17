@@ -103,14 +103,44 @@ export default {
           to: { height: "0" },
         },
         "fade-in": {
-          from: { opacity: "0", transform: "translateY(4px)" },
-          to: { opacity: "1", transform: "translateY(0)" },
+          from: { opacity: "0", transform: "translateY(12px)", filter: "blur(4px)" },
+          to: { opacity: "1", transform: "translateY(0)", filter: "blur(0)" },
+        },
+        "hero-in": {
+          from: {
+            opacity: "0",
+            transform: "translateY(28px) scale(0.97)",
+            filter: "blur(10px)",
+          },
+          to: {
+            opacity: "1",
+            transform: "translateY(0) scale(1)",
+            filter: "blur(0)",
+          },
+        },
+        "card-in": {
+          // Gentler variant of hero-in — smaller travel and blur, so tiny
+          // floating cards don't feel like they "pop" into existence.
+          from: {
+            opacity: "0",
+            transform: "translateY(14px) scale(0.985)",
+            filter: "blur(5px)",
+          },
+          to: {
+            opacity: "1",
+            transform: "translateY(0) scale(1)",
+            filter: "blur(0)",
+          },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in": "fade-in 0.18s ease-out both",
+        "fade-in": "fade-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both",
+        // Longer, cinematic reveal for the hero visual column
+        "hero-in": "hero-in 1.6s cubic-bezier(0.22, 1, 0.36, 1) both",
+        // Slower, softer reveal for small floating UI (e.g. hero spec card)
+        "card-in": "card-in 2s cubic-bezier(0.22, 1, 0.36, 1) both",
       },
     },
   },

@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Zap } from "lucide-react";
+import { ArrowRight, Zap, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Reveal from "@/components/ui/reveal";
+import CountUp from "@/components/ui/count-up";
 import heroImage from "@/assets/hero-candles.jpg";
 
 const Hero = () => {
@@ -8,21 +10,25 @@ const Hero = () => {
     <section className="border-b border-border">
       <div className="container grid items-center gap-10 py-12 md:py-20 lg:grid-cols-2 lg:gap-16">
         <div className="animate-fade-in">
-          <div className="eyebrow mb-4">B2B · Опт от 1 коробки</div>
+          {/* Badge */}
+          <div className="mb-6 inline-flex items-center gap-2.5 rounded-full border border-primary/20 bg-gradient-to-r from-primary/30 via-primary/12 to-surface px-4 py-2 text-sm font-medium text-foreground/80 shadow-[0_10px_22px_-6px_rgba(0,0,0,0.28),0_4px_8px_-2px_rgba(0,0,0,0.12),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-sm">
+            <Package className="h-3.5 w-3.5 text-primary" strokeWidth={2.25} />
+            Оптовые поставки свечей
+          </div>
+
           <h1 className="text-balance text-4xl font-semibold leading-[1.05] tracking-tight md:text-5xl lg:text-6xl">
-            Свечи оптом для&nbsp;
-            <span className="text-primary">декораторов</span>, флористов и&nbsp;отелей.
+            Свечи оптом для&nbsp;<span className="text-primary">бизнеса</span>&nbsp;— от&nbsp;1&nbsp;коробки
           </h1>
           <p className="mt-5 max-w-lg text-base text-muted-foreground md:text-lg">
-            Прозрачные цены, скидки от объёма, отгрузка за 1–2 дня.
-            Заявка вместо корзины — счёт по реквизитам в течение 2 часов.
+            Прямые отгрузки со склада для декораторов, флористов, отелей и event-агентств.
+            Счёт по реквизитам в течение 2 часов, скидки от объёма и отгрузка за&nbsp;1–2&nbsp;рабочих дня.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Button asChild size="lg" variant="hero" className="gap-2">
+            <Button asChild size="lg" variant="hero" className="gap-2 group">
               <Link to="/catalog">
                 Перейти в каталог
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="gap-2">
@@ -33,25 +39,58 @@ const Hero = () => {
             </Button>
           </div>
 
-          {/* Mini KPI strip */}
-          <dl className="mt-10 grid grid-cols-3 gap-6 border-t border-border pt-6 max-w-md">
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-muted-foreground">Минимум</dt>
-              <dd className="mt-1 price text-xl">1 коробка</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-muted-foreground">Скидка</dt>
-              <dd className="mt-1 price text-xl">до&nbsp;15%</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase tracking-wider text-muted-foreground">Отгрузка</dt>
-              <dd className="mt-1 price text-xl">1–2 дня</dd>
-            </div>
+          {/* Mini KPI strip with staggered reveal, count-up & per-cell hover */}
+          <dl className="mt-10 grid grid-cols-3 gap-2 border-t border-border pt-6 max-w-md">
+            <Reveal delay={0} y={18}>
+              <div className="group relative -mx-2 cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute left-2 right-2 top-0 h-px origin-left scale-x-0 bg-primary/70 transition-transform duration-500 ease-out group-hover:scale-x-100"
+                />
+                <dt className="text-xs uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
+                  Минимум
+                </dt>
+                <dd className="mt-1 price text-xl transition-colors group-hover:text-primary">
+                  <CountUp to={1} duration={900} /> коробка
+                </dd>
+              </div>
+            </Reveal>
+            <Reveal delay={180} y={18}>
+              <div className="group relative -mx-2 cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute left-2 right-2 top-0 h-px origin-left scale-x-0 bg-primary/70 transition-transform duration-500 ease-out group-hover:scale-x-100"
+                />
+                <dt className="text-xs uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
+                  Скидка
+                </dt>
+                <dd className="mt-1 price text-xl transition-colors group-hover:text-primary">
+                  до&nbsp;<CountUp to={15} duration={1400} />%
+                </dd>
+              </div>
+            </Reveal>
+            <Reveal delay={360} y={18}>
+              <div className="group relative -mx-2 cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute left-2 right-2 top-0 h-px origin-left scale-x-0 bg-primary/70 transition-transform duration-500 ease-out group-hover:scale-x-100"
+                />
+                <dt className="text-xs uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
+                  Отгрузка
+                </dt>
+                <dd className="mt-1 price text-xl transition-colors group-hover:text-primary">
+                  1–2 дня
+                </dd>
+              </div>
+            </Reveal>
           </dl>
         </div>
 
-        {/* Visual */}
-        <div className="relative">
+        {/* Visual — cinematic reveal: translate + scale + blur, softer than `fade-in` */}
+        <div
+          className="relative animate-hero-in [transform-origin:50%_60%] motion-reduce:animate-none"
+          style={{ animationDelay: "200ms" }}
+        >
           <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-md">
             <img
               src={heroImage}
@@ -61,20 +100,33 @@ const Hero = () => {
             />
           </div>
 
-          {/* Floating spec card */}
-          <div className="pointer-events-none absolute -bottom-5 -left-3 hidden w-64 rounded-lg border border-border bg-surface p-4 shadow-md sm:block md:-left-6">
+          {/* Floating spec card — gentler + slower `card-in` so it doesn't "pop" */}
+          <Link
+            to="/catalog?q=PIL-070-IV"
+            aria-label="Перейти к товару PIL-070-IV: Свеча столбчатая 7×15 см"
+            style={{ animationDelay: "450ms" }}
+            className="group absolute -bottom-5 -left-3 hidden w-64 animate-card-in rounded-lg border border-border bg-surface p-4 shadow-md transition-all duration-300 ease-out [transform-origin:0%_100%] hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg focus-visible:-translate-y-1 focus-visible:border-primary/40 focus-visible:shadow-lg motion-reduce:animate-none sm:block md:-left-6"
+          >
             <div className="flex items-baseline justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Артикул PIL-070-IV</span>
+              <span className="text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+                Артикул PIL-070-IV
+              </span>
               <span className="rounded-sm bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-success">
                 в наличии
               </span>
             </div>
-            <div className="mt-2 text-sm font-medium">Свеча столбчатая 7×15 см</div>
+            <div className="mt-2 text-sm font-medium transition-colors group-hover:text-primary">
+              Свеча столбчатая 7×15 см
+            </div>
             <div className="mt-3 flex items-baseline justify-between">
               <span className="text-xs text-muted-foreground">за коробку (12 шт)</span>
               <span className="price text-base">1 920 ₽</span>
             </div>
-          </div>
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-4 bottom-1.5 h-px origin-left scale-x-0 bg-primary/60 transition-transform duration-300 ease-out group-hover:scale-x-100"
+            />
+          </Link>
         </div>
       </div>
     </section>

@@ -1,10 +1,12 @@
 import { Link } from "react-router-dom";
 import { Zap, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Reveal from "@/components/ui/reveal";
 
 const QuickOrderTeaser = () => {
   return (
     <section className="container py-16 md:py-20">
+      <Reveal>
       <div className="grid items-center gap-8 rounded-xl border border-border bg-foreground p-8 text-background md:grid-cols-2 md:p-12">
         <div>
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
@@ -34,7 +36,7 @@ const QuickOrderTeaser = () => {
         </div>
 
         {/* Mock table preview */}
-        <div className="rounded-lg border border-background/15 bg-background/5 p-3 backdrop-blur">
+        <div className="rounded-lg border border-background/15 bg-background/5 p-3 backdrop-blur transition-transform duration-500 hover:-rotate-[0.3deg] hover:scale-[1.01]">
           <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-2 pb-2 text-[10px] uppercase tracking-wider text-background/60">
             <span>Артикул / товар</span>
             <span className="text-right">Кор.</span>
@@ -63,6 +65,7 @@ const QuickOrderTeaser = () => {
           </div>
         </div>
       </div>
+      </Reveal>
     </section>
   );
 };

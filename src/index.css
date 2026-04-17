@@ -11,14 +11,14 @@
 @layer base {
   :root {
     /* Surfaces */
-    --background: 40 20% 98%;        /* warm off-white page bg */
-    --surface: 0 0% 100%;            /* cards, tables */
+    --background: 36 30% 96%;        /* calm warm cream page bg */
+    --surface: 40 25% 99%;           /* cards, tables — near-white with a hint of warmth */
     --foreground: 25 15% 12%;        /* near-black warm */
 
-    --card: 0 0% 100%;
+    --card: 40 25% 99%;
     --card-foreground: 25 15% 12%;
 
-    --popover: 0 0% 100%;
+    --popover: 40 25% 99%;
     --popover-foreground: 25 15% 12%;
 
     /* Primary — warm amber (signature) */
@@ -114,6 +114,9 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    /* Always reserve space for the vertical scrollbar so Radix dialogs/dropdowns
+       that lock body scroll don't shift the layout horizontally. */
+    scrollbar-gutter: stable;
   }
 
   body {
