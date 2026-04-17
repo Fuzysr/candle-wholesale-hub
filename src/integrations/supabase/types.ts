@@ -55,6 +55,81 @@ export type Database = {
           },
         ]
       }
+      company_settings: {
+        Row: {
+          bank_account: string
+          bank_bik: string
+          bank_name: string
+          corr_account: string
+          delivery_terms: string
+          director_name: string
+          director_position: string
+          email: string
+          id: number
+          inn: string
+          kpp: string
+          legal_address: string
+          legal_name: string
+          offer_text: string
+          ogrn: string
+          payment_terms: string
+          phone: string
+          postal_address: string
+          short_name: string
+          signature_url: string | null
+          stamp_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          bank_account?: string
+          bank_bik?: string
+          bank_name?: string
+          corr_account?: string
+          delivery_terms?: string
+          director_name?: string
+          director_position?: string
+          email?: string
+          id?: number
+          inn?: string
+          kpp?: string
+          legal_address?: string
+          legal_name?: string
+          offer_text?: string
+          ogrn?: string
+          payment_terms?: string
+          phone?: string
+          postal_address?: string
+          short_name?: string
+          signature_url?: string | null
+          stamp_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bank_account?: string
+          bank_bik?: string
+          bank_name?: string
+          corr_account?: string
+          delivery_terms?: string
+          director_name?: string
+          director_position?: string
+          email?: string
+          id?: number
+          inn?: string
+          kpp?: string
+          legal_address?: string
+          legal_name?: string
+          offer_text?: string
+          ogrn?: string
+          payment_terms?: string
+          phone?: string
+          postal_address?: string
+          short_name?: string
+          signature_url?: string | null
+          stamp_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       discount_tiers: {
         Row: {
           created_at: string
@@ -73,6 +148,33 @@ export type Database = {
           discount_percent?: number
           id?: string
           min_boxes?: number
+        }
+        Relationships: []
+      }
+      materials: {
+        Row: {
+          created_at: string
+          id: string
+          name_en: string
+          name_ru: string
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name_en: string
+          name_ru: string
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name_en?: string
+          name_ru?: string
+          slug?: string
+          sort_order?: number
         }
         Relationships: []
       }
@@ -240,15 +342,53 @@ export type Database = {
         }
         Relationships: []
       }
+      product_images: {
+        Row: {
+          alt: string | null
+          created_at: string
+          id: string
+          product_id: string
+          sort_order: number
+          url: string
+        }
+        Insert: {
+          alt?: string | null
+          created_at?: string
+          id?: string
+          product_id: string
+          sort_order?: number
+          url: string
+        }
+        Update: {
+          alt?: string | null
+          created_at?: string
+          id?: string
+          product_id?: string
+          sort_order?: number
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_images_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_variants: {
         Row: {
           color: string | null
           created_at: string
+          external_id: string | null
           id: string
+          last_synced_at: string | null
           pieces_per_box: number
           price_per_piece_rub: number
           price_per_piece_usd: number
           product_id: string
+          reserved_boxes: number
           shape: string | null
           size: string | null
           sku: string
@@ -258,11 +398,14 @@ export type Database = {
         Insert: {
           color?: string | null
           created_at?: string
+          external_id?: string | null
           id?: string
+          last_synced_at?: string | null
           pieces_per_box?: number
           price_per_piece_rub: number
           price_per_piece_usd: number
           product_id: string
+          reserved_boxes?: number
           shape?: string | null
           size?: string | null
           sku: string
@@ -272,11 +415,14 @@ export type Database = {
         Update: {
           color?: string | null
           created_at?: string
+          external_id?: string | null
           id?: string
+          last_synced_at?: string | null
           pieces_per_box?: number
           price_per_piece_rub?: number
           price_per_piece_usd?: number
           product_id?: string
+          reserved_boxes?: number
           shape?: string | null
           size?: string | null
           sku?: string
@@ -302,8 +448,11 @@ export type Database = {
           id: string
           image_url: string | null
           is_published: boolean
+          material_id: string | null
           name_en: string
           name_ru: string
+          scent_id: string | null
+          shape_id: string | null
           slug: string
           updated_at: string
         }
@@ -315,8 +464,11 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_published?: boolean
+          material_id?: string | null
           name_en: string
           name_ru: string
+          scent_id?: string | null
+          shape_id?: string | null
           slug: string
           updated_at?: string
         }
@@ -328,8 +480,11 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_published?: boolean
+          material_id?: string | null
           name_en?: string
           name_ru?: string
+          scent_id?: string | null
+          shape_id?: string | null
           slug?: string
           updated_at?: string
         }
@@ -339,6 +494,27 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_scent_id_fkey"
+            columns: ["scent_id"]
+            isOneToOne: false
+            referencedRelation: "scents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_shape_id_fkey"
+            columns: ["shape_id"]
+            isOneToOne: false
+            referencedRelation: "shapes"
             referencedColumns: ["id"]
           },
         ]
@@ -378,6 +554,104 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      scents: {
+        Row: {
+          created_at: string
+          id: string
+          name_en: string
+          name_ru: string
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name_en: string
+          name_ru: string
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name_en?: string
+          name_ru?: string
+          slug?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      shapes: {
+        Row: {
+          created_at: string
+          id: string
+          name_en: string
+          name_ru: string
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name_en: string
+          name_ru: string
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name_en?: string
+          name_ru?: string
+          slug?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      stock_movements: {
+        Row: {
+          comment: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          qty_boxes: number
+          ref_id: string | null
+          source: string | null
+          type: Database["public"]["Enums"]["stock_movement_type"]
+          variant_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          qty_boxes: number
+          ref_id?: string | null
+          source?: string | null
+          type: Database["public"]["Enums"]["stock_movement_type"]
+          variant_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          qty_boxes?: number
+          ref_id?: string | null
+          source?: string | null
+          type?: Database["public"]["Enums"]["stock_movement_type"]
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movements_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -423,6 +697,13 @@ export type Database = {
         | "shipped"
         | "completed"
         | "cancelled"
+      stock_movement_type:
+        | "in"
+        | "out"
+        | "reserve"
+        | "release"
+        | "adjust"
+        | "sync"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -559,6 +840,14 @@ export const Constants = {
         "shipped",
         "completed",
         "cancelled",
+      ],
+      stock_movement_type: [
+        "in",
+        "out",
+        "reserve",
+        "release",
+        "adjust",
+        "sync",
       ],
     },
   },
