@@ -4,6 +4,7 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import ImageUpload from "@/components/admin/ImageUpload";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { formatMoney } from "@/lib/format";
@@ -425,7 +426,10 @@ const Admin = () => {
                 <TextArea label="Описание EN" rows={3} value={editingProduct.description_en ?? ""} onChange={(e) => setEditingProduct({ ...editingProduct, description_en: e.target.value })} />
               </div>
               <div className="md:col-span-2">
-                <Field label="URL изображения / ключ" value={editingProduct.image_url ?? ""} onChange={(e) => setEditingProduct({ ...editingProduct, image_url: e.target.value })} />
+                <ImageUpload
+                  value={editingProduct.image_url ?? null}
+                  onChange={(url) => setEditingProduct({ ...editingProduct, image_url: url })}
+                />
               </div>
               <label className="md:col-span-2 flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={editingProduct.is_published ?? true} onChange={(e) => setEditingProduct({ ...editingProduct, is_published: e.target.checked })} className="h-4 w-4 accent-primary" />

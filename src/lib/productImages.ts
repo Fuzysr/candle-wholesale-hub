@@ -16,5 +16,8 @@ export const productImageMap: Record<string, string> = {
 
 export const getProductImage = (key?: string | null): string => {
   if (!key) return pillarIvory;
+  // Full URL (uploaded to Storage or external) — use as-is
+  if (key.startsWith("http://") || key.startsWith("https://") || key.startsWith("/")) return key;
+  // Otherwise treat as a static asset key
   return productImageMap[key] ?? pillarIvory;
 };
