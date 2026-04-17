@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/integrations/supabase/client";
+import { catalogApi, stockApi } from "@/lib/api";
 import { useAppStore } from "@/store/appStore";
 import { useCartStore } from "@/store/cartStore";
 import {
@@ -14,8 +16,6 @@ import {
   variantLabel,
   variantPrice,
   availableBoxes,
-  type DiscountTier,
-  type Product,
   type ProductVariant,
 } from "@/lib/catalog";
 import { formatMoney } from "@/lib/format";
@@ -31,37 +31,52 @@ const ProductPage = () => {
   const { currency, lang } = useAppStore();
   const addItem = useCartStore((s) => s.addItem);
   const { push } = useRecentlyViewed();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [tiers, setTiers] = useState<DiscountTier[]>([]);
   const [variantId, setVariantId] = useState<string>("");
   const [qty, setQty] = useState(1);
-  const [loading, setLoading] = useState(true);
 
+  const productQuery = useQuery({
+    queryKey: ["product", slug],
+    queryFn: () => catalogApi.getProductBySlug(slug!),
+    enabled: !!slug,
+    retry: (_count, err) => !(axios.isAxiosError(err) && err.response?.status === 404),
+  });
+  const { data: tiers = [] } = useQuery({
+    queryKey: ["discount-tiers"],
+    queryFn: () => stockApi.listDiscountTiers(),
+  });
+
+  const product = productQuery.data ?? null;
+
+  // Initial variant selection when the product is first loaded.
   useEffect(() => {
-    if (!slug) return;
-    setLoading(true);
-    Promise.all([
-      supabase.from("products")
-        .select("*, variants:product_variants(*), images:product_images(*), category:categories(slug,name_ru,name_en), material:materials(*), scent:scents(*), shape:shapes(*)")
-        .eq("slug", slug).maybeSingle(),
-      supabase.from("discount_tiers").select("*").order("min_boxes"),
-    ]).then(([{ data: p }, { data: t }]) => {
-      const product = p as unknown as Product | null;
-      setProduct(product);
-      setTiers((t as DiscountTier[]) ?? []);
-      const first = product?.variants?.find((v) => availableBoxes(v) > 0) ?? product?.variants?.[0];
-      if (first) setVariantId(first.id);
-      setLoading(false);
-      if (product) {
-        push({ id: product.id, slug: product.slug, name_ru: product.name_ru, name_en: product.name_en, image_url: product.image_url });
-      }
+    if (!product) return;
+    const first = product.variants.find((v) => availableBoxes(v) > 0) ?? product.variants[0];
+    if (first) setVariantId(first.id);
+    push({
+      id: product.id,
+      slug: product.slug,
+      name_ru: product.name_ru,
+      name_en: product.name_en,
+      image_url: product.image_url,
     });
-  }, [slug, push]);
+  }, [product, push]);
 
   const gallery = useMemo(() => (product ? productGalleryUrls(product) : []), [product]);
 
-  if (loading) return <PublicLayout><div className="container py-10"><Skeleton className="h-96" /></div></PublicLayout>;
-  if (!product) return <PublicLayout><div className="container py-20 text-center text-muted-foreground">Товар не найден</div></PublicLayout>;
+  if (productQuery.isLoading) {
+    return (
+      <PublicLayout>
+        <div className="container py-10"><Skeleton className="h-96" /></div>
+      </PublicLayout>
+    );
+  }
+  if (!product) {
+    return (
+      <PublicLayout>
+        <div className="container py-20 text-center text-muted-foreground">Товар не найден</div>
+      </PublicLayout>
+    );
+  }
 
   const variant: ProductVariant | undefined = product.variants?.find((v) => v.id === variantId) ?? product.variants?.[0];
 

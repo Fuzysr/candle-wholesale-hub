@@ -1,63 +1,24 @@
 import type { Currency, Lang } from "@/lib/format";
+import type {
+  AttributeOut,
+  CategoryOut,
+  DiscountTierOut,
+  ProductImageOut,
+  ProductOut,
+  ProductVariantOut,
+} from "@/lib/api";
 
-export type DiscountTier = { min_boxes: number; discount_percent: number };
-
-export type Material = { id: string; slug: string; name_ru: string; name_en: string };
-export type Scent = { id: string; slug: string; name_ru: string; name_en: string };
-export type Shape = { id: string; slug: string; name_ru: string; name_en: string };
-
-export type ProductImage = {
-  id: string;
-  product_id: string;
-  url: string;
-  alt: string | null;
-  sort_order: number;
-};
-
-export type ProductVariant = {
-  id: string;
-  product_id: string;
-  sku: string;
-  size: string | null;
-  color: string | null;
-  shape: string | null;
-  pieces_per_box: number;
-  price_per_piece_rub: number;
-  price_per_piece_usd: number;
-  stock_boxes: number;
-  reserved_boxes?: number;
-  external_id?: string | null;
-};
-
-export type Product = {
-  id: string;
-  slug: string;
-  category_id: string | null;
-  material_id?: string | null;
-  scent_id?: string | null;
-  shape_id?: string | null;
-  name_ru: string;
-  name_en: string;
-  description_ru: string | null;
-  description_en: string | null;
-  image_url: string | null;
-  is_published: boolean;
-  created_at?: string;
-  variants?: ProductVariant[];
-  images?: ProductImage[];
-  category?: { slug: string; name_ru: string; name_en: string } | null;
-  material?: Material | null;
-  scent?: Scent | null;
-  shape?: Shape | null;
-};
-
-export type Category = {
-  id: string;
-  slug: string;
-  name_ru: string;
-  name_en: string;
-  sort_order: number;
-  parent_id: string | null;
+// Re-exports so existing pages keep using the short type names while the
+// canonical definitions live in `@/lib/api`.
+export type Category = CategoryOut;
+export type Product = ProductOut;
+export type ProductVariant = ProductVariantOut;
+export type ProductImage = ProductImageOut;
+export type Material = AttributeOut;
+export type Scent = AttributeOut;
+export type Shape = AttributeOut;
+export type DiscountTier = Pick<DiscountTierOut, "min_boxes" | "discount_percent"> & {
+  id?: string;
 };
 
 export const productName = (p: Pick<Product, "name_ru" | "name_en">, lang: Lang) =>

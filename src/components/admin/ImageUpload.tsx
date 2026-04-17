@@ -1,24 +1,28 @@
 import { useRef, useState } from "react";
 import { Upload, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { apiErrorMessage, uploadsApi } from "@/lib/api";
 import { getProductImage } from "@/lib/productImages";
 import { toast } from "sonner";
 
 type Props = {
   value: string | null;
   onChange: (url: string | null) => void;
+  /** Which bucket to upload into. Defaults to product images. */
+  kind?: "product" | "company";
 };
 
-const BUCKET = "product-images";
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
-const ImageUpload = ({ value, onChange }: Props) => {
+const ImageUpload = ({ value, onChange, kind = "product" }: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   const preview = value ? (value.startsWith("http") ? value : getProductImage(value)) : null;
+
+  const upload = (file: File) =>
+    kind === "company" ? uploadsApi.uploadCompanyAsset(file) : uploadsApi.uploadProductImage(file);
 
   const handleFile = async (file: File) => {
     if (!ALLOWED.includes(file.type)) {
@@ -29,20 +33,11 @@ const ImageUpload = ({ value, onChange }: Props) => {
     }
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
-        contentType: file.type,
-      });
-      if (error) throw error;
-      const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-      onChange(data.publicUrl);
+      const { url } = await upload(file);
+      onChange(url);
       toast.success("Изображение загружено");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Ошибка загрузки";
-      toast.error(msg);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Ошибка загрузки"));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -50,9 +45,12 @@ const ImageUpload = ({ value, onChange }: Props) => {
   };
 
   const handleRemove = async () => {
-    if (value && value.includes(`/${BUCKET}/`)) {
-      const path = value.split(`/${BUCKET}/`)[1];
-      if (path) await supabase.storage.from(BUCKET).remove([path]);
+    if (value && value.startsWith("http")) {
+      try {
+        await uploadsApi.delete(value);
+      } catch {
+        /* file may live outside our buckets — ignore */
+      }
     }
     onChange(null);
   };

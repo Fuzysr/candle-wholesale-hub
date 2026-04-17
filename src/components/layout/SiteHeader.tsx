@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Search, ShoppingCart, User, Menu, Zap, LogOut, LayoutDashboard, ChevronDown } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useCartStore } from "@/store/cartStore";
 import { useAppStore } from "@/store/appStore";
 import { useAuth, signOut } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import type { Category } from "@/lib/catalog";
+import { catalogApi } from "@/lib/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,13 +31,10 @@ const SiteHeader = () => {
   const { currency, lang, setCurrency, setLang } = useAppStore();
   const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [categories, setCategories] = useState<Category[]>([]);
-
-  useEffect(() => {
-    supabase.from("categories").select("*").order("sort_order").then(({ data }) => {
-      setCategories((data as Category[]) ?? []);
-    });
-  }, []);
+  const { data: categories = [] } = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => catalogApi.listCategories(),
+  });
 
   const roots = categories.filter((c) => !c.parent_id);
   const childrenOf = (id: string) => categories.filter((c) => c.parent_id === id);

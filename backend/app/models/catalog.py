@@ -1,0 +1,159 @@
+from datetime import datetime
+from typing import TYPE_CHECKING
+from uuid import UUID
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func, text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.stock import StockMovement
+
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    name_ru: Mapped[str] = mapped_column(String, nullable=False)
+    name_en: Mapped[str] = mapped_column(String, nullable=False)
+    parent_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    parent: Mapped["Category | None"] = relationship(remote_side="Category.id", back_populates="children")
+    children: Mapped[list["Category"]] = relationship(back_populates="parent")
+    products: Mapped[list["Product"]] = relationship(back_populates="category")
+
+
+class Material(Base):
+    __tablename__ = "materials"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    name_ru: Mapped[str] = mapped_column(String, nullable=False)
+    name_en: Mapped[str] = mapped_column(String, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Scent(Base):
+    __tablename__ = "scents"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    name_ru: Mapped[str] = mapped_column(String, nullable=False)
+    name_en: Mapped[str] = mapped_column(String, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Shape(Base):
+    __tablename__ = "shapes"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    name_ru: Mapped[str] = mapped_column(String, nullable=False)
+    name_en: Mapped[str] = mapped_column(String, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Product(Base):
+    __tablename__ = "products"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    category_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
+    material_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("materials.id", ondelete="SET NULL"), nullable=True
+    )
+    scent_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("scents.id", ondelete="SET NULL"), nullable=True
+    )
+    shape_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("shapes.id", ondelete="SET NULL"), nullable=True
+    )
+    name_ru: Mapped[str] = mapped_column(String, nullable=False)
+    name_en: Mapped[str] = mapped_column(String, nullable=False)
+    description_ru: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    category: Mapped["Category | None"] = relationship(back_populates="products")
+    material: Mapped["Material | None"] = relationship()
+    scent: Mapped["Scent | None"] = relationship()
+    shape: Mapped["Shape | None"] = relationship()
+    variants: Mapped[list["ProductVariant"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan", passive_deletes=True
+    )
+    images: Mapped[list["ProductImage"]] = relationship(
+        back_populates="product",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ProductImage.sort_order",
+    )
+
+
+class ProductVariant(Base):
+    __tablename__ = "product_variants"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    product_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("products.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sku: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    size: Mapped[str | None] = mapped_column(String, nullable=True)
+    color: Mapped[str | None] = mapped_column(String, nullable=True)
+    shape: Mapped[str | None] = mapped_column(String, nullable=True)
+    pieces_per_box: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    price_per_piece_rub: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    price_per_piece_usd: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    stock_boxes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    reserved_boxes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    external_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    product: Mapped["Product"] = relationship(back_populates="variants")
+    stock_movements: Mapped[list["StockMovement"]] = relationship(
+        back_populates="variant", cascade="all, delete-orphan", passive_deletes=True
+    )
+
+
+class ProductImage(Base):
+    __tablename__ = "product_images"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    product_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("products.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    alt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    product: Mapped["Product"] = relationship(back_populates="images")

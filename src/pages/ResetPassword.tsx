@@ -1,38 +1,34 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { apiErrorMessage, authApi } from "@/lib/api";
 import { toast } from "sonner";
 
 const ResetPassword = () => {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const token = params.get("token") ?? "";
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    // When user clicks recovery link, supabase sets a session via hash automatically
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") setReady(true);
-    });
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setReady(true);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, []);
+  const ready = !!token;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!token) return toast.error("Токен восстановления отсутствует в ссылке");
     if (password.length < 6) return toast.error("Минимум 6 символов");
     if (password !== confirm) return toast.error("Пароли не совпадают");
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
-    setLoading(false);
-    if (error) return toast.error(error.message);
-    toast.success("Пароль обновлён");
-    navigate("/account");
+    try {
+      await authApi.confirmPasswordReset(token, password);
+      toast.success("Пароль обновлён. Войдите с новым паролем");
+      navigate("/auth");
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось обновить пароль"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -43,7 +39,7 @@ const ResetPassword = () => {
           <p className="mt-1 text-sm text-muted-foreground">
             {ready
               ? "Задайте новый пароль для входа в кабинет."
-              : "Откройте ссылку из письма для восстановления пароля."}
+              : "Откройте ссылку из письма с токеном восстановления."}
           </p>
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <label className="block">

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useParams, Link } from "react-router-dom";
 import { Grid2X2, List, SlidersHorizontal, Search, ChevronDown, ChevronRight, X } from "lucide-react";
+import { useQueries } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/integrations/supabase/client";
+import { catalogApi } from "@/lib/api";
 import { getProductImage } from "@/lib/productImages";
 import { useAppStore } from "@/store/appStore";
 import { useCartStore } from "@/store/cartStore";
@@ -46,12 +47,6 @@ const Catalog = () => {
   const { currency, lang } = useAppStore();
   const addItem = useCartStore((s) => s.addItem);
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [scents, setScents] = useState<Scent[]>([]);
-  const [shapes, setShapes] = useState<Shape[]>([]);
-  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("grid");
   const [onlyInStock, setOnlyInStock] = useState(true);
   const [colorFilter, setColorFilter] = useState<string>("");
@@ -63,28 +58,21 @@ const Catalog = () => {
 
   const search = params.get("q")?.toLowerCase() ?? "";
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const [{ data: cats }, { data: prods }, { data: mats }, { data: scs }, { data: shs }] = await Promise.all([
-        supabase.from("categories").select("*").order("sort_order"),
-        supabase
-          .from("products")
-          .select("*, variants:product_variants(*), images:product_images(*), category:categories(slug,name_ru,name_en), material:materials(*), scent:scents(*), shape:shapes(*)")
-          .eq("is_published", true),
-        supabase.from("materials").select("*").order("sort_order"),
-        supabase.from("scents").select("*").order("sort_order"),
-        supabase.from("shapes").select("*").order("sort_order"),
-      ]);
-      setCategories((cats as Category[]) ?? []);
-      setProducts((prods as unknown as Product[]) ?? []);
-      setMaterials((mats as Material[]) ?? []);
-      setScents((scs as Scent[]) ?? []);
-      setShapes((shs as Shape[]) ?? []);
-      setLoading(false);
-    };
-    load();
-  }, []);
+  const [catQ, prodQ, matQ, scentQ, shapeQ] = useQueries({
+    queries: [
+      { queryKey: ["categories"], queryFn: () => catalogApi.listCategories() },
+      { queryKey: ["products"], queryFn: () => catalogApi.listProducts() },
+      { queryKey: ["attributes", "materials"], queryFn: () => catalogApi.listAttributes("materials") },
+      { queryKey: ["attributes", "scents"], queryFn: () => catalogApi.listAttributes("scents") },
+      { queryKey: ["attributes", "shapes"], queryFn: () => catalogApi.listAttributes("shapes") },
+    ],
+  });
+  const categories: Category[] = catQ.data ?? [];
+  const products: Product[] = prodQ.data ?? [];
+  const materials: Material[] = matQ.data ?? [];
+  const scents: Scent[] = scentQ.data ?? [];
+  const shapes: Shape[] = shapeQ.data ?? [];
+  const loading = catQ.isPending || prodQ.isPending;
 
   // Category tree
   const rootCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);

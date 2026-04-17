@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
-import { supabase } from "@/integrations/supabase/client";
-import type { DiscountTier } from "@/lib/catalog";
+import { stockApi } from "@/lib/api";
 
 const WholesaleTerms = () => {
-  const [tiers, setTiers] = useState<DiscountTier[]>([]);
-  useEffect(() => {
-    supabase.from("discount_tiers").select("*").order("min_boxes").then(({ data }) => setTiers((data as DiscountTier[]) ?? []));
-  }, []);
+  const { data: tiers = [] } = useQuery({
+    queryKey: ["discount-tiers"],
+    queryFn: () => stockApi.listDiscountTiers(),
+  });
 
   return (
     <PublicLayout>

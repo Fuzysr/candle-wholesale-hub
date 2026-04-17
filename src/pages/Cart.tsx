@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Trash2, ShoppingBag } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { useCartStore } from "@/store/cartStore";
@@ -9,20 +10,17 @@ import { formatMoney } from "@/lib/format";
 import { getProductImage } from "@/lib/productImages";
 import NumberStepper from "@/components/shop/NumberStepper";
 import DiscountProgressBar from "@/components/shop/DiscountProgressBar";
-import { supabase } from "@/integrations/supabase/client";
-import { computeDiscount, type DiscountTier } from "@/lib/catalog";
+import { stockApi } from "@/lib/api";
+import { computeDiscount } from "@/lib/catalog";
 
 const Cart = () => {
   const navigate = useNavigate();
   const { items, setBoxes, remove, clear } = useCartStore();
   const { currency } = useAppStore();
-  const [tiers, setTiers] = useState<DiscountTier[]>([]);
-
-  useEffect(() => {
-    supabase.from("discount_tiers").select("*").order("min_boxes").then(({ data }) => {
-      setTiers((data as DiscountTier[]) ?? []);
-    });
-  }, []);
+  const { data: tiers = [] } = useQuery({
+    queryKey: ["discount-tiers"],
+    queryFn: () => stockApi.listDiscountTiers(),
+  });
 
   const totals = useMemo(() => {
     const totalBoxes = items.reduce((s, i) => s + i.boxes, 0);

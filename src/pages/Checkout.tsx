@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { apiErrorMessage, ordersApi, profileApi, stockApi } from "@/lib/api";
+import { AUTH_ME_KEY } from "@/hooks/useAuth";
 import { useAppStore } from "@/store/appStore";
 import { useCartStore } from "@/store/cartStore";
 import { useAuth } from "@/hooks/useAuth";
 import { formatMoney } from "@/lib/format";
-import { computeDiscount, type DiscountTier } from "@/lib/catalog";
+import { computeDiscount } from "@/lib/catalog";
 import { toast } from "sonner";
 
 const Field = ({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
@@ -19,10 +21,14 @@ const Field = ({ label, ...props }: { label: string } & React.InputHTMLAttribute
 
 const Checkout = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, loading: authLoading } = useAuth();
   const { items, clear } = useCartStore();
   const { currency } = useAppStore();
-  const [tiers, setTiers] = useState<DiscountTier[]>([]);
+  const { data: tiers = [] } = useQuery({
+    queryKey: ["discount-tiers"],
+    queryFn: () => stockApi.listDiscountTiers(),
+  });
   const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({
@@ -35,10 +41,6 @@ const Checkout = () => {
     delivery_date: "",
     customer_comment: "",
   });
-
-  useEffect(() => {
-    supabase.from("discount_tiers").select("*").order("min_boxes").then(({ data }) => setTiers((data as DiscountTier[]) ?? []));
-  }, []);
 
   useEffect(() => {
     if (user) {
@@ -93,16 +95,9 @@ const Checkout = () => {
     if (!user) return;
     setSubmitting(true);
 
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .insert([{
-        user_id: user.user.id,
+    try {
+      const order = await ordersApi.create({
         currency,
-        subtotal: totals.subtotal,
-        discount_percent: totals.discountPercent,
-        discount_amount: totals.discountAmount,
-        total: totals.total,
-        total_boxes: totals.totalBoxes,
         delivery_address: form.delivery_address || null,
         delivery_date: form.delivery_date || null,
         customer_comment: form.customer_comment || null,
@@ -111,47 +106,38 @@ const Checkout = () => {
         phone: form.phone,
         inn: form.inn,
         email: form.email,
-      } as never])
-      .select()
-      .single();
+        items: items.map((i) => ({
+          variant_id: i.variantId,
+          sku: i.sku,
+          product_name: i.productName,
+          variant_label: i.variantLabel,
+          pieces_per_box: i.piecesPerBox,
+          boxes: i.boxes,
+          unit_price: currency === "RUB" ? i.priceRub : i.priceUsd,
+        })),
+      });
 
-    if (orderError || !order) {
+      // Keep the profile snapshot in sync for next checkout.
+      try {
+        await profileApi.update({
+          company_name: form.company_name || null,
+          contact_name: form.contact_name || null,
+          phone: form.phone || null,
+          inn: form.inn || null,
+          address: form.delivery_address || null,
+        });
+        queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY });
+      } catch {
+        // non-fatal — order is already created
+      }
+
+      clear();
+      navigate(`/order/success/${order.id}`);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось создать заявку"));
+    } finally {
       setSubmitting(false);
-      toast.error("Не удалось создать заявку: " + (orderError?.message ?? ""));
-      return;
     }
-
-    const orderItems = items.map((i) => {
-      const unit = currency === "RUB" ? i.priceRub : i.priceUsd;
-      return {
-        order_id: order.id,
-        variant_id: i.variantId,
-        sku: i.sku,
-        product_name: i.productName,
-        variant_label: i.variantLabel,
-        pieces_per_box: i.piecesPerBox,
-        boxes: i.boxes,
-        unit_price: unit,
-        line_total: unit * i.piecesPerBox * i.boxes,
-      };
-    });
-
-    const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
-    if (itemsError) {
-      setSubmitting(false);
-      toast.error("Не удалось сохранить позиции: " + itemsError.message);
-      return;
-    }
-
-    // Update profile snapshot
-    await supabase.from("profiles").update({
-      company_name: form.company_name, contact_name: form.contact_name,
-      phone: form.phone, inn: form.inn, address: form.delivery_address,
-    }).eq("id", user.user.id);
-
-    clear();
-    setSubmitting(false);
-    navigate(`/order/success/${order.id}`);
   };
 
   return (

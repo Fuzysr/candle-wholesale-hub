@@ -2,7 +2,7 @@ import { Plus, Minus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
+import { apiErrorMessage, stockApi } from "@/lib/api";
 import { toast } from "sonner";
 
 export type StockOpVariant = {
@@ -30,31 +30,24 @@ const StockOpDialog = ({ variant, onClose, onDone }: Props) => {
   const available = Math.max(0, variant.stock_boxes - reserved);
 
   const submit = async () => {
-    if (qty <= 0) return toast.error("Количество должно быть > 0");
+    if (qty < 0) return toast.error("Количество не может быть отрицательным");
+    if (type !== "adjust" && qty === 0) return toast.error("Количество должно быть > 0");
+    if (type === "out" && qty > available) {
+      return toast.error(`Доступно только ${available} кор.`);
+    }
     setBusy(true);
     try {
-      let newStock = variant.stock_boxes;
-      if (type === "in") newStock += qty;
-      else if (type === "out") {
-        if (qty > available) return toast.error(`Доступно только ${available} кор.`);
-        newStock -= qty;
-      } else newStock = qty;
-
-      const { error: e1 } = await supabase.from("product_variants").update({ stock_boxes: newStock }).eq("id", variant.id);
-      if (e1) throw e1;
-      const { error: e2 } = await supabase.from("stock_movements").insert({
+      await stockApi.adminMovement({
         variant_id: variant.id,
         type,
-        qty_boxes: type === "adjust" ? qty - variant.stock_boxes : (type === "in" ? qty : -qty),
-        source: "admin",
+        qty_boxes: qty,
         comment: comment || null,
       });
-      if (e2) throw e2;
       toast.success("Движение учтено");
       onDone();
       onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Ошибка");
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Ошибка"));
     } finally {
       setBusy(false);
     }

@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Upload, Download, Plus, Trash2, FileSpreadsheet } from "lucide-react";
+import { useQueries } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { catalogApi, stockApi } from "@/lib/api";
 import { useAppStore } from "@/store/appStore";
 import { useCartStore } from "@/store/cartStore";
 import { formatMoney } from "@/lib/format";
-import { computeDiscount, productName, type DiscountTier, type Product } from "@/lib/catalog";
+import { computeDiscount, productName, type Product } from "@/lib/catalog";
 import { toast } from "sonner";
 
 type Row = { sku: string; qty: number };
@@ -17,19 +18,16 @@ const QuickOrder = () => {
   const navigate = useNavigate();
   const { currency, lang } = useAppStore();
   const addItem = useCartStore((s) => s.addItem);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [tiers, setTiers] = useState<DiscountTier[]>([]);
   const [rows, setRows] = useState<Row[]>([{ sku: "", qty: 1 }, { sku: "", qty: 1 }, { sku: "", qty: 1 }]);
 
-  useEffect(() => {
-    Promise.all([
-      supabase.from("products").select("*, variants:product_variants(*)").eq("is_published", true),
-      supabase.from("discount_tiers").select("*").order("min_boxes"),
-    ]).then(([{ data: p }, { data: t }]) => {
-      setProducts((p as unknown as Product[]) ?? []);
-      setTiers((t as DiscountTier[]) ?? []);
-    });
-  }, []);
+  const [productsQ, tiersQ] = useQueries({
+    queries: [
+      { queryKey: ["products"], queryFn: () => catalogApi.listProducts() },
+      { queryKey: ["discount-tiers"], queryFn: () => stockApi.listDiscountTiers() },
+    ],
+  });
+  const products: Product[] = productsQ.data ?? [];
+  const tiers = tiersQ.data ?? [];
 
   const skuIndex = useMemo(() => {
     const map = new Map<string, { p: Product; v: Product["variants"][number] }>();

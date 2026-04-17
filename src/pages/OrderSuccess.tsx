@@ -1,21 +1,20 @@
-import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { ordersApi } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 
 const OrderSuccess = () => {
   const { id } = useParams();
-  const [order, setOrder] = useState<{ order_number: string; total: number; currency: string; email: string } | null>(null);
 
-  useEffect(() => {
-    if (!id) return;
-    supabase.from("orders").select("order_number,total,currency,email").eq("id", id).maybeSingle().then(({ data }) => {
-      if (data) setOrder(data);
-    });
-  }, [id]);
+  const { data: order } = useQuery({
+    queryKey: ["order", id],
+    queryFn: () => ordersApi.getById(id!),
+    enabled: !!id,
+    retry: false,
+  });
 
   return (
     <PublicLayout>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { Plus, Pencil, Trash2, FileDown, Package, Settings as SettingsIcon, Tag } from "lucide-react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -8,76 +9,33 @@ import ImageUpload from "@/components/admin/ImageUpload";
 import MultiImageUpload, { type GalleryImage } from "@/components/admin/MultiImageUpload";
 import StockOpDialog, { type StockOpVariant } from "@/components/admin/StockOpDialog";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  apiErrorMessage,
+  catalogApi,
+  companyApi,
+  ordersApi,
+  type AttributeKind,
+  type AttributeOut,
+  type CategoryOut,
+  type CompanySettingsOut,
+  type Currency,
+  type OrderListOut,
+  type OrderStatus,
+  type ProductOut,
+  type ProductVariantOut,
+} from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { downloadInvoicePdf, type InvoiceCompany } from "@/lib/invoicePdf";
+import { downloadInvoicePdf } from "@/lib/invoicePdf";
 import { toast } from "sonner";
 
-type AdminOrder = {
-  id: string;
-  order_number: string;
-  status: string;
-  total: number;
-  currency: string;
-  total_boxes: number;
-  created_at: string;
-  company_name: string | null;
-  contact_name: string | null;
-  email: string | null;
-  phone: string | null;
-  inn: string | null;
-  delivery_address: string | null;
-  customer_comment: string | null;
-  subtotal: number;
-  discount_percent: number;
-  discount_amount: number;
-};
-
-type AdminVariant = {
-  id: string;
-  product_id: string;
-  sku: string;
-  size: string | null;
-  color: string | null;
-  shape: string | null;
-  pieces_per_box: number;
-  price_per_piece_rub: number;
-  price_per_piece_usd: number;
-  stock_boxes: number;
-  reserved_boxes?: number;
-  external_id?: string | null;
-};
-
-type AdminProduct = {
-  id: string;
-  slug: string;
-  name_ru: string;
-  name_en: string;
-  description_ru: string | null;
-  description_en: string | null;
-  image_url: string | null;
-  is_published: boolean;
-  category_id: string | null;
-  material_id: string | null;
-  scent_id: string | null;
-  shape_id: string | null;
-  variants: AdminVariant[];
-  images: { id: string; url: string; sort_order: number }[];
-};
-
-type AdminCategory = {
-  id: string;
-  slug: string;
-  name_ru: string;
-  name_en: string;
-  sort_order: number;
-  parent_id: string | null;
-};
-
-type Lookup = { id: string; slug: string; name_ru: string; name_en: string; sort_order: number };
+type AdminOrder = OrderListOut;
+type AdminVariant = ProductVariantOut;
+type AdminProduct = ProductOut;
+type AdminCategory = CategoryOut;
+type Lookup = AttributeOut;
 
 const STATUSES = ["new", "processing", "invoiced", "paid", "shipped", "completed", "cancelled"] as const;
-type LookupKind = "materials" | "scents" | "shapes";
+type LookupKind = AttributeKind;
 const LOOKUP_LABEL: Record<LookupKind, string> = { materials: "Материалы", scents: "Ароматы", shapes: "Формы" };
 
 const Field = ({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
@@ -98,13 +56,33 @@ type Tab = "orders" | "products" | "categories" | "stock" | "lookups" | "setting
 
 const Admin = () => {
   const { user, loading } = useAuth();
-  const [orders, setOrders] = useState<AdminOrder[]>([]);
-  const [products, setProducts] = useState<AdminProduct[]>([]);
-  const [categories, setCategories] = useState<AdminCategory[]>([]);
-  const [materials, setMaterials] = useState<Lookup[]>([]);
-  const [scents, setScents] = useState<Lookup[]>([]);
-  const [shapes, setShapes] = useState<Lookup[]>([]);
-  const [company, setCompany] = useState<InvoiceCompany | null>(null);
+  const queryClient = useQueryClient();
+  const isAdmin = !!user?.isAdmin;
+
+  const [ordersQ, productsQ, categoriesQ, materialsQ, scentsQ, shapesQ, companyQ] = useQueries({
+    queries: [
+      { queryKey: ["admin", "orders"], queryFn: () => ordersApi.adminList(), enabled: isAdmin },
+      { queryKey: ["admin", "products"], queryFn: () => catalogApi.adminListProducts(), enabled: isAdmin },
+      { queryKey: ["categories"], queryFn: () => catalogApi.listCategories(), enabled: isAdmin },
+      { queryKey: ["attributes", "materials"], queryFn: () => catalogApi.listAttributes("materials"), enabled: isAdmin },
+      { queryKey: ["attributes", "scents"], queryFn: () => catalogApi.listAttributes("scents"), enabled: isAdmin },
+      { queryKey: ["attributes", "shapes"], queryFn: () => catalogApi.listAttributes("shapes"), enabled: isAdmin },
+      { queryKey: ["company-settings"], queryFn: () => companyApi.get(), enabled: isAdmin },
+    ],
+  });
+
+  const orders: AdminOrder[] = ordersQ.data ?? [];
+  const products: AdminProduct[] = productsQ.data ?? [];
+  const categories: AdminCategory[] = categoriesQ.data ?? [];
+  const materials: Lookup[] = materialsQ.data ?? [];
+  const scents: Lookup[] = scentsQ.data ?? [];
+  const shapes: Lookup[] = shapesQ.data ?? [];
+
+  const [company, setCompany] = useState<CompanySettingsOut | null>(null);
+  useEffect(() => {
+    if (companyQ.data) setCompany(companyQ.data);
+  }, [companyQ.data]);
+
   const [tab, setTab] = useState<Tab>("orders");
 
   const [editingProduct, setEditingProduct] = useState<Partial<AdminProduct> | null>(null);
@@ -114,26 +92,12 @@ const Admin = () => {
   const [stockOpVariant, setStockOpVariant] = useState<StockOpVariant | null>(null);
   const [editingLookup, setEditingLookup] = useState<{ kind: LookupKind; data: Partial<Lookup> } | null>(null);
 
-  const load = async () => {
-    const [{ data: o }, { data: p }, { data: c }, { data: m }, { data: s }, { data: sh }, { data: comp }] = await Promise.all([
-      supabase.from("orders").select("*").order("created_at", { ascending: false }),
-      supabase.from("products").select("*, variants:product_variants(*), images:product_images(*)").order("name_ru"),
-      supabase.from("categories").select("*").order("sort_order"),
-      supabase.from("materials").select("*").order("sort_order"),
-      supabase.from("scents").select("*").order("sort_order"),
-      supabase.from("shapes").select("*").order("sort_order"),
-      supabase.from("company_settings").select("*").maybeSingle(),
-    ]);
-    setOrders((o as unknown as AdminOrder[]) ?? []);
-    setProducts((p as unknown as AdminProduct[]) ?? []);
-    setCategories((c as AdminCategory[]) ?? []);
-    setMaterials((m as Lookup[]) ?? []);
-    setScents((s as Lookup[]) ?? []);
-    setShapes((sh as Lookup[]) ?? []);
-    if (comp) setCompany(comp as unknown as InvoiceCompany);
-  };
-
-  useEffect(() => { if (user?.isAdmin) load(); }, [user]);
+  const reloadProducts = () => queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+  const reloadCategories = () => queryClient.invalidateQueries({ queryKey: ["categories"] });
+  const reloadAttributes = (kind: AttributeKind) =>
+    queryClient.invalidateQueries({ queryKey: ["attributes", kind] });
+  const reloadOrders = () => queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
+  const reloadCompany = () => queryClient.invalidateQueries({ queryKey: ["company-settings"] });
 
   if (loading) return <PublicLayout><div className="container py-10">Загрузка...</div></PublicLayout>;
   if (!user) return <Navigate to="/auth" replace />;
@@ -148,51 +112,54 @@ const Admin = () => {
   );
 
   const updateStatus = async (id: string, status: string) => {
-    const { error } = await supabase.from("orders").update({ status: status as never }).eq("id", id);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Статус обновлён");
-    load();
+    try {
+      await ordersApi.adminUpdate(id, { status: status as OrderStatus });
+      toast.success("Статус обновлён");
+      reloadOrders();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось обновить статус"));
+    }
   };
 
   // ======= INVOICE =======
   const downloadInvoice = async (order: AdminOrder) => {
     if (!company) return toast.error("Заполните реквизиты компании в разделе «Настройки»");
-    const { data: items, error } = await supabase
-      .from("order_items")
-      .select("sku,product_name,variant_label,pieces_per_box,boxes,unit_price,line_total")
-      .eq("order_id", order.id);
-    if (error) return toast.error(error.message);
-    downloadInvoicePdf(
-      company,
-      {
-        company_name: order.company_name,
-        contact_name: order.contact_name,
-        inn: order.inn,
-        email: order.email,
-        phone: order.phone,
-        delivery_address: order.delivery_address,
-      },
-      {
-        order_number: order.order_number,
-        created_at: order.created_at,
-        currency: order.currency,
-        subtotal: Number(order.subtotal),
-        discount_percent: Number(order.discount_percent),
-        discount_amount: Number(order.discount_amount),
-        total: Number(order.total),
-        total_boxes: order.total_boxes,
-        customer_comment: order.customer_comment,
-      },
-      (items ?? []).map((it) => ({
-        sku: it.sku,
-        product_name: it.product_name,
-        variant_label: it.variant_label,
-        pieces_per_box: it.pieces_per_box,
-        boxes: it.boxes,
-        unit_price: Number(it.unit_price),
-        line_total: Number(it.line_total),
-      })),
-    );
+    try {
+      const full = await ordersApi.adminGetById(order.id);
+      downloadInvoicePdf(
+        company,
+        {
+          company_name: order.company_name,
+          contact_name: order.contact_name,
+          inn: order.inn,
+          email: order.email,
+          phone: order.phone,
+          delivery_address: order.delivery_address,
+        },
+        {
+          order_number: order.order_number,
+          created_at: order.created_at,
+          currency: order.currency,
+          subtotal: Number(order.subtotal),
+          discount_percent: Number(order.discount_percent),
+          discount_amount: Number(order.discount_amount),
+          total: Number(order.total),
+          total_boxes: order.total_boxes,
+          customer_comment: order.customer_comment,
+        },
+        full.items.map((it) => ({
+          sku: it.sku,
+          product_name: it.product_name,
+          variant_label: it.variant_label,
+          pieces_per_box: it.pieces_per_box,
+          boxes: it.boxes,
+          unit_price: Number(it.unit_price),
+          line_total: Number(it.line_total),
+        })),
+      );
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось загрузить позиции заявки"));
+    }
   };
 
   // ======= PRODUCTS =======
@@ -221,56 +188,61 @@ const Admin = () => {
     };
     if (!payload.slug || !payload.name_ru || !payload.name_en) return toast.error("Заполните slug и названия");
 
-    let productId = editingProduct.id;
-    if (productId) {
-      const { error } = await supabase.from("products").update(payload).eq("id", productId);
-      if (error) return toast.error(error.message);
-    } else {
-      const { data, error } = await supabase.from("products").insert(payload).select("id").single();
-      if (error) return toast.error(error.message);
-      productId = data.id;
-    }
+    try {
+      const saved = editingProduct.id
+        ? await catalogApi.updateProduct(editingProduct.id, payload)
+        : await catalogApi.createProduct(payload);
+      const productId = saved.id;
 
-    // Sync gallery: delete removed, upsert remaining with sort_order
-    const existing = (editingProduct.images ?? []) as { id: string; url: string }[];
-    const keepIds = new Set(productGallery.filter((g) => g.id).map((g) => g.id!));
-    const toDelete = existing.filter((e) => !keepIds.has(e.id)).map((e) => e.id);
-    if (toDelete.length) await supabase.from("product_images").delete().in("id", toDelete);
-    for (let i = 0; i < productGallery.length; i++) {
-      const img = productGallery[i];
-      if (img.id) {
-        await supabase.from("product_images").update({ sort_order: i }).eq("id", img.id);
-      } else {
-        await supabase.from("product_images").insert({ product_id: productId, url: img.url, sort_order: i });
+      // Sync gallery: delete removed, reorder existing, append new ones.
+      const existing = (editingProduct.images ?? []) as { id: string; url: string; sort_order: number }[];
+      const keepIds = new Set(productGallery.filter((g) => g.id).map((g) => g.id!));
+      await Promise.all(
+        existing
+          .filter((e) => !keepIds.has(e.id))
+          .map((e) => catalogApi.deleteImage(e.id).catch(() => null)),
+      );
+      for (let i = 0; i < productGallery.length; i++) {
+        const img = productGallery[i];
+        if (img.id) {
+          await catalogApi.updateImage(img.id, { sort_order: i });
+        } else {
+          await catalogApi.createImage(productId, { url: img.url, sort_order: i });
+        }
       }
-    }
-    // Auto-set image_url to first gallery image if main empty
-    if (!payload.image_url && productGallery[0]?.url) {
-      await supabase.from("products").update({ image_url: productGallery[0].url }).eq("id", productId);
-    }
+      // Auto-set image_url to the first gallery image when it's empty.
+      if (!payload.image_url && productGallery[0]?.url) {
+        await catalogApi.updateProduct(productId, { image_url: productGallery[0].url });
+      }
 
-    toast.success("Сохранено");
-    setEditingProduct(null);
-    setProductGallery([]);
-    load();
+      toast.success("Сохранено");
+      setEditingProduct(null);
+      setProductGallery([]);
+      reloadProducts();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось сохранить товар"));
+    }
   };
 
   const deleteProduct = async (id: string) => {
     if (!confirm("Удалить товар вместе со всеми вариациями?")) return;
-    await supabase.from("product_variants").delete().eq("product_id", id);
-    await supabase.from("product_images").delete().eq("product_id", id);
-    const { error } = await supabase.from("products").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Удалено");
-    load();
+    try {
+      await catalogApi.deleteProduct(id);
+      toast.success("Удалено");
+      reloadProducts();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось удалить товар"));
+    }
   };
 
   // ======= VARIANTS =======
   const saveVariant = async () => {
     if (!editingVariant) return;
-    const payload = {
-      product_id: editingVariant.product_id,
-      sku: editingVariant.sku || "",
+    const sku = (editingVariant.sku || "").trim();
+    if (!sku) return toast.error("Укажите SKU");
+
+    const body = {
+      sku,
       size: editingVariant.size || null,
       color: editingVariant.color || null,
       shape: editingVariant.shape || null,
@@ -280,26 +252,30 @@ const Admin = () => {
       stock_boxes: Number(editingVariant.stock_boxes) || 0,
       external_id: editingVariant.external_id || null,
     };
-    if (!payload.sku) return toast.error("Укажите SKU");
 
-    let error;
-    if (editingVariant.id) {
-      ({ error } = await supabase.from("product_variants").update(payload).eq("id", editingVariant.id));
-    } else {
-      ({ error } = await supabase.from("product_variants").insert(payload));
+    try {
+      if (editingVariant.id) {
+        await catalogApi.updateVariant(editingVariant.id, body);
+      } else {
+        await catalogApi.createVariant(editingVariant.product_id, body);
+      }
+      toast.success("Сохранено");
+      setEditingVariant(null);
+      reloadProducts();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось сохранить вариацию"));
     }
-    if (error) return toast.error(error.message);
-    toast.success("Сохранено");
-    setEditingVariant(null);
-    load();
   };
 
   const deleteVariant = async (id: string) => {
     if (!confirm("Удалить вариацию?")) return;
-    const { error } = await supabase.from("product_variants").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Удалено");
-    load();
+    try {
+      await catalogApi.deleteVariant(id);
+      toast.success("Удалено");
+      reloadProducts();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось удалить вариацию"));
+    }
   };
 
   // ======= CATEGORIES =======
@@ -314,24 +290,29 @@ const Admin = () => {
     };
     if (!payload.slug || !payload.name_ru) return toast.error("Заполните slug и название");
 
-    let error;
-    if (editingCategory.id) {
-      ({ error } = await supabase.from("categories").update(payload).eq("id", editingCategory.id));
-    } else {
-      ({ error } = await supabase.from("categories").insert(payload));
+    try {
+      if (editingCategory.id) {
+        await catalogApi.updateCategory(editingCategory.id, payload);
+      } else {
+        await catalogApi.createCategory(payload);
+      }
+      toast.success("Сохранено");
+      setEditingCategory(null);
+      reloadCategories();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось сохранить категорию"));
     }
-    if (error) return toast.error(error.message);
-    toast.success("Сохранено");
-    setEditingCategory(null);
-    load();
   };
 
   const deleteCategory = async (id: string) => {
     if (!confirm("Удалить категорию? Подкатегории и товары в ней останутся без родителя/категории.")) return;
-    const { error } = await supabase.from("categories").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Удалено");
-    load();
+    try {
+      await catalogApi.deleteCategory(id);
+      toast.success("Удалено");
+      reloadCategories();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось удалить категорию"));
+    }
   };
 
   // ======= LOOKUPS (materials/scents/shapes) =======
@@ -347,30 +328,42 @@ const Admin = () => {
       sort_order: Number(data.sort_order) || 0,
     };
     if (!payload.slug || !payload.name_ru) return toast.error("Заполните slug и название");
-    let error;
-    if (data.id) ({ error } = await supabase.from(kind).update(payload).eq("id", data.id));
-    else ({ error } = await supabase.from(kind).insert(payload));
-    if (error) return toast.error(error.message);
-    toast.success("Сохранено");
-    setEditingLookup(null);
-    load();
+    try {
+      if (data.id) {
+        await catalogApi.updateAttribute(kind, data.id, payload);
+      } else {
+        await catalogApi.createAttribute(kind, payload);
+      }
+      toast.success("Сохранено");
+      setEditingLookup(null);
+      reloadAttributes(kind);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось сохранить запись"));
+    }
   };
 
   const deleteLookup = async (kind: LookupKind, id: string) => {
     if (!confirm("Удалить запись справочника?")) return;
-    const { error } = await supabase.from(kind).delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Удалено");
-    load();
+    try {
+      await catalogApi.deleteAttribute(kind, id);
+      toast.success("Удалено");
+      reloadAttributes(kind);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось удалить запись"));
+    }
   };
 
   // ======= COMPANY SETTINGS =======
   const saveCompany = async () => {
     if (!company) return;
-    const { error } = await supabase.from("company_settings").update(company as never).eq("id", 1);
-    if (error) return toast.error(error.message);
-    toast.success("Реквизиты сохранены");
-    load();
+    try {
+      const { id: _id, updated_at: _updated_at, ...rest } = company;
+      await companyApi.update(rest);
+      toast.success("Реквизиты сохранены");
+      reloadCompany();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось сохранить реквизиты"));
+    }
   };
 
   const newCount = orders.filter((o) => o.status === "new").length;
@@ -447,7 +440,7 @@ const Admin = () => {
                       <div className="text-xs text-muted-foreground">{o.email}</div>
                     </td>
                     <td className="px-3 py-2.5 text-right num">{o.total_boxes}</td>
-                    <td className="px-3 py-2.5 text-right price">{formatMoney(Number(o.total), o.currency as "RUB" | "USD")}</td>
+                    <td className="px-3 py-2.5 text-right price">{formatMoney(Number(o.total), o.currency as Currency)}</td>
                     <td className="px-3 py-2.5">
                       <select value={o.status} onChange={(e) => updateStatus(o.id, e.target.value)}
                         className="h-9 w-full rounded-md border border-input bg-background px-2 text-xs">
@@ -580,7 +573,7 @@ const Admin = () => {
             <div className="rounded-lg border border-border bg-surface p-4 text-xs">
               <div className="font-semibold">Webhook для внешней системы (1С / МойСклад):</div>
               <div className="mt-1 break-all rounded-md bg-muted px-2 py-1 num">
-                {`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/inventory-webhook`}
+                {`${import.meta.env.VITE_API_URL ?? "http://localhost:8000"}/inventory/webhook`}
               </div>
               <div className="mt-2 text-muted-foreground">
                 POST с заголовком <code className="num">x-webhook-secret</code> и телом <code className="num">{`{"updates":[{"sku":"...","stock_boxes":N}]}`}</code>.
@@ -835,7 +828,7 @@ const Admin = () => {
         </DialogContent>
       </Dialog>
 
-      <StockOpDialog variant={stockOpVariant} onClose={() => setStockOpVariant(null)} onDone={load} />
+      <StockOpDialog variant={stockOpVariant} onClose={() => setStockOpVariant(null)} onDone={reloadProducts} />
     </PublicLayout>
   );
 };

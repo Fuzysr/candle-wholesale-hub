@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Upload, X, Loader2, ArrowUp, ArrowDown, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { apiErrorMessage, uploadsApi } from "@/lib/api";
 import { toast } from "sonner";
 
 export type GalleryImage = {
@@ -13,13 +13,12 @@ export type GalleryImage = {
 type Props = {
   value: GalleryImage[];
   onChange: (next: GalleryImage[]) => void;
-  bucket?: string;
 };
 
 const MAX_SIZE = 5 * 1024 * 1024;
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
-const MultiImageUpload = ({ value, onChange, bucket = "product-images" }: Props) => {
+const MultiImageUpload = ({ value, onChange }: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -35,14 +34,12 @@ const MultiImageUpload = ({ value, onChange, bucket = "product-images" }: Props)
       for (const file of Array.from(files)) {
         if (!ALLOWED.includes(file.type)) { toast.error(`${file.name}: неверный формат`); continue; }
         if (file.size > MAX_SIZE) { toast.error(`${file.name}: больше 5 МБ`); continue; }
-        const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-        const path = `${crypto.randomUUID()}.${ext}`;
-        const { error } = await supabase.storage.from(bucket).upload(path, file, {
-          cacheControl: "3600", upsert: false, contentType: file.type,
-        });
-        if (error) { toast.error(error.message); continue; }
-        const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-        uploaded.push({ url: data.publicUrl, sort_order: 0 });
+        try {
+          const { url } = await uploadsApi.uploadProductImage(file);
+          uploaded.push({ url, sort_order: 0 });
+        } catch (err) {
+          toast.error(apiErrorMessage(err, `${file.name}: ошибка загрузки`));
+        }
       }
       if (uploaded.length) {
         reorder([...sorted, ...uploaded]);
@@ -64,9 +61,12 @@ const MultiImageUpload = ({ value, onChange, bucket = "product-images" }: Props)
 
   const remove = async (idx: number) => {
     const img = sorted[idx];
-    if (img.url.includes(`/${bucket}/`)) {
-      const path = img.url.split(`/${bucket}/`)[1];
-      if (path) await supabase.storage.from(bucket).remove([path]).catch(() => null);
+    if (img.url.startsWith("http")) {
+      try {
+        await uploadsApi.delete(img.url);
+      } catch {
+        /* ignore — image may be external */
+      }
     }
     reorder(sorted.filter((_, i) => i !== idx));
   };

@@ -1,0 +1,76 @@
+# Production-oriented compose file.
+#
+# Differences vs. docker-compose.yml (which is for local development):
+#   - no source-code bind mount on the backend (uses the baked image)
+#   - no --reload / no dev-time Alembic step baked into command
+#     (run migrations once via `docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head`)
+#   - `restart: unless-stopped` on every service
+#   - Postgres and MinIO ports are NOT published to the host by default
+#     (expose them only if you really need external access)
+#   - expects secrets via env_file: `backend/.env` — make sure that file
+#     is deployed with a strong `JWT_SECRET`, real MinIO / Postgres creds,
+#     and `APP_ENV=production`
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
+#   docker compose -f docker-compose.prod.yml run --rm backend python -m scripts.bootstrap_admin
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: candles-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-candles}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-candles}
+      POSTGRES_DB: ${POSTGRES_DB:-candles}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-candles} -d ${POSTGRES_DB:-candles}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: candles-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: candles-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"   # only bind to localhost; reverse-proxy sits in front
+    # No `--reload`, no bind mount. Migrations are run out-of-band — see the
+    # header of this file. The image's default CMD (uvicorn app.main:app ...)
+    # takes over.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres-data:
+  minio-data:

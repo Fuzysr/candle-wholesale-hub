@@ -1,32 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { AUTH_ME_KEY, useAuth } from "@/hooks/useAuth";
+import { apiErrorMessage, catalogApi, ordersApi, profileApi } from "@/lib/api";
+import type { Currency } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { useCartStore } from "@/store/cartStore";
 import { toast } from "sonner";
-
-type Order = {
-  id: string;
-  order_number: string;
-  status: string;
-  total: number;
-  currency: string;
-  total_boxes: number;
-  created_at: string;
-};
-
-type OrderItem = {
-  variant_id: string | null;
-  sku: string;
-  product_name: string;
-  variant_label: string | null;
-  pieces_per_box: number;
-  boxes: number;
-  unit_price: number;
-};
 
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   new:        { label: "Новая",          cls: "bg-info/10 text-info" },
@@ -47,7 +29,7 @@ const Field = ({ label, ...props }: { label: string } & React.InputHTMLAttribute
 
 const Account = () => {
   const { user, loading } = useAuth();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const queryClient = useQueryClient();
   const addItem = useCartStore((s) => s.addItem);
   const [tab, setTab] = useState<"orders" | "profile">("orders");
   const [profileForm, setProfileForm] = useState({
@@ -59,6 +41,12 @@ const Account = () => {
   });
   const [savingProfile, setSavingProfile] = useState(false);
 
+  const { data: orders = [] } = useQuery({
+    queryKey: ["orders", "mine"],
+    queryFn: () => ordersApi.listMine(),
+    enabled: !!user,
+  });
+
   useEffect(() => {
     if (!user) return;
     setProfileForm({
@@ -68,43 +56,68 @@ const Account = () => {
       inn: user.profile?.inn ?? "",
       address: user.profile?.address ?? "",
     });
-    supabase.from("orders").select("id,order_number,status,total,currency,total_boxes,created_at")
-      .eq("user_id", user.user.id).order("created_at", { ascending: false })
-      .then(({ data }) => setOrders((data as Order[]) ?? []));
   }, [user]);
 
   const repeat = async (orderId: string) => {
-    const { data: items } = await supabase.from("order_items").select("*").eq("order_id", orderId);
-    if (!items) return;
-    let added = 0;
-    for (const i of items as OrderItem[]) {
-      if (!i.variant_id) continue;
-      const { data: v } = await supabase.from("product_variants").select("*, product:products(*)").eq("id", i.variant_id).maybeSingle();
-      if (!v) continue;
-      const product = (v as { product: { id: string; name_ru: string; image_url: string | null } }).product;
-      addItem({
-        variantId: v.id, productId: product.id, sku: v.sku,
-        productName: product.name_ru,
-        variantLabel: i.variant_label ?? "",
-        image: product.image_url,
-        piecesPerBox: v.pieces_per_box,
-        priceRub: Number(v.price_per_piece_rub),
-        priceUsd: Number(v.price_per_piece_usd),
-        stockBoxes: v.stock_boxes,
-      }, i.boxes);
-      added++;
+    try {
+      const order = await ordersApi.getById(orderId);
+      let added = 0;
+      for (const item of order.items) {
+        if (!item.variant_id) continue;
+        try {
+          // Backend doesn't expose a variant-by-id public endpoint, so
+          // we refetch the product by slug (via the SKU's variant label)
+          // and cherry-pick the variant. For simplicity we just look the
+          // variant up via the cached products list.
+          const products = await catalogApi.listProducts();
+          const product = products.find((p) => p.variants.some((v) => v.id === item.variant_id));
+          const variant = product?.variants.find((v) => v.id === item.variant_id);
+          if (!product || !variant) continue;
+          addItem(
+            {
+              variantId: variant.id,
+              productId: product.id,
+              sku: variant.sku,
+              productName: product.name_ru,
+              variantLabel: item.variant_label ?? "",
+              image: product.image_url,
+              piecesPerBox: variant.pieces_per_box,
+              priceRub: Number(variant.price_per_piece_rub),
+              priceUsd: Number(variant.price_per_piece_usd),
+              stockBoxes: Math.max(0, variant.stock_boxes - variant.reserved_boxes),
+            },
+            item.boxes,
+          );
+          added++;
+        } catch {
+          /* skip unavailable variant */
+        }
+      }
+      toast.success(`Добавлено в корзину: ${added} позиций`);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось повторить заявку"));
     }
-    toast.success(`Добавлено в корзину: ${added} позиций`);
   };
 
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setSavingProfile(true);
-    const { error } = await supabase.from("profiles").update(profileForm).eq("id", user.user.id);
-    setSavingProfile(false);
-    if (error) return toast.error(error.message);
-    toast.success("Профиль сохранён");
+    try {
+      await profileApi.update({
+        company_name: profileForm.company_name || null,
+        contact_name: profileForm.contact_name || null,
+        phone: profileForm.phone || null,
+        inn: profileForm.inn || null,
+        address: profileForm.address || null,
+      });
+      await queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY });
+      toast.success("Профиль сохранён");
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось сохранить профиль"));
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   if (loading) return <PublicLayout><div className="container py-10">Загрузка...</div></PublicLayout>;
@@ -156,7 +169,7 @@ const Account = () => {
                         <td className="px-3 py-2.5 text-muted-foreground">{new Date(o.created_at).toLocaleDateString("ru-RU")}</td>
                         <td className="px-3 py-2.5"><span className={`inline-flex rounded-sm px-2 py-0.5 text-xs font-medium ${s.cls}`}>{s.label}</span></td>
                         <td className="px-3 py-2.5 text-right num">{o.total_boxes}</td>
-                        <td className="px-3 py-2.5 text-right price">{formatMoney(Number(o.total), o.currency as "RUB" | "USD")}</td>
+                        <td className="px-3 py-2.5 text-right price">{formatMoney(Number(o.total), o.currency as Currency)}</td>
                         <td className="px-3 py-2.5 text-right">
                           <Button size="sm" variant="outline" onClick={() => repeat(o.id)}>Повторить</Button>
                         </td>

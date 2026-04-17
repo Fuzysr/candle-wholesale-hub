@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { authApi, apiErrorMessage } from "@/lib/api";
+import { AUTH_ME_KEY } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
 const Field = ({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
@@ -16,6 +18,7 @@ type Mode = "login" | "register" | "forgot";
 
 const Auth = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [params] = useSearchParams();
   const next = params.get("next") || "/account";
   const [mode, setMode] = useState<Mode>("register");
@@ -33,40 +36,41 @@ const Auth = () => {
     e.preventDefault();
     setLoading(true);
 
-    if (mode === "forgot") {
-      const { error } = await supabase.auth.resetPasswordForEmail(form.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      setLoading(false);
-      if (error) return toast.error(error.message);
-      toast.success("Письмо со ссылкой отправлено на email");
-      setMode("login");
-      return;
-    }
+    try {
+      if (mode === "forgot") {
+        const result = await authApi.requestPasswordReset(form.email);
+        toast.success("Если email зарегистрирован — ссылка отправлена");
+        // Dev fallback: email delivery isn't wired yet, so the backend returns the
+        // raw token when APP_ENV !== production. Jump straight into the reset flow.
+        if (result.reset_token) {
+          navigate(`/reset-password?token=${encodeURIComponent(result.reset_token)}`);
+          return;
+        }
+        setMode("login");
+        return;
+      }
 
-    if (mode === "register") {
-      const { error } = await supabase.auth.signUp({
-        email: form.email,
-        password: form.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}${next}`,
-          data: {
-            company_name: form.company_name,
-            contact_name: form.contact_name,
-            phone: form.phone,
-          },
-        },
-      });
+      if (mode === "register") {
+        await authApi.register({
+          email: form.email,
+          password: form.password,
+          company_name: form.company_name || null,
+          contact_name: form.contact_name || null,
+          phone: form.phone || null,
+        });
+        await queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY });
+        toast.success("Аккаунт создан");
+        navigate(next);
+      } else {
+        await authApi.login({ email: form.email, password: form.password });
+        await queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY });
+        toast.success("Добро пожаловать");
+        navigate(next);
+      }
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось выполнить запрос"));
+    } finally {
       setLoading(false);
-      if (error) { toast.error(error.message); return; }
-      toast.success("Аккаунт создан");
-      navigate(next);
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });
-      setLoading(false);
-      if (error) { toast.error(error.message); return; }
-      toast.success("Добро пожаловать");
-      navigate(next);
     }
   };
 
