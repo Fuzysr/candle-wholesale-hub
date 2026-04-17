@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useParams, Link } from "react-router-dom";
-import { Grid2X2, List, SlidersHorizontal, Search } from "lucide-react";
+import { Grid2X2, List, SlidersHorizontal, Search, ChevronDown, ChevronRight, X } from "lucide-react";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,12 +10,19 @@ import { useAppStore } from "@/store/appStore";
 import { useCartStore } from "@/store/cartStore";
 import {
   productName,
+  productMinBoxPrice,
+  productTotalStock,
+  productGalleryUrls,
   variantBoxPrice,
   variantPrice,
   variantLabel,
+  availableBoxes,
   type Product,
   type ProductVariant,
   type Category,
+  type Material,
+  type Scent,
+  type Shape,
 } from "@/lib/catalog";
 import { formatMoney } from "@/lib/format";
 import StockIndicator from "@/components/shop/StockIndicator";
@@ -23,6 +30,15 @@ import NumberStepper from "@/components/shop/NumberStepper";
 import { toast } from "sonner";
 
 type View = "grid" | "table";
+type SortKey = "newest" | "price-asc" | "price-desc" | "name" | "stock";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  newest: "Сначала новинки",
+  "price-asc": "Цена ↑",
+  "price-desc": "Цена ↓",
+  name: "По названию (А→Я)",
+  stock: "По наличию",
+};
 
 const Catalog = () => {
   const { categorySlug } = useParams();
@@ -32,48 +48,110 @@ const Catalog = () => {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [scents, setScents] = useState<Scent[]>([]);
+  const [shapes, setShapes] = useState<Shape[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("grid");
   const [onlyInStock, setOnlyInStock] = useState(true);
   const [colorFilter, setColorFilter] = useState<string>("");
+  const [materialIds, setMaterialIds] = useState<Set<string>>(new Set());
+  const [scentIds, setScentIds] = useState<Set<string>>(new Set());
+  const [shapeIds, setShapeIds] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<SortKey>("newest");
+  const [openCats, setOpenCats] = useState<Set<string>>(new Set());
+
   const search = params.get("q")?.toLowerCase() ?? "";
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [{ data: cats }, { data: prods }] = await Promise.all([
+      const [{ data: cats }, { data: prods }, { data: mats }, { data: scs }, { data: shs }] = await Promise.all([
         supabase.from("categories").select("*").order("sort_order"),
         supabase
           .from("products")
-          .select("*, variants:product_variants(*), category:categories(slug,name_ru,name_en)")
+          .select("*, variants:product_variants(*), images:product_images(*), category:categories(slug,name_ru,name_en), material:materials(*), scent:scents(*), shape:shapes(*)")
           .eq("is_published", true),
+        supabase.from("materials").select("*").order("sort_order"),
+        supabase.from("scents").select("*").order("sort_order"),
+        supabase.from("shapes").select("*").order("sort_order"),
       ]);
       setCategories((cats as Category[]) ?? []);
       setProducts((prods as unknown as Product[]) ?? []);
+      setMaterials((mats as Material[]) ?? []);
+      setScents((scs as Scent[]) ?? []);
+      setShapes((shs as Shape[]) ?? []);
       setLoading(false);
     };
     load();
   }, []);
 
+  // Category tree
+  const rootCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
+  const childrenOf = (id: string) => categories.filter((c) => c.parent_id === id);
+
+  // Auto-open the parent of the active category
+  useEffect(() => {
+    if (!categorySlug) return;
+    const active = categories.find((c) => c.slug === categorySlug);
+    if (active?.parent_id) {
+      setOpenCats((s) => new Set(s).add(active.parent_id!));
+    }
+  }, [categorySlug, categories]);
+
+  const activeCategoryAndDescendants = useMemo(() => {
+    if (!categorySlug) return null;
+    const root = categories.find((c) => c.slug === categorySlug);
+    if (!root) return null;
+    const ids = new Set<string>([root.id]);
+    const queue = [root.id];
+    while (queue.length) {
+      const id = queue.shift()!;
+      categories.filter((c) => c.parent_id === id).forEach((c) => { ids.add(c.id); queue.push(c.id); });
+    }
+    return ids;
+  }, [categorySlug, categories]);
+
+  const toggleSet = <T,>(set: Set<T>, value: T): Set<T> => {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value); else next.add(value);
+    return next;
+  };
+
   const filtered = useMemo(() => {
-    return products
-      .filter((p) => (categorySlug ? p.category?.slug === categorySlug : true))
+    const list = products
+      .filter((p) => activeCategoryAndDescendants ? (p.category_id ? activeCategoryAndDescendants.has(p.category_id) : false) : true)
       .filter((p) =>
         search
           ? productName(p, lang).toLowerCase().includes(search) ||
             p.variants?.some((v) => v.sku.toLowerCase().includes(search))
           : true,
       )
+      .filter((p) => (materialIds.size ? p.material_id && materialIds.has(p.material_id) : true))
+      .filter((p) => (scentIds.size ? p.scent_id && scentIds.has(p.scent_id) : true))
+      .filter((p) => (shapeIds.size ? p.shape_id && shapeIds.has(p.shape_id) : true))
       .map((p) => ({
         ...p,
         variants: (p.variants ?? []).filter((v) => {
-          if (onlyInStock && v.stock_boxes <= 0) return false;
+          if (onlyInStock && availableBoxes(v) <= 0) return false;
           if (colorFilter && v.color !== colorFilter) return false;
           return true;
         }),
       }))
       .filter((p) => (p.variants?.length ?? 0) > 0);
-  }, [products, categorySlug, search, onlyInStock, colorFilter, lang]);
+
+    const sorted = [...list];
+    switch (sort) {
+      case "price-asc": sorted.sort((a, b) => productMinBoxPrice(a, currency) - productMinBoxPrice(b, currency)); break;
+      case "price-desc": sorted.sort((a, b) => productMinBoxPrice(b, currency) - productMinBoxPrice(a, currency)); break;
+      case "name": sorted.sort((a, b) => productName(a, lang).localeCompare(productName(b, lang), "ru")); break;
+      case "stock": sorted.sort((a, b) => productTotalStock(b) - productTotalStock(a)); break;
+      case "newest":
+      default:
+        sorted.sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+    }
+    return sorted;
+  }, [products, activeCategoryAndDescendants, search, onlyInStock, colorFilter, lang, materialIds, scentIds, shapeIds, sort, currency]);
 
   const allColors = useMemo(() => {
     const s = new Set<string>();
@@ -88,13 +166,22 @@ const Catalog = () => {
       sku: v.sku,
       productName: productName(p, lang),
       variantLabel: variantLabel(v),
-      image: p.image_url,
+      image: productGalleryUrls(p)[0] ?? p.image_url,
       piecesPerBox: v.pieces_per_box,
       priceRub: Number(v.price_per_piece_rub),
       priceUsd: Number(v.price_per_piece_usd),
-      stockBoxes: v.stock_boxes,
+      stockBoxes: availableBoxes(v),
     }, qty);
     toast.success(`${v.sku} · ${qty} кор. в корзине`);
+  };
+
+  const activeFiltersCount = materialIds.size + scentIds.size + shapeIds.size + (colorFilter ? 1 : 0) + (onlyInStock ? 0 : 0);
+
+  const clearAttrFilters = () => {
+    setMaterialIds(new Set());
+    setScentIds(new Set());
+    setShapeIds(new Set());
+    setColorFilter("");
   };
 
   return (
@@ -136,11 +223,16 @@ const Catalog = () => {
               />
               Только в наличии
             </label>
+            {activeFiltersCount > 0 && (
+              <button onClick={clearAttrFilters} className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                <X className="h-3 w-3" /> Сбросить фильтры ({activeFiltersCount})
+              </button>
+            )}
           </div>
 
           <div>
             <h3 className="mb-2 text-sm font-semibold">Категории</h3>
-            <ul className="space-y-1 text-sm">
+            <ul className="space-y-0.5 text-sm">
               <li>
                 <Link
                   to="/catalog"
@@ -149,18 +241,56 @@ const Catalog = () => {
                   Все категории
                 </Link>
               </li>
-              {categories.map((c) => (
-                <li key={c.id}>
-                  <Link
-                    to={`/catalog/${c.slug}`}
-                    className={`block rounded-md px-2 py-1.5 hover:bg-accent ${categorySlug === c.slug ? "bg-accent font-medium" : ""}`}
-                  >
-                    {c.name_ru}
-                  </Link>
-                </li>
-              ))}
+              {rootCategories.map((c) => {
+                const subs = childrenOf(c.id);
+                const isOpen = openCats.has(c.id);
+                const activeSelf = categorySlug === c.slug;
+                return (
+                  <li key={c.id}>
+                    <div className={`flex items-center gap-1 rounded-md ${activeSelf ? "bg-accent" : ""}`}>
+                      <Link to={`/catalog/${c.slug}`} className={`flex-1 rounded-md px-2 py-1.5 hover:bg-accent ${activeSelf ? "font-medium" : ""}`}>
+                        {c.name_ru}
+                      </Link>
+                      {subs.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setOpenCats((s) => toggleSet(s, c.id))}
+                          className="rounded-md p-1 hover:bg-accent"
+                          aria-label="Развернуть"
+                        >
+                          {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
+                    </div>
+                    {subs.length > 0 && isOpen && (
+                      <ul className="ml-3 mt-0.5 space-y-0.5 border-l border-border pl-2">
+                        {subs.map((s) => (
+                          <li key={s.id}>
+                            <Link
+                              to={`/catalog/${s.slug}`}
+                              className={`block rounded-md px-2 py-1 text-[13px] hover:bg-accent ${categorySlug === s.slug ? "bg-accent font-medium" : "text-muted-foreground"}`}
+                            >
+                              {s.name_ru}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
+
+          {materials.length > 0 && (
+            <FilterGroup title="Материал" items={materials.map((m) => ({ id: m.id, label: lang === "ru" ? m.name_ru : m.name_en }))} selected={materialIds} onToggle={(id) => setMaterialIds((s) => toggleSet(s, id))} />
+          )}
+          {scents.length > 0 && (
+            <FilterGroup title="Аромат" items={scents.map((s) => ({ id: s.id, label: lang === "ru" ? s.name_ru : s.name_en }))} selected={scentIds} onToggle={(id) => setScentIds((s) => toggleSet(s, id))} />
+          )}
+          {shapes.length > 0 && (
+            <FilterGroup title="Форма" items={shapes.map((sh) => ({ id: sh.id, label: lang === "ru" ? sh.name_ru : sh.name_en }))} selected={shapeIds} onToggle={(id) => setShapeIds((s) => toggleSet(s, id))} />
+          )}
 
           {allColors.length > 0 && (
             <div>
@@ -209,19 +339,33 @@ const Catalog = () => {
               </form>
               <span className="text-xs text-muted-foreground">{filtered.length} товаров</span>
             </div>
-            <div className="inline-flex rounded-md border border-input bg-background p-0.5">
-              <button
-                onClick={() => setView("grid")}
-                className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-xs font-medium ${view === "grid" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-accent"}`}
-              >
-                <Grid2X2 className="h-3.5 w-3.5" /> Сетка
-              </button>
-              <button
-                onClick={() => setView("table")}
-                className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-xs font-medium ${view === "table" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-accent"}`}
-              >
-                <List className="h-3.5 w-3.5" /> Таблица
-              </button>
+            <div className="flex items-center gap-2">
+              <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="hidden sm:inline">Сортировка:</span>
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as SortKey)}
+                  className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+                >
+                  {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                    <option key={k} value={k}>{SORT_LABELS[k]}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="inline-flex rounded-md border border-input bg-background p-0.5">
+                <button
+                  onClick={() => setView("grid")}
+                  className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-xs font-medium ${view === "grid" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-accent"}`}
+                >
+                  <Grid2X2 className="h-3.5 w-3.5" /> Сетка
+                </button>
+                <button
+                  onClick={() => setView("table")}
+                  className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-xs font-medium ${view === "table" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-accent"}`}
+                >
+                  <List className="h-3.5 w-3.5" /> Таблица
+                </button>
+              </div>
             </div>
           </div>
 
@@ -236,35 +380,38 @@ const Catalog = () => {
           ) : view === "grid" ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filtered.flatMap((p) =>
-                (p.variants ?? []).map((v) => (
-                  <article key={v.id} className="group flex flex-col overflow-hidden rounded-lg border border-border bg-surface transition-shadow hover:shadow-md">
-                    <Link to={`/product/${p.slug}`} className="aspect-square overflow-hidden bg-muted">
-                      <img
-                        src={getProductImage(p.image_url)}
-                        alt={productName(p, lang)}
-                        loading="lazy"
-                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                      />
-                    </Link>
-                    <div className="flex flex-1 flex-col p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="num text-[11px] text-muted-foreground">{v.sku}</span>
-                        <StockIndicator stockBoxes={v.stock_boxes} />
-                      </div>
-                      <Link to={`/product/${p.slug}`} className="mt-1 line-clamp-2 text-sm font-semibold hover:text-primary">
-                        {productName(p, lang)}
+                (p.variants ?? []).map((v) => {
+                  const cover = productGalleryUrls(p)[0] ?? p.image_url;
+                  return (
+                    <article key={v.id} className="group flex flex-col overflow-hidden rounded-lg border border-border bg-surface transition-shadow hover:shadow-md">
+                      <Link to={`/product/${p.slug}`} className="aspect-square overflow-hidden bg-muted">
+                        <img
+                          src={getProductImage(cover)}
+                          alt={productName(p, lang)}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                        />
                       </Link>
-                      <div className="mt-1 text-xs text-muted-foreground">{variantLabel(v)}</div>
-                      <div className="mt-3 flex items-baseline justify-between">
-                        <div>
-                          <div className="price text-base">{formatMoney(variantBoxPrice(v, currency), currency)}</div>
-                          <div className="text-[11px] text-muted-foreground">за коробку · {v.pieces_per_box} шт</div>
+                      <div className="flex flex-1 flex-col p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="num text-[11px] text-muted-foreground">{v.sku}</span>
+                          <StockIndicator stockBoxes={availableBoxes(v)} />
                         </div>
+                        <Link to={`/product/${p.slug}`} className="mt-1 line-clamp-2 text-sm font-semibold hover:text-primary">
+                          {productName(p, lang)}
+                        </Link>
+                        <div className="mt-1 text-xs text-muted-foreground">{variantLabel(v)}</div>
+                        <div className="mt-3 flex items-baseline justify-between">
+                          <div>
+                            <div className="price text-base">{formatMoney(variantBoxPrice(v, currency), currency)}</div>
+                            <div className="text-[11px] text-muted-foreground">за коробку · {v.pieces_per_box} шт</div>
+                          </div>
+                        </div>
+                        <Button onClick={() => handleAdd(p, v)} className="mt-3 w-full">+ В корзину</Button>
                       </div>
-                      <Button onClick={() => handleAdd(p, v)} className="mt-3 w-full">+ В корзину</Button>
-                    </div>
-                  </article>
-                )),
+                    </article>
+                  );
+                }),
               )}
             </div>
           ) : (
@@ -298,9 +445,34 @@ const Catalog = () => {
   );
 };
 
+const FilterGroup = ({
+  title, items, selected, onToggle,
+}: {
+  title: string;
+  items: { id: string; label: string }[];
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+}) => (
+  <div>
+    <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+    <div className="space-y-1">
+      {items.map((it) => {
+        const active = selected.has(it.id);
+        return (
+          <label key={it.id} className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-accent">
+            <input type="checkbox" checked={active} onChange={() => onToggle(it.id)} className="h-3.5 w-3.5 accent-primary" />
+            <span className={active ? "font-medium" : "text-foreground/80"}>{it.label}</span>
+          </label>
+        );
+      })}
+    </div>
+  </div>
+);
+
 const TableRow = ({ p, v, onAdd }: { p: Product; v: ProductVariant; onAdd: (p: Product, v: ProductVariant, n: number) => void }) => {
   const { currency, lang } = useAppStore();
   const [qty, setQty] = useState(1);
+  const stock = availableBoxes(v);
   return (
     <tr className="border-t border-border hover:bg-accent/40">
       <td className="px-3 py-2.5 num text-xs text-muted-foreground">{v.sku}</td>
@@ -311,13 +483,13 @@ const TableRow = ({ p, v, onAdd }: { p: Product; v: ProductVariant; onAdd: (p: P
       </td>
       <td className="px-3 py-2.5 text-xs text-muted-foreground">{variantLabel(v)}</td>
       <td className="px-3 py-2.5 text-right num">{v.pieces_per_box}</td>
-      <td className="px-3 py-2.5 text-right"><StockIndicator stockBoxes={v.stock_boxes} /></td>
+      <td className="px-3 py-2.5 text-right"><StockIndicator stockBoxes={stock} /></td>
       <td className="px-3 py-2.5 text-right">
         <div className="price">{formatMoney(variantBoxPrice(v, currency), currency)}</div>
         <div className="text-[11px] text-muted-foreground">{formatMoney(variantPrice(v, currency), currency)} × {v.pieces_per_box}</div>
       </td>
       <td className="px-3 py-2.5 text-right">
-        <NumberStepper value={qty} onChange={setQty} min={1} max={v.stock_boxes} size="sm" />
+        <NumberStepper value={qty} onChange={setQty} min={1} max={stock} size="sm" />
       </td>
       <td className="px-3 py-2.5 text-right">
         <Button size="sm" onClick={() => onAdd(p, v, qty)}>В корзину</Button>
