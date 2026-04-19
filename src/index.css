@@ -10,15 +10,16 @@
 
 @layer base {
   :root {
-    /* Surfaces */
-    --background: 36 30% 96%;        /* calm warm cream page bg */
-    --surface: 40 25% 99%;           /* cards, tables — near-white with a hint of warmth */
+    /* Surfaces — warmed amber-cream palette (slightly bumped from the previous
+       cooler variant so the whole canvas feels cosier, candle-shop vibe). */
+    --background: 34 42% 95%;        /* warm cream page bg */
+    --surface: 36 38% 98%;           /* cards, tables — soft ivory */
     --foreground: 25 15% 12%;        /* near-black warm */
 
-    --card: 40 25% 99%;
+    --card: 36 38% 98%;
     --card-foreground: 25 15% 12%;
 
-    --popover: 40 25% 99%;
+    --popover: 36 38% 98%;
     --popover-foreground: 25 15% 12%;
 
     /* Primary — warm amber (signature) */
@@ -26,14 +27,14 @@
     --primary-foreground: 25 30% 10%;
     --primary-hover: 35 90% 45%;
 
-    /* Secondary — neutral */
-    --secondary: 30 15% 94%;
+    /* Secondary — neutral (warm) */
+    --secondary: 32 25% 93%;
     --secondary-foreground: 25 15% 18%;
 
-    --muted: 30 15% 96%;
-    --muted-foreground: 30 8% 42%;
+    --muted: 32 25% 95%;
+    --muted-foreground: 30 10% 40%;
 
-    --accent: 30 15% 94%;
+    --accent: 32 25% 93%;
     --accent-foreground: 25 15% 18%;
 
     /* Status */
@@ -47,61 +48,64 @@
     --info-foreground: 0 0% 100%;
 
     /* Borders & rings */
-    --border: 30 15% 90%;
-    --input: 30 15% 88%;
+    --border: 32 22% 88%;
+    --input: 32 22% 86%;
     --ring: 35 90% 50%;
 
     --radius: 0.5rem;
 
-    /* Sidebar (admin) */
-    --sidebar-background: 30 15% 97%;
+    /* Sidebar (admin) — matches the warmer neutral scale above */
+    --sidebar-background: 32 25% 96%;
     --sidebar-foreground: 25 15% 18%;
     --sidebar-primary: 35 90% 50%;
     --sidebar-primary-foreground: 25 30% 10%;
-    --sidebar-accent: 30 15% 92%;
+    --sidebar-accent: 32 22% 90%;
     --sidebar-accent-foreground: 25 15% 18%;
-    --sidebar-border: 30 15% 88%;
+    --sidebar-border: 32 22% 86%;
     --sidebar-ring: 35 90% 50%;
   }
 
   .dark {
-    --background: 25 15% 8%;
-    --surface: 25 12% 12%;
-    --foreground: 40 20% 96%;
+    /* Warm amber-cocoa dark palette — evokes candlelight rather than default
+       cold charcoal. Hue anchored ~26 (brown-amber), saturation raised vs the
+       original grays so the surface actually reads warm, not neutral. */
+    --background: 26 22% 8%;
+    --surface: 26 18% 13%;
+    --foreground: 38 30% 95%;
 
-    --card: 25 12% 12%;
-    --card-foreground: 40 20% 96%;
-    --popover: 25 12% 12%;
-    --popover-foreground: 40 20% 96%;
+    --card: 26 18% 13%;
+    --card-foreground: 38 30% 95%;
+    --popover: 26 18% 13%;
+    --popover-foreground: 38 30% 95%;
 
-    --primary: 35 90% 55%;
-    --primary-foreground: 25 30% 10%;
-    --primary-hover: 35 90% 60%;
+    --primary: 35 92% 58%;
+    --primary-foreground: 26 40% 10%;
+    --primary-hover: 35 92% 63%;
 
-    --secondary: 25 10% 18%;
-    --secondary-foreground: 40 20% 96%;
-    --muted: 25 10% 16%;
-    --muted-foreground: 30 8% 65%;
-    --accent: 25 10% 18%;
-    --accent-foreground: 40 20% 96%;
+    --secondary: 26 15% 18%;
+    --secondary-foreground: 38 30% 95%;
+    --muted: 26 15% 16%;
+    --muted-foreground: 32 15% 68%;
+    --accent: 26 15% 18%;
+    --accent-foreground: 38 30% 95%;
 
-    --success: 145 50% 45%;
-    --warning: 38 95% 55%;
-    --destructive: 0 65% 55%;
-    --info: 210 80% 60%;
+    --success: 145 50% 48%;
+    --warning: 38 95% 58%;
+    --destructive: 0 68% 58%;
+    --info: 210 80% 62%;
 
-    --border: 25 10% 20%;
-    --input: 25 10% 22%;
-    --ring: 35 90% 55%;
+    --border: 26 15% 20%;
+    --input: 26 15% 22%;
+    --ring: 35 92% 58%;
 
-    --sidebar-background: 25 12% 10%;
-    --sidebar-foreground: 40 20% 96%;
-    --sidebar-primary: 35 90% 55%;
-    --sidebar-primary-foreground: 25 30% 10%;
-    --sidebar-accent: 25 10% 16%;
-    --sidebar-accent-foreground: 40 20% 96%;
-    --sidebar-border: 25 10% 18%;
-    --sidebar-ring: 35 90% 55%;
+    --sidebar-background: 26 20% 10%;
+    --sidebar-foreground: 38 30% 95%;
+    --sidebar-primary: 35 92% 58%;
+    --sidebar-primary-foreground: 26 40% 10%;
+    --sidebar-accent: 26 15% 16%;
+    --sidebar-accent-foreground: 38 30% 95%;
+    --sidebar-border: 26 15% 18%;
+    --sidebar-ring: 35 92% 58%;
   }
 }
 

@@ -3,6 +3,7 @@ import { ArrowRight, Zap, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Reveal from "@/components/ui/reveal";
 import CountUp from "@/components/ui/count-up";
+import { cn } from "@/lib/utils";
 import heroImage from "@/assets/hero-candles.jpg";
 
 const Hero = () => {
@@ -100,33 +101,54 @@ const Hero = () => {
             />
           </div>
 
-          {/* Floating spec card — gentler + slower `card-in` so it doesn't "pop" */}
-          <Link
-            to="/catalog?q=PIL-070-IV"
-            aria-label="Перейти к товару PIL-070-IV: Свеча столбчатая 7×15 см"
+          {/*
+            Floating spec card.
+            IMPORTANT: the entry animation `animate-card-in` has `animation-fill-mode: both`,
+            which pins `transform` on the animated element and would *override* any hover
+            transform per the CSS Animations spec. So we split responsibilities:
+              - outer <div>  → absolute position + entry animation (owns animated transform)
+              - inner <Link> → hover lift (owns interactive transform)
+          */}
+          <div
+            className="absolute -bottom-5 -left-3 hidden w-64 animate-card-in motion-reduce:animate-none sm:block md:-left-6"
             style={{ animationDelay: "450ms" }}
-            className="group absolute -bottom-5 -left-3 hidden w-64 animate-card-in rounded-lg border border-border bg-surface p-4 shadow-md transition-all duration-300 ease-out [transform-origin:0%_100%] hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg focus-visible:-translate-y-1 focus-visible:border-primary/40 focus-visible:shadow-lg motion-reduce:animate-none sm:block md:-left-6"
           >
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground">
-                Артикул PIL-070-IV
-              </span>
-              <span className="rounded-sm bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-success">
-                в наличии
-              </span>
-            </div>
-            <div className="mt-2 text-sm font-medium transition-colors group-hover:text-primary">
-              Свеча столбчатая 7×15 см
-            </div>
-            <div className="mt-3 flex items-baseline justify-between">
-              <span className="text-xs text-muted-foreground">за коробку (12 шт)</span>
-              <span className="price text-base">1 920 ₽</span>
-            </div>
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-x-4 bottom-1.5 h-px origin-left scale-x-0 bg-primary/60 transition-transform duration-300 ease-out group-hover:scale-x-100"
-            />
-          </Link>
+            <Link
+              to="/catalog?q=PIL-070-IV"
+              aria-label="Перейти к товару PIL-070-IV: Свеча столбчатая 7×15 см"
+              className={cn(
+                "group relative block rounded-lg border border-border bg-surface p-4 shadow-md transition-all duration-500 ease-out",
+                // Pronounced lift on hover: 12px up + 3% scale + amber-tinted 2xl shadow
+                "hover:-translate-y-3 hover:scale-[1.03] hover:border-primary/60 hover:shadow-2xl hover:shadow-primary/30",
+                "focus-visible:-translate-y-3 focus-visible:scale-[1.03] focus-visible:border-primary/60 focus-visible:shadow-2xl focus-visible:shadow-primary/30",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                "motion-reduce:transform-none motion-reduce:transition-none",
+              )}
+            >
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs font-medium text-muted-foreground transition-colors duration-300 group-hover:text-foreground">
+                  Артикул PIL-070-IV
+                </span>
+                <span className="rounded-sm bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-success transition-transform duration-300 group-hover:scale-110">
+                  в наличии
+                </span>
+              </div>
+              <div className="mt-2 text-sm font-medium transition-colors duration-300 group-hover:text-primary">
+                Свеча столбчатая 7×15 см
+              </div>
+              <div className="mt-3 flex items-baseline justify-between">
+                <span className="text-xs text-muted-foreground">за коробку (12 шт)</span>
+                <span className="price text-base transition-colors duration-300 group-hover:text-primary">
+                  1 920 ₽
+                </span>
+              </div>
+              {/* Amber underline that scales in as the card lifts */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-4 bottom-1.5 h-px origin-left scale-x-0 bg-primary/60 transition-transform duration-500 ease-out group-hover:scale-x-100"
+              />
+            </Link>
+          </div>
         </div>
       </div>
     </section>

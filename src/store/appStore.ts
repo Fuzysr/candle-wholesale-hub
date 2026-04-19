@@ -17,6 +17,18 @@ export const useAppStore = create<AppState>()(
       setCurrency: (currency) => set({ currency }),
       setLang: (lang) => set({ lang }),
     }),
-    { name: "wc-app-prefs" },
+    {
+      name: "wc-app-prefs",
+      // Bump version so any previously-persisted `currency: "USD"` preferences
+      // are reset to RUB (the only currency actually surfaced in the UI today).
+      version: 2,
+      migrate: (persisted: unknown) => {
+        const state = (persisted as Partial<AppState>) ?? {};
+        return {
+          currency: "RUB" as Currency,
+          lang: (state.lang as Lang) ?? "ru",
+        };
+      },
+    },
   ),
 );

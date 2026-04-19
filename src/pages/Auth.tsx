@@ -78,23 +78,16 @@ const Auth = () => {
     <PublicLayout>
       <div className="container max-w-md py-12">
         <div className="rounded-lg border border-border bg-surface p-6">
-          {mode !== "forgot" && (
-            <div className="mb-6 inline-flex rounded-md border border-input bg-background p-0.5 text-sm">
-              <button type="button" onClick={() => setMode("register")}
-                className={`rounded-sm px-3 py-1.5 ${mode === "register" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-accent"}`}>
-                Регистрация
-              </button>
-              <button type="button" onClick={() => setMode("login")}
-                className={`rounded-sm px-3 py-1.5 ${mode === "login" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-accent"}`}>
-                Вход
-              </button>
-            </div>
-          )}
-
-          <h1 className="text-2xl font-semibold tracking-tight">
+          {/*
+            Header is centered on a single-column card — we dropped the
+            Register/Login tab bar in favour of an inline mode-switch
+            prompt below the primary CTA, so there's nothing sharing this
+            row to fight for alignment.
+          */}
+          <h1 className="text-center text-2xl font-semibold tracking-tight">
             {mode === "register" ? "Регистрация компании" : mode === "login" ? "Вход в кабинет" : "Восстановление пароля"}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-center text-sm text-muted-foreground">
             {mode === "register"
               ? "Создайте аккаунт, чтобы оформлять заявки и видеть статусы."
               : mode === "login"
@@ -119,19 +112,74 @@ const Auth = () => {
             </Button>
           </form>
 
-          <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+          {/*
+            Mode-switch prompt below the primary CTA. The copy mirrors the
+            classic «have-an-account?» pattern so the page can stay on a
+            single card without the old tab bar.
+          */}
+          <div className="mt-5 space-y-2 text-center text-sm text-muted-foreground">
+            {mode === "register" && (
+              <p>
+                Уже есть аккаунт?{" "}
+                <button
+                  type="button"
+                  onClick={() => setMode("login")}
+                  className="font-medium text-foreground transition-colors hover:text-primary hover:underline"
+                >
+                  Войти
+                </button>
+              </p>
+            )}
             {mode === "login" && (
-              <button type="button" onClick={() => setMode("forgot")} className="hover:text-foreground hover:underline">
-                Забыли пароль?
-              </button>
+              <>
+                <p>
+                  Ещё нет аккаунта?{" "}
+                  <button
+                    type="button"
+                    onClick={() => setMode("register")}
+                    className="font-medium text-foreground transition-colors hover:text-primary hover:underline"
+                  >
+                    Зарегистрироваться
+                  </button>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setMode("forgot")}
+                  className="text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
+                >
+                  Забыли пароль?
+                </button>
+              </>
             )}
             {mode === "forgot" && (
-              <button type="button" onClick={() => setMode("login")} className="hover:text-foreground hover:underline">
+              <button
+                type="button"
+                onClick={() => setMode("login")}
+                className="transition-colors hover:text-foreground hover:underline"
+              >
                 ← Назад ко входу
               </button>
             )}
-            <Link to="/wholesale-terms" className="ml-auto hover:text-foreground hover:underline">
+          </div>
+
+          {/*
+            Legal footer — small muted links with a subtle hover. Both
+            currently point at the wholesale terms page; once a dedicated
+            privacy policy route exists swap the second link's target.
+          */}
+          <div className="mt-6 flex items-center justify-center gap-3 text-[11px] text-muted-foreground/70">
+            <Link
+              to="/wholesale-terms"
+              className="transition-colors hover:text-foreground hover:underline"
+            >
               Условия опта
+            </Link>
+            <span className="text-muted-foreground/40">·</span>
+            <Link
+              to="/wholesale-terms"
+              className="transition-colors hover:text-foreground hover:underline"
+            >
+              Политика обработки данных
             </Link>
           </div>
         </div>

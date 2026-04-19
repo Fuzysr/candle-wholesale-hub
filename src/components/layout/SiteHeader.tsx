@@ -24,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import ThemeToggle from "@/components/theme-toggle";
 
 // Top-level navigation. "Быстрый заказ" intentionally lives outside this list —
 // it is rendered as a standalone highlighted CTA in the action zone.
@@ -123,14 +124,35 @@ const SiteHeader = () => {
           ))}
         </nav>
 
-        <form onSubmit={handleSearch} className="ml-auto hidden flex-1 max-w-sm md:block">
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <form
+          onSubmit={handleSearch}
+          autoComplete="off"
+          className="ml-auto hidden flex-1 max-w-sm md:block"
+        >
+          <label className="group relative block">
+            <Search
+              className={cn(
+                "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-all duration-300 ease-out",
+                "group-focus-within:scale-110 group-focus-within:text-primary",
+              )}
+            />
             <input
               name="q"
               type="search"
               placeholder="Поиск по артикулу или названию"
-              className="h-10 w-full rounded-md border border-input bg-surface pl-9 pr-3 text-sm placeholder:text-muted-foreground transition-colors hover:border-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              // Suppress the browser's past-search history dropdown — it
+              // covers the page content on focus and isn't useful here.
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              className={cn(
+                "h-10 w-full rounded-md border border-input bg-surface pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground",
+                "transition-all duration-300 ease-out",
+                "hover:border-primary/40",
+                "focus:border-primary/60 focus:bg-background focus:ring-4 focus:ring-primary/15",
+                "[&::-webkit-search-cancel-button]:appearance-none",
+              )}
             />
           </label>
         </form>
@@ -322,6 +344,11 @@ const SiteHeader = () => {
                   )}
                 </div>
 
+                {/* Theme switcher — visible segmented control */}
+                <div className="border-t border-border/70 px-3 py-3">
+                  <ThemeToggle />
+                </div>
+
                 {/* Sign out */}
                 <div className="border-t border-border/70 bg-muted/30 p-1.5">
                   <DropdownMenuItem
@@ -383,15 +410,31 @@ const SiteHeader = () => {
                   handleSearch(e);
                   setMobileOpen(false);
                 }}
+                autoComplete="off"
                 className="mt-4"
               >
-                <label className="relative block">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <label className="group relative block">
+                  <Search
+                    className={cn(
+                      "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-all duration-300 ease-out",
+                      "group-focus-within:scale-110 group-focus-within:text-primary",
+                    )}
+                  />
                   <input
                     name="q"
                     type="search"
                     placeholder="Поиск..."
-                    className="h-10 w-full rounded-md border border-input bg-surface pl-9 pr-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    className={cn(
+                      "h-10 w-full rounded-md border border-input bg-surface pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground",
+                      "transition-all duration-300 ease-out",
+                      "hover:border-primary/40",
+                      "focus:border-primary/60 focus:bg-background focus:ring-4 focus:ring-primary/15",
+                      "[&::-webkit-search-cancel-button]:appearance-none",
+                    )}
                   />
                 </label>
               </form>
@@ -480,6 +523,12 @@ const SiteHeader = () => {
                     <Link to="/auth">Войти / Регистрация</Link>
                   </Button>
                 )}
+              </div>
+
+              {/* Theme switcher — also available when signed out, pinned at the
+                  bottom of the drawer for easy reach on mobile. */}
+              <div className="mt-4 border-t border-border pt-4">
+                <ThemeToggle />
               </div>
             </SheetContent>
           </Sheet>

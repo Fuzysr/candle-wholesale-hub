@@ -32,6 +32,12 @@ const Reveal = ({
 }: RevealProps) => {
   const ref = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(false);
+  // Once the animation has finished we drop ALL of its inline styles
+  // (transform, filter, will-change, transition) so the element no longer
+  // sits in a compositor layer. Without this, Windows/non-retina screens
+  // render persistent blurry subpixel text inside the Reveal because
+  // `will-change` + `filter: blur(0)` keep the layer around forever.
+  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
@@ -62,21 +68,40 @@ const Reveal = ({
     return () => io.disconnect();
   }, [once]);
 
+  // Mark "settled" slightly after the animation is expected to complete so we
+  // can strip compositor styles. If the element scrolls back out (only when
+  // `once=false`) we re-enter the animated state and wait again.
+  useEffect(() => {
+    if (!visible) {
+      setSettled(false);
+      return;
+    }
+    const t = window.setTimeout(
+      () => setSettled(true),
+      delay + duration + 80,
+    );
+    return () => window.clearTimeout(t);
+  }, [visible, delay, duration]);
+
   return (
     <div
       ref={ref}
-      style={{
-        transform: visible ? "translateY(0)" : `translateY(${y}px)`,
-        opacity: visible ? 1 : 0,
-        filter: visible ? "blur(0px)" : "blur(4px)",
-        transition: [
-          `opacity ${duration}ms ${EASE} ${delay}ms`,
-          `transform ${duration}ms ${EASE} ${delay}ms`,
-          `filter ${Math.round(duration * 0.8)}ms ${EASE} ${delay}ms`,
-        ].join(", "),
-        willChange: "transform, opacity, filter",
-        ...style,
-      }}
+      style={
+        settled
+          ? style
+          : {
+              transform: visible ? "translateY(0)" : `translateY(${y}px)`,
+              opacity: visible ? 1 : 0,
+              filter: visible ? "blur(0px)" : "blur(4px)",
+              transition: [
+                `opacity ${duration}ms ${EASE} ${delay}ms`,
+                `transform ${duration}ms ${EASE} ${delay}ms`,
+                `filter ${Math.round(duration * 0.8)}ms ${EASE} ${delay}ms`,
+              ].join(", "),
+              willChange: "transform, opacity, filter",
+              ...style,
+            }
+      }
       className={cn(className)}
       {...rest}
     >
