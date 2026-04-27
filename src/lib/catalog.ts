@@ -61,11 +61,36 @@ export const productMinBoxPrice = (p: Product, currency: Currency): number => {
 export const productTotalStock = (p: Product): number =>
   (p.variants ?? []).reduce((s, v) => s + availableBoxes(v), 0);
 
+/**
+ * Возвращает все URL-ы товара в порядке, в котором их надо показывать.
+ *
+ * Приоритет:
+ *   1) `image_url` (основное фото) — всегда первое, если задано;
+ *   2) галерея из `images`, отсортированная по `sort_order`, без дубля
+ *      основного фото.
+ *
+ * Раньше функция возвращала только галерею, когда она не пуста, из-за
+ * чего cover в каталоге и QuickOrder подтягивался из галереи и игнорировал
+ * основное фото из поля «Изображение товара».
+ */
 export const productGalleryUrls = (p: Product): string[] => {
   const gallery = (p.images ?? [])
     .slice()
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((i) => i.url);
-  if (gallery.length) return gallery;
-  return p.image_url ? [p.image_url] : [];
+  const main = p.image_url ?? null;
+  if (main) return [main, ...gallery.filter((u) => u !== main)];
+  return gallery;
+};
+
+/**
+ * Возвращает галерею для конкретной вариации: если у неё есть свой
+ * `image_url`, он идёт первым, затем общая галерея товара (без дубля).
+ * Если у вариации нет своего фото — возвращает обычную галерею товара.
+ */
+export const variantGalleryUrls = (p: Product, v: ProductVariant | undefined): string[] => {
+  const base = productGalleryUrls(p);
+  const vImg = v?.image_url ?? null;
+  if (!vImg) return base;
+  return [vImg, ...base.filter((u) => u !== vImg)];
 };

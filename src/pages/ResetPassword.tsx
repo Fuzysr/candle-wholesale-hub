@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { apiErrorMessage, authApi } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -69,7 +70,7 @@ const ResetPassword = () => {
               />
             </label>
             <Button type="submit" size="lg" className="w-full" disabled={loading || !ready}>
-              {loading ? "..." : "Сохранить"}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Сохранить"}
             </Button>
           </form>
         </div>

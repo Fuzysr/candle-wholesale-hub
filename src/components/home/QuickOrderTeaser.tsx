@@ -1,29 +1,32 @@
 import { Link } from "react-router-dom";
 import { Zap, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LightningBorder } from "@/components/ui/lightning-border";
 import Reveal from "@/components/ui/reveal";
 
 const QuickOrderTeaser = () => {
   return (
-    <section className="container py-16 md:py-20">
+    <section className="container py-12 md:py-20">
       <Reveal>
-      <div className="grid items-center gap-8 rounded-xl border border-border bg-foreground p-8 text-background md:grid-cols-2 md:p-12">
+      <div className="grid items-center gap-6 rounded-xl border border-border bg-foreground p-5 text-background sm:gap-8 sm:p-8 md:grid-cols-2 md:p-12">
         <div>
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
             <Zap className="h-3.5 w-3.5" /> Для опытных закупщиков
           </div>
-          <h2 className="text-balance text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
+          <h2 className="text-balance font-semibold leading-tight tracking-tight text-[clamp(1.5rem,4vw,2.25rem)]">
             Знаете артикулы? Соберите заявку <span className="text-primary">за минуту</span>.
           </h2>
-          <p className="mt-3 max-w-md text-sm text-background/70 md:text-base">
+          <p className="mt-3 max-w-md text-sm text-background/70 sm:text-base">
             Таблица с автокомплитом, импорт из Excel, повторение прошлой заявки в один клик.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button asChild size="lg" className="gap-2 bg-primary text-primary-foreground hover:bg-primary-hover">
-              <Link to="/quick-order">
-                Открыть быстрый заказ <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            <LightningBorder alwaysOn>
+              <Button asChild size="lg" className="gap-2 bg-primary text-primary-foreground hover:bg-primary-hover">
+                <Link to="/quick-order">
+                  Открыть быстрый заказ <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </LightningBorder>
             <Button
               asChild
               size="lg"

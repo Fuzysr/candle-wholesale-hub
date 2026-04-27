@@ -13,12 +13,20 @@ export type GalleryImage = {
 type Props = {
   value: GalleryImage[];
   onChange: (next: GalleryImage[]) => void;
+  /**
+   * URL основного фото товара (из отдельного поля «Изображение товара»).
+   * Если оно задано — именно оно идёт в карточку,
+   * а первое фото галереи «fallback-главным» быть уже не может,
+   * поэтому прячем метку «ГЛАВНОЕ» и пояснение.
+   */
+  mainImageUrl?: string | null;
 };
 
 const MAX_SIZE = 5 * 1024 * 1024;
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
-const MultiImageUpload = ({ value, onChange }: Props) => {
+const MultiImageUpload = ({ value, onChange, mainImageUrl }: Props) => {
+  const hasMainImage = !!mainImageUrl;
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -99,7 +107,7 @@ const MultiImageUpload = ({ value, onChange }: Props) => {
           {sorted.map((img, i) => (
             <div key={img.id ?? img.url} className="group relative overflow-hidden rounded-md border border-border bg-muted">
               <img src={img.url} alt="" className="aspect-square w-full object-cover" />
-              {i === 0 && (
+              {i === 0 && !hasMainImage && (
                 <span className="absolute left-1 top-1 inline-flex items-center gap-0.5 rounded-sm bg-primary px-1.5 py-0.5 text-[9px] font-semibold uppercase text-primary-foreground">
                   <Star className="h-2.5 w-2.5" /> главное
                 </span>
@@ -115,7 +123,12 @@ const MultiImageUpload = ({ value, onChange }: Props) => {
           ))}
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">JPG / PNG / WebP, до 5 МБ. Перетаскивание стрелками — первое фото главное.</p>
+      <p className="text-[11px] text-muted-foreground">
+        JPG / PNG / WebP, до 5 МБ. Стрелками можно менять порядок.
+        {hasMainImage
+          ? " Главное фото берётся из поля «Изображение товара» выше."
+          : " Если основное фото не задано — главным станет первое из галереи."}
+      </p>
     </div>
   );
 };

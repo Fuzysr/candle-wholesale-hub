@@ -18,10 +18,10 @@ const WholesaleTerms = () => {
 
   return (
     <PublicLayout>
-      <div className="container max-w-3xl py-12">
+      <div className="container max-w-3xl py-8 sm:py-12">
         <Reveal delay={0} y={20}>
           <div className="eyebrow mb-3">Для бизнеса</div>
-          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+          <h1 className="font-semibold tracking-tight text-[clamp(1.5rem,4vw,2.25rem)]">
             Условия оптовых поставок
           </h1>
         </Reveal>
@@ -84,12 +84,11 @@ const WholesaleTerms = () => {
 
         <Reveal delay={REVEAL_STEP * 4} y={20}>
           <section className="mt-8">
-            <h2 className="text-xl font-semibold">Доставка</h2>
+            <h2 className="text-xl font-semibold">Самовывоз</h2>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-foreground/80">
-              <li>Самовывоз со склада в Москве.</li>
+              <li>Только самовывоз со склада в Москве.</li>
               <li>
-                Доставка по РФ транспортными компаниями (ПЭК, Деловые линии,
-                СДЭК).
+                Адрес склада и часы выдачи менеджер пришлёт вместе со счётом.
               </li>
               <li>Отгрузка за 1–2 рабочих дня после оплаты.</li>
             </ul>

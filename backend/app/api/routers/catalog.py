@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import db_session, require_admin
+from app.api.pagination import PaginationParams, pagination_params
 from app.models.catalog import (
     Category,
     Material,
@@ -96,10 +97,17 @@ async def list_attributes(kind: AttrKind, session: AsyncSession = Depends(db_ses
 
 
 @router.get("/products", response_model=list[ProductOut])
-async def list_products(session: AsyncSession = Depends(db_session)) -> list[Product]:
+async def list_products(
+    p: PaginationParams = Depends(pagination_params),
+    session: AsyncSession = Depends(db_session),
+) -> list[Product]:
     """List published products with variants / images / attributes loaded."""
     res = await session.scalars(
-        _product_query().where(Product.is_published.is_(True)).order_by(Product.name_ru)
+        _product_query()
+        .where(Product.is_published.is_(True))
+        .order_by(Product.name_ru)
+        .offset(p.offset)
+        .limit(p.limit)
     )
     return list(res.unique().all())
 
@@ -118,8 +126,16 @@ async def get_product_by_slug(slug: str, session: AsyncSession = Depends(db_sess
 
 
 @router.get("/admin/products", response_model=list[ProductOut], dependencies=[Depends(require_admin)])
-async def admin_list_products(session: AsyncSession = Depends(db_session)) -> list[Product]:
-    res = await session.scalars(_product_query().order_by(Product.name_ru))
+async def admin_list_products(
+    p: PaginationParams = Depends(pagination_params),
+    session: AsyncSession = Depends(db_session),
+) -> list[Product]:
+    res = await session.scalars(
+        _product_query()
+        .order_by(Product.name_ru)
+        .offset(p.offset)
+        .limit(p.limit)
+    )
     return list(res.unique().all())
 
 

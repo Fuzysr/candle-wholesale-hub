@@ -19,7 +19,9 @@ import axios, {
 import { tokenStore } from "./token-store";
 import type { AccessToken } from "./types";
 
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
+const BASE_URL =
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  `${window.location.protocol}//${window.location.hostname}:8000`;
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -113,6 +115,12 @@ export const apiErrorMessage = (err: unknown, fallback = "Неизвестная
     const data = err.response?.data as { detail?: unknown } | undefined;
     const detail = data?.detail;
     if (typeof detail === "string") return detail;
+    // Структурированные ошибки вроде `{message, out_of_stock: [...]}` —
+    // например, 409 от POST /orders при нехватке остатков на складе.
+    if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+      const obj = detail as { message?: unknown };
+      if (typeof obj.message === "string") return obj.message;
+    }
     if (Array.isArray(detail) && detail.length) {
       // FastAPI validation errors are arrays of `{msg, loc, type}`.
       const first = detail[0] as { msg?: string };

@@ -9,7 +9,7 @@ import heroImage from "@/assets/hero-candles.jpg";
 const Hero = () => {
   return (
     <section className="border-b border-border">
-      <div className="container grid items-center gap-10 py-12 md:py-20 lg:grid-cols-2 lg:gap-16">
+      <div className="container grid items-center gap-8 py-10 sm:gap-10 md:py-20 lg:grid-cols-2 lg:gap-16">
         <div className="animate-fade-in">
           {/* Badge */}
           <div className="mb-6 inline-flex items-center gap-2.5 rounded-full border border-primary/20 bg-gradient-to-r from-primary/30 via-primary/12 to-surface px-4 py-2 text-sm font-medium text-foreground/80 shadow-[0_10px_22px_-6px_rgba(0,0,0,0.28),0_4px_8px_-2px_rgba(0,0,0,0.12),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-sm">
@@ -17,10 +17,10 @@ const Hero = () => {
             Оптовые поставки свечей
           </div>
 
-          <h1 className="text-balance text-4xl font-semibold leading-[1.05] tracking-tight md:text-5xl lg:text-6xl">
+          <h1 className="text-balance font-semibold leading-[1.05] tracking-tight text-[clamp(1.75rem,5vw,3.75rem)]">
             Свечи оптом для&nbsp;<span className="text-primary">бизнеса</span>&nbsp;— от&nbsp;1&nbsp;коробки
           </h1>
-          <p className="mt-5 max-w-lg text-base text-muted-foreground md:text-lg">
+          <p className="mt-4 max-w-lg text-[clamp(0.875rem,1.5vw,1.125rem)] text-muted-foreground sm:mt-5">
             Прямые отгрузки со склада для декораторов, флористов, отелей и event-агентств.
             Счёт по реквизитам в течение 2 часов, скидки от объёма и отгрузка за&nbsp;1–2&nbsp;рабочих дня.
           </p>
@@ -41,9 +41,9 @@ const Hero = () => {
           </div>
 
           {/* Mini KPI strip with staggered reveal, count-up & per-cell hover */}
-          <dl className="mt-10 grid grid-cols-3 gap-2 border-t border-border pt-6 max-w-md">
+          <dl className="mt-8 grid grid-cols-3 gap-1 border-t border-border pt-5 max-w-md sm:mt-10 sm:gap-2 sm:pt-6">
             <Reveal delay={0} y={18}>
-              <div className="group relative -mx-2 cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
+              <div className="group relative cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
                 <span
                   aria-hidden
                   className="pointer-events-none absolute left-2 right-2 top-0 h-px origin-left scale-x-0 bg-primary/70 transition-transform duration-500 ease-out group-hover:scale-x-100"
@@ -51,13 +51,13 @@ const Hero = () => {
                 <dt className="text-xs uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
                   Минимум
                 </dt>
-                <dd className="mt-1 price text-xl transition-colors group-hover:text-primary">
+                <dd className="mt-1 price text-base transition-colors group-hover:text-primary sm:text-xl">
                   <CountUp to={1} duration={900} /> коробка
                 </dd>
               </div>
             </Reveal>
             <Reveal delay={180} y={18}>
-              <div className="group relative -mx-2 cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
+              <div className="group relative cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
                 <span
                   aria-hidden
                   className="pointer-events-none absolute left-2 right-2 top-0 h-px origin-left scale-x-0 bg-primary/70 transition-transform duration-500 ease-out group-hover:scale-x-100"
@@ -65,13 +65,13 @@ const Hero = () => {
                 <dt className="text-xs uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
                   Скидка
                 </dt>
-                <dd className="mt-1 price text-xl transition-colors group-hover:text-primary">
+                <dd className="mt-1 price text-base transition-colors group-hover:text-primary sm:text-xl">
                   до&nbsp;<CountUp to={15} duration={1400} />%
                 </dd>
               </div>
             </Reveal>
             <Reveal delay={360} y={18}>
-              <div className="group relative -mx-2 cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
+              <div className="group relative cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
                 <span
                   aria-hidden
                   className="pointer-events-none absolute left-2 right-2 top-0 h-px origin-left scale-x-0 bg-primary/70 transition-transform duration-500 ease-out group-hover:scale-x-100"
@@ -79,7 +79,7 @@ const Hero = () => {
                 <dt className="text-xs uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
                   Отгрузка
                 </dt>
-                <dd className="mt-1 price text-xl transition-colors group-hover:text-primary">
+                <dd className="mt-1 price text-base transition-colors group-hover:text-primary sm:text-xl">
                   1–2 дня
                 </dd>
               </div>
@@ -87,9 +87,15 @@ const Hero = () => {
           </dl>
         </div>
 
-        {/* Visual — cinematic reveal: translate + scale + blur, softer than `fade-in` */}
+        {/*
+          Visual — cinematic reveal: translate + scale + blur, softer than `fade-in`.
+          Hidden below the lg breakpoint: on mobile the photo competes with the
+          dense "Почему B2B-клиенты выбирают нас" block right below it and
+          adds little signal — better to give the headline + CTA strip the
+          full viewport.
+        */}
         <div
-          className="relative animate-hero-in [transform-origin:50%_60%] motion-reduce:animate-none"
+          className="relative hidden animate-hero-in [transform-origin:50%_60%] motion-reduce:animate-none lg:block"
           style={{ animationDelay: "200ms" }}
         >
           <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-md">
@@ -110,7 +116,7 @@ const Hero = () => {
               - inner <Link> → hover lift (owns interactive transform)
           */}
           <div
-            className="absolute -bottom-5 -left-3 hidden w-64 animate-card-in motion-reduce:animate-none sm:block md:-left-6"
+            className="absolute -bottom-5 left-0 hidden w-56 animate-card-in motion-reduce:animate-none sm:block sm:w-64 md:-left-6"
             style={{ animationDelay: "450ms" }}
           >
             <Link

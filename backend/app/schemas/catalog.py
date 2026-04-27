@@ -85,6 +85,7 @@ class ProductVariantOut(_ORM):
     price_per_piece_usd: float
     stock_boxes: int
     reserved_boxes: int
+    image_url: str | None
     external_id: str | None
     last_synced_at: datetime | None
     created_at: datetime
@@ -100,6 +101,7 @@ class ProductVariantCreate(BaseModel):
     price_per_piece_rub: float = Field(ge=0)
     price_per_piece_usd: float = Field(ge=0)
     stock_boxes: int = Field(ge=0, default=0)
+    image_url: str | None = None
     external_id: str | None = None
 
 
@@ -112,6 +114,7 @@ class ProductVariantUpdate(BaseModel):
     price_per_piece_rub: float | None = Field(default=None, ge=0)
     price_per_piece_usd: float | None = Field(default=None, ge=0)
     stock_boxes: int | None = Field(default=None, ge=0)
+    image_url: str | None = None
     external_id: str | None = None
 
 

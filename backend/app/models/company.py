@@ -48,7 +48,7 @@ class CompanySettings(Base):
     delivery_terms: Mapped[str] = mapped_column(
         Text,
         nullable=False,
-        server_default=text("'Отгрузка со склада в Москве. Доставка по согласованию.'"),
+        server_default=text("'Самовывоз со склада в Москве. Адрес и часы выдачи менеджер пришлёт вместе со счётом.'"),
     )
     signature_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     stamp_url: Mapped[str | None] = mapped_column(Text, nullable=True)

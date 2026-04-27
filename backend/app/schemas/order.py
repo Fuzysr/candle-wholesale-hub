@@ -20,11 +20,11 @@ Currency = Literal["RUB", "USD"]
 class OrderItemIn(BaseModel):
     variant_id: UUID | None = None
     sku: str = Field(min_length=1, max_length=128)
-    product_name: str = Field(min_length=1)
-    variant_label: str | None = None
-    pieces_per_box: int = Field(ge=1)
-    boxes: int = Field(ge=1)
-    unit_price: float = Field(ge=0)
+    product_name: str = Field(min_length=1, max_length=500)
+    variant_label: str | None = Field(default=None, max_length=500)
+    pieces_per_box: int = Field(ge=1, le=100_000)
+    boxes: int = Field(ge=1, le=100_000)
+    unit_price: float = Field(ge=0, le=1_000_000)
 
 
 class OrderItemOut(_ORM):
@@ -58,16 +58,16 @@ class OrderStatusHistoryOut(_ORM):
 
 class OrderCreate(BaseModel):
     currency: Currency = "RUB"
-    delivery_address: str | None = None
+    delivery_address: str | None = Field(default=None, max_length=2000)
     delivery_date: date | None = None
-    customer_comment: str | None = None
+    customer_comment: str | None = Field(default=None, max_length=5000)
     # buyer snapshot (required at order time)
-    company_name: str | None = None
-    contact_name: str | None = None
-    phone: str | None = None
-    inn: str | None = None
+    company_name: str | None = Field(default=None, max_length=500)
+    contact_name: str | None = Field(default=None, max_length=500)
+    phone: str | None = Field(default=None, max_length=50)
+    inn: str | None = Field(default=None, max_length=20)
     email: EmailStr | None = None
-    items: list[OrderItemIn] = Field(min_length=1)
+    items: list[OrderItemIn] = Field(min_length=1, max_length=200)
 
 
 class OrderUpdateAdmin(BaseModel):
@@ -90,6 +90,7 @@ class OrderBase(_ORM):
     delivery_date: date | None
     customer_comment: str | None
     admin_comment: str | None
+    payment_receipt_url: str | None
     company_name: str | None
     contact_name: str | None
     phone: str | None

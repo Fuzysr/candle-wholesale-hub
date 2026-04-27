@@ -11,27 +11,42 @@ const steps = [
 ];
 
 const HowItWorks = () => {
+  /*
+    "Начать заказ" CTA placement:
+      - md+ : sits next to the heading (right column of the section header).
+      - <md : moves to the very end of the section, after the four steps —
+              the user has read the explanation and is ready to act, so the
+              CTA is visible without pre-empting the content. We render the
+              same button twice with mutually-exclusive responsive classes
+              instead of moving a single instance with CSS, because Tailwind
+              has no `order` token that would re-flow it across grid/flex
+              boundaries cleanly.
+  */
+  const cta = (
+    <Button asChild variant="default" className="gap-2 group">
+      <Link to="/catalog">
+        Начать заказ
+        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+      </Link>
+    </Button>
+  );
+
   return (
     <section className="border-y border-border bg-surface">
-      <div className="container py-16 md:py-20">
+      <div className="container py-12 md:py-20">
         <Reveal>
           <div className="mb-10 flex flex-col items-start justify-between gap-4 md:flex-row md:items-end">
             <div className="max-w-xl">
               <div className="eyebrow mb-3">Как это работает</div>
-              <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
+              <h2 className="font-semibold tracking-tight text-[clamp(1.375rem,3vw,1.875rem)]">
                 Четыре шага от каталога до отгрузки
               </h2>
             </div>
-            <Button asChild variant="default" className="gap-2 group">
-              <Link to="/catalog">
-                Начать заказ
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-              </Link>
-            </Button>
+            <div className="hidden md:inline-flex">{cta}</div>
           </div>
         </Reveal>
 
-        <ol className="grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-4">
+        <ol className="grid gap-px overflow-hidden rounded-lg border border-border bg-border grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
           {steps.map((s, idx) => (
             <Reveal key={s.n} delay={idx * 130} y={20}>
               <li className="group h-full bg-surface p-6 transition-colors duration-300 hover:bg-accent">
@@ -46,6 +61,11 @@ const HowItWorks = () => {
             </Reveal>
           ))}
         </ol>
+
+        {/* Mobile-only CTA at the end of the flow */}
+        <Reveal delay={steps.length * 130 + 80} y={16}>
+          <div className="mt-8 flex justify-center md:hidden">{cta}</div>
+        </Reveal>
       </div>
     </section>
   );

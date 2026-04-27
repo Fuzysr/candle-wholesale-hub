@@ -1,62 +1,37 @@
 import { useState } from "react";
-import { Link, NavLink as RouterNavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink as RouterNavLink, useNavigate } from "react-router-dom";
 import {
   Search,
   ShoppingCart,
-  User,
   Menu,
   Zap,
   LogOut,
   LayoutDashboard,
-  Receipt,
-  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useCartStore } from "@/store/cartStore";
 import { useAuth, signOut } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import UserMenu from "@/components/layout/UserMenu";
 import ThemeToggle from "@/components/theme-toggle";
+import { LightningBorder } from "@/components/ui/lightning-border";
 
 // Top-level navigation. "Быстрый заказ" intentionally lives outside this list —
 // it is rendered as a standalone highlighted CTA in the action zone.
 const nav = [
   { label: "Каталог", to: "/catalog" },
   { label: "Условия опта", to: "/wholesale-terms" },
+  { label: "Галерея", to: "/gallery" },
   { label: "Контакты", to: "/contacts" },
 ];
 
-/** Pick up to two readable initials from the user's company name or email. */
-const getInitials = (name?: string | null, email?: string | null) => {
-  const source = (name?.trim() || email?.split("@")[0] || "").replace(/[^\p{L}\p{N}\s]/gu, " ");
-  const parts = source.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "??";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-};
-
 const SiteHeader = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const items = useCartStore((s) => s.items);
   const cartCount = items.reduce((s, i) => s + i.boxes, 0);
   const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  // "Profile area" covers the account routes and (for admins) the admin panel.
-  const isProfileActive =
-    location.pathname.startsWith("/account") || location.pathname.startsWith("/admin");
-  const isAccountActive = location.pathname.startsWith("/account") && !location.pathname.startsWith("/account/orders");
-  const isOrdersActive = location.pathname.startsWith("/account/orders");
-  const isAdminActive = location.pathname.startsWith("/admin");
 
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -66,8 +41,9 @@ const SiteHeader = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-      <div className="container flex h-16 items-center gap-4">
+    <>
+    <header className="sticky top-0 z-40 w-full border-b border-border bg-background/85 shadow-[0_2px_12px_-3px_rgba(0,0,0,0.12)] backdrop-blur supports-[backdrop-filter]:bg-background/70 dark:shadow-[0_2px_12px_-3px_rgba(0,0,0,0.4)]">
+      <div className="container flex h-14 items-center gap-2 sm:h-16 sm:gap-4">
         <Link
           to="/"
           aria-label="На главную"
@@ -80,7 +56,7 @@ const SiteHeader = () => {
               className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-500 ease-out group-hover:translate-x-full"
             />
           </span>
-          <span className="hidden font-semibold tracking-tight text-foreground transition-colors duration-300 group-hover:text-primary md:inline">
+          <span className="text-xs font-semibold tracking-tight text-foreground transition-colors duration-300 group-hover:text-primary sm:text-base">
             Wholesale
             <span className="text-primary transition-all duration-300 group-hover:inline-block group-hover:scale-125">
               .
@@ -127,7 +103,7 @@ const SiteHeader = () => {
         <form
           onSubmit={handleSearch}
           autoComplete="off"
-          className="ml-auto hidden flex-1 max-w-sm md:block"
+          className="ml-auto hidden flex-1 max-w-sm"
         >
           <label className="group relative block">
             <Search
@@ -157,20 +133,34 @@ const SiteHeader = () => {
           </label>
         </form>
 
-        <div className="ml-auto flex items-center gap-2 md:ml-0">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
           {/* Highlighted Quick Order CTA — stands out, always visible on md+ */}
+          {/* Quick Order icon — mobile only */}
           <Button
             asChild
-            className="group relative hidden gap-2 shadow-md shadow-primary/25 ring-1 ring-primary/40 hover:shadow-lg hover:shadow-primary/40 md:inline-flex"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary md:hidden"
           >
-            <Link to="/quick-order">
-              <Zap className="h-4 w-4 transition-transform group-hover:scale-110" />
-              Быстрый заказ
+            <Link to="/quick-order" aria-label="Быстрый заказ">
+              <Zap className="h-4 w-4" />
             </Link>
           </Button>
 
+          <LightningBorder className="hidden hover:-translate-y-0.5 transition-transform duration-300 md:inline-flex">
+            <Button
+              asChild
+              className="group relative gap-2 shadow-md shadow-primary/25 ring-1 ring-primary/40 hover:shadow-lg hover:shadow-primary/40 transition-shadow duration-300"
+            >
+              <Link to="/quick-order">
+                <Zap className="h-4 w-4 transition-transform group-hover:scale-110" />
+                Быстрый заказ
+              </Link>
+            </Button>
+          </LightningBorder>
+
           {/* Cart */}
-          <Button asChild variant="outline" className="relative gap-2">
+          <Button asChild variant="outline" className="relative hidden gap-2 md:inline-flex">
             <Link to="/cart">
               <ShoppingCart className="h-4 w-4" />
               <span className="hidden sm:inline">Корзина</span>
@@ -180,227 +170,34 @@ const SiteHeader = () => {
             </Link>
           </Button>
 
-          {/* Profile — pushed to the far right corner of the header */}
-          {user ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Кабинет"
-                  className={cn(
-                    "group relative hidden h-10 w-10 shrink-0 place-items-center rounded-md transition-all duration-200 ease-out md:grid",
-                    "hover:bg-accent/70 hover:text-foreground hover:shadow-sm",
-                    "data-[state=open]:bg-accent data-[state=open]:text-foreground data-[state=open]:ring-1 data-[state=open]:ring-primary/30",
-                    // tighter, subtler focus-visible (overrides the global ring-2 + ring-offset-2)
-                    "focus-visible:outline-none focus-visible:bg-accent focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:ring-offset-0",
-                    isProfileActive ? "text-foreground" : "text-foreground/70",
-                  )}
-                >
-                  <User className="h-5 w-5 transition-transform duration-300 group-hover:scale-110 group-data-[state=open]:scale-110" />
-                  {/* Active-page dot (mirrors the nav underline style) */}
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "pointer-events-none absolute -bottom-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary transition-all duration-300",
-                      isProfileActive ? "scale-100 opacity-100" : "scale-0 opacity-0 group-hover:scale-75 group-hover:opacity-60",
-                    )}
-                  />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                sideOffset={10}
-                className={cn(
-                  "w-72 overflow-hidden rounded-xl border-border/70 p-0 shadow-lg",
-                  "data-[state=open]:duration-[220ms] data-[state=closed]:duration-150",
-                )}
-              >
-                {/* Header card with avatar */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-primary/18 via-primary/6 to-transparent p-4">
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/15 blur-2xl"
-                  />
-                  <div className="relative flex items-center gap-3">
-                    <div className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide shadow-sm shadow-primary/30 ring-2 ring-popover">
-                      {getInitials(user.profile?.company_name || user.profile?.contact_name, user.profile?.email || user.user.email)}
-                      <span
-                        aria-hidden
-                        className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-success ring-2 ring-popover"
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                        Вы вошли как
-                      </div>
-                      <div className="truncate text-sm font-semibold text-foreground">
-                        {user.profile?.company_name || user.profile?.contact_name || user.user.email}
-                      </div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {user.profile?.email || user.user.email}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+          {/* Theme toggle — always visible as a simple icon button */}
+          <ThemeToggle className="hidden md:grid" />
 
-                {/* Menu items */}
-                <div className="p-1.5">
-                  <DropdownMenuItem asChild className="group/item rounded-lg p-0 focus:bg-transparent">
-                    <Link
-                      to="/account"
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                        isAccountActive
-                          ? "bg-accent text-foreground"
-                          : "text-foreground/85 hover:bg-accent hover:text-foreground",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "grid h-8 w-8 place-items-center rounded-md transition-colors",
-                          isAccountActive
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground group-hover/item:bg-primary/15 group-hover/item:text-primary",
-                        )}
-                      >
-                        <User className="h-4 w-4" />
-                      </span>
-                      <span className="flex-1 font-medium">Мой кабинет</span>
-                      <ChevronRight
-                        className={cn(
-                          "h-3.5 w-3.5 transition-all",
-                          isAccountActive
-                            ? "translate-x-0 text-primary opacity-100"
-                            : "-translate-x-1 text-muted-foreground opacity-0 group-hover/item:translate-x-0 group-hover/item:opacity-100",
-                        )}
-                      />
-                    </Link>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem asChild className="group/item rounded-lg p-0 focus:bg-transparent">
-                    <Link
-                      to="/account/orders"
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                        isOrdersActive
-                          ? "bg-accent text-foreground"
-                          : "text-foreground/85 hover:bg-accent hover:text-foreground",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "grid h-8 w-8 place-items-center rounded-md transition-colors",
-                          isOrdersActive
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground group-hover/item:bg-primary/15 group-hover/item:text-primary",
-                        )}
-                      >
-                        <Receipt className="h-4 w-4" />
-                      </span>
-                      <span className="flex-1 font-medium">Мои заявки</span>
-                      <ChevronRight
-                        className={cn(
-                          "h-3.5 w-3.5 transition-all",
-                          isOrdersActive
-                            ? "translate-x-0 text-primary opacity-100"
-                            : "-translate-x-1 text-muted-foreground opacity-0 group-hover/item:translate-x-0 group-hover/item:opacity-100",
-                        )}
-                      />
-                    </Link>
-                  </DropdownMenuItem>
-
-                  {user.isAdmin && (
-                    <DropdownMenuItem asChild className="group/item rounded-lg p-0 focus:bg-transparent">
-                      <Link
-                        to="/admin"
-                        className={cn(
-                          "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                          isAdminActive
-                            ? "bg-accent text-foreground"
-                            : "text-foreground/85 hover:bg-accent hover:text-foreground",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "grid h-8 w-8 place-items-center rounded-md transition-colors",
-                            isAdminActive
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground group-hover/item:bg-primary/15 group-hover/item:text-primary",
-                          )}
-                        >
-                          <LayoutDashboard className="h-4 w-4" />
-                        </span>
-                        <span className="flex-1 font-medium">Админка</span>
-                        <ChevronRight
-                          className={cn(
-                            "h-3.5 w-3.5 transition-all",
-                            isAdminActive
-                              ? "translate-x-0 text-primary opacity-100"
-                              : "-translate-x-1 text-muted-foreground opacity-0 group-hover/item:translate-x-0 group-hover/item:opacity-100",
-                          )}
-                        />
-                      </Link>
-                    </DropdownMenuItem>
-                  )}
-                </div>
-
-                {/* Theme switcher — visible segmented control */}
-                <div className="border-t border-border/70 px-3 py-3">
-                  <ThemeToggle />
-                </div>
-
-                {/* Sign out */}
-                <div className="border-t border-border/70 bg-muted/30 p-1.5">
-                  <DropdownMenuItem
-                    onClick={async () => {
-                      await signOut();
-                      navigate("/");
-                    }}
-                    className="group/item flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-destructive transition-colors focus:bg-destructive/10 focus:text-destructive"
-                  >
-                    <span className="grid h-8 w-8 place-items-center rounded-md bg-destructive/10 text-destructive transition-colors group-hover/item:bg-destructive group-hover/item:text-destructive-foreground">
-                      <LogOut className="h-4 w-4" />
-                    </span>
-                    <span className="flex-1 font-medium">Выйти</span>
-                  </DropdownMenuItem>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <RouterNavLink
-              to="/auth"
-              aria-label="Вход"
-              className={({ isActive }) =>
-                cn(
-                  "group relative hidden h-10 w-10 shrink-0 place-items-center rounded-md transition-all duration-200 ease-out md:grid",
-                  "hover:bg-accent/70 hover:text-foreground hover:shadow-sm",
-                  "focus-visible:outline-none focus-visible:bg-accent focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:ring-offset-0",
-                  isActive ? "text-foreground" : "text-foreground/70",
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <User className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "pointer-events-none absolute -bottom-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary transition-all duration-300",
-                      isActive ? "scale-100 opacity-100" : "scale-0 opacity-0 group-hover:scale-75 group-hover:opacity-60",
-                    )}
-                  />
-                </>
-              )}
-            </RouterNavLink>
-          )}
+          {/* Profile — pushed to the far right corner of the header.
+              Единый компонент UserMenu для публичного хедера и админки,
+              чтобы UX/верстка не расходились между страницами. */}
+          <UserMenu alwaysVisible />
 
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Меню">
+              <Button variant="ghost" size="icon" className="h-10 w-10 lg:hidden" aria-label="Меню">
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[300px] overflow-y-auto sm:w-[360px]">
+            <SheetContent
+              side="right"
+              className="w-[300px] overflow-y-auto sm:w-[360px]"
+              /*
+                Radix' default behaviour is to move focus to the first
+                focusable element when the drawer opens — that happens to be
+                the search input, which then immediately pops the mobile
+                keyboard. Users opening the burger to navigate, not to
+                search, find that intrusive. Cancelling the auto-focus event
+                keeps focus on the trigger; Radix still traps focus inside
+                the drawer once the user interacts with it.
+              */
+              onOpenAutoFocus={(e) => e.preventDefault()}
+            >
               <SheetHeader>
                 <SheetTitle>Меню</SheetTitle>
               </SheetHeader>
@@ -482,7 +279,7 @@ const SiteHeader = () => {
               </nav>
 
               <div className="mt-6 border-t border-border pt-4">
-                {user ? (
+                {user && (
                   <div className="flex flex-col gap-1">
                     <div className="px-3 pb-2 text-xs text-muted-foreground">
                       <div>Вы вошли как</div>
@@ -518,16 +315,12 @@ const SiteHeader = () => {
                       <LogOut className="h-4 w-4" /> Выйти
                     </button>
                   </div>
-                ) : (
-                  <Button asChild className="w-full" onClick={() => setMobileOpen(false)}>
-                    <Link to="/auth">Войти / Регистрация</Link>
-                  </Button>
                 )}
               </div>
 
-              {/* Theme switcher — also available when signed out, pinned at the
-                  bottom of the drawer for easy reach on mobile. */}
-              <div className="mt-4 border-t border-border pt-4">
+              {/* Theme switcher — simple icon toggle at the bottom of the drawer */}
+              <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+                <span className="text-sm text-muted-foreground">Тема оформления</span>
                 <ThemeToggle />
               </div>
             </SheetContent>
@@ -535,6 +328,21 @@ const SiteHeader = () => {
         </div>
       </div>
     </header>
+
+    {/* Floating mobile cart — sticky circle below the header */}
+    <Link
+      to="/cart"
+      className="fixed right-4 top-[4.25rem] z-30 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform hover:scale-105 active:scale-95 sm:top-[4.75rem] md:hidden"
+      aria-label="Корзина"
+    >
+      <ShoppingCart className="h-5 w-5" />
+      {cartCount > 0 && (
+        <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-background text-[10px] font-bold text-primary ring-2 ring-primary">
+          {cartCount}
+        </span>
+      )}
+    </Link>
+    </>
   );
 };
 

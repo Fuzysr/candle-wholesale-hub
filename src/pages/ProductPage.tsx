@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
@@ -11,7 +11,7 @@ import { useAppStore } from "@/store/appStore";
 import { useCartStore } from "@/store/cartStore";
 import {
   productName,
-  productGalleryUrls,
+  variantGalleryUrls,
   variantBoxPrice,
   variantLabel,
   variantPrice,
@@ -28,10 +28,12 @@ import { toast } from "sonner";
 
 const ProductPage = () => {
   const { slug } = useParams();
+  const [searchParams] = useSearchParams();
+  const urlVariantId = searchParams.get("variant");
   const { currency, lang } = useAppStore();
   const addItem = useCartStore((s) => s.addItem);
   const { push } = useRecentlyViewed();
-  const [variantId, setVariantId] = useState<string>("");
+  const [variantId, setVariantId] = useState<string>(urlVariantId ?? "");
   const [qty, setQty] = useState(1);
 
   const productQuery = useQuery({
@@ -48,9 +50,11 @@ const ProductPage = () => {
   const product = productQuery.data ?? null;
 
   // Initial variant selection when the product is first loaded.
+  // If a ?variant=<id> query param is present, prefer that variant.
   useEffect(() => {
     if (!product) return;
-    const first = product.variants.find((v) => availableBoxes(v) > 0) ?? product.variants[0];
+    const fromUrl = urlVariantId ? product.variants.find((v) => v.id === urlVariantId) : null;
+    const first = fromUrl ?? product.variants.find((v) => availableBoxes(v) > 0) ?? product.variants[0];
     if (first) setVariantId(first.id);
     push({
       id: product.id,
@@ -59,14 +63,24 @@ const ProductPage = () => {
       name_en: product.name_en,
       image_url: product.image_url,
     });
-  }, [product, push]);
-
-  const gallery = useMemo(() => (product ? productGalleryUrls(product) : []), [product]);
+  }, [product, push, urlVariantId]);
 
   if (productQuery.isLoading) {
     return (
       <PublicLayout>
-        <div className="container py-10"><Skeleton className="h-96" /></div>
+        <div className="container py-10">
+          <Skeleton className="mb-4 h-4 w-40" />
+          <div className="grid gap-8 md:grid-cols-2">
+            <Skeleton className="aspect-square w-full rounded-lg" />
+            <div className="space-y-4">
+              <Skeleton className="h-8 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-10 w-40" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          </div>
+        </div>
       </PublicLayout>
     );
   }
@@ -83,6 +97,8 @@ const ProductPage = () => {
   const sizes = Array.from(new Set(product.variants?.map((v) => v.size).filter(Boolean) as string[]));
   const colors = Array.from(new Set(product.variants?.map((v) => v.color).filter(Boolean) as string[]));
   const stock = variant ? availableBoxes(variant) : 0;
+
+  const gallery = variantGalleryUrls(product, variant);
 
   const handleAdd = () => {
     if (!variant) return;
@@ -114,12 +130,12 @@ const ProductPage = () => {
           <ArrowLeft className="h-4 w-4" /> Назад в каталог
         </Link>
       </div>
-      <div className="container grid gap-10 pb-16 lg:grid-cols-2">
+      <div className="container grid gap-6 pb-10 sm:gap-10 sm:pb-16 lg:grid-cols-2">
         <ProductGallery images={gallery} alt={productName(product, lang)} />
 
         <div className="lg:sticky lg:top-24 lg:self-start">
           <div className="eyebrow">{product.category?.name_ru}</div>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">{productName(product, lang)}</h1>
+          <h1 className="mt-2 font-semibold tracking-tight text-[clamp(1.5rem,4vw,1.875rem)]">{productName(product, lang)}</h1>
           {variant && <p className="mt-2 num text-xs text-muted-foreground">Артикул {variant.sku}</p>}
 
           {(product.description_ru || product.description_en) && (
@@ -129,7 +145,7 @@ const ProductPage = () => {
           )}
 
           {attrs.length > 0 && (
-            <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-2 rounded-md border border-border bg-surface p-3 text-sm">
+            <dl className="mt-5 grid grid-cols-1 gap-x-6 gap-y-2 rounded-md border border-border bg-surface p-3 text-sm sm:grid-cols-2">
               {attrs.map((a) => (
                 <div key={a.label} className="flex justify-between gap-2 border-b border-border/50 pb-1.5 last:border-0">
                   <dt className="text-muted-foreground">{a.label}</dt>
@@ -141,7 +157,7 @@ const ProductPage = () => {
 
           {sizes.length > 1 && (
             <div className="mt-6">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Размер</div>
+              <div className="mb-2 text-xs text-muted-foreground">Размер</div>
               <div className="flex flex-wrap gap-2">
                 {sizes.map((s) => {
                   const active = variant?.size === s;
@@ -152,7 +168,7 @@ const ProductPage = () => {
                         const next = product.variants?.find((v) => v.size === s && (variant ? v.color === variant.color : true)) ?? product.variants?.find((v) => v.size === s);
                         if (next) { setVariantId(next.id); setQty(1); }
                       }}
-                      className={`rounded-md border px-3 py-1.5 text-sm ${active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-accent"}`}
+                      className={`min-h-[44px] rounded-md border px-3 py-1.5 text-sm ${active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-accent"}`}
                     >
                       {s}
                     </button>
@@ -175,7 +191,7 @@ const ProductPage = () => {
                         const next = product.variants?.find((v) => v.color === c && (variant ? v.size === variant.size : true)) ?? product.variants?.find((v) => v.color === c);
                         if (next) { setVariantId(next.id); setQty(1); }
                       }}
-                      className={`rounded-md border px-3 py-1.5 text-sm ${active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-accent"}`}
+                      className={`min-h-[44px] rounded-md border px-3 py-1.5 text-sm ${active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-accent"}`}
                     >
                       {c}
                     </button>
@@ -198,7 +214,7 @@ const ProductPage = () => {
               {tiers.length > 0 && (
                 <div className="mt-6 rounded-lg border border-border bg-surface p-4">
                   <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Сетка скидок по объёму</div>
-                  <div className="mt-2 grid grid-cols-4 gap-2">
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {tiers.map((t) => (
                       <div key={t.min_boxes} className="rounded-md border border-border bg-background p-2 text-center">
                         <div className="num text-xs text-muted-foreground">от {t.min_boxes} кор</div>
@@ -209,16 +225,14 @@ const ProductPage = () => {
                 </div>
               )}
 
-              <div className="mt-6 flex items-end gap-3">
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div>
                   <div className="mb-1 text-xs text-muted-foreground">Количество коробок</div>
                   <NumberStepper value={qty} onChange={setQty} min={1} max={stock || 1} />
                 </div>
-                <div className="flex flex-1 gap-2">
-                  <Button size="lg" disabled={stock <= 0} onClick={handleAdd} className="flex-1">
-                    Добавить в корзину
-                  </Button>
-                </div>
+                <Button size="lg" disabled={stock <= 0} onClick={handleAdd} className="flex-1">
+                  Добавить в корзину
+                </Button>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {[5, 10, 25].map((n) => (

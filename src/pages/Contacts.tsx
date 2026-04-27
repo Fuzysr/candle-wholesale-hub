@@ -199,13 +199,13 @@ const Contacts = () => {
 
   return (
     <PublicLayout>
-      <div className="container max-w-6xl py-12 md:py-16">
+      <div className="container max-w-6xl py-10 md:py-16">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           {/* ───────── Left column — intro, contact rows, map ───────── */}
           <div className="flex flex-col gap-8">
             <Reveal delay={0} y={20}>
               <div>
-                <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+                <h1 className="font-semibold tracking-tight text-[clamp(1.5rem,4vw,2.25rem)]">
                   Контакты
                 </h1>
                 <p className="mt-3 text-sm text-muted-foreground md:text-base">

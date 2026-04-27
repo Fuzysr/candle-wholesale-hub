@@ -18,11 +18,11 @@ const OrderSuccess = () => {
 
   return (
     <PublicLayout>
-      <div className="container max-w-xl py-20 text-center">
+      <div className="container max-w-xl py-12 text-center sm:py-20">
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-success/10 text-success">
           <CheckCircle2 className="h-8 w-8" />
         </div>
-        <h1 className="mt-5 text-3xl font-semibold tracking-tight">Заявка отправлена</h1>
+        <h1 className="mt-5 font-semibold tracking-tight text-[clamp(1.5rem,4vw,1.875rem)]">Заявка отправлена</h1>
         {order && (
           <>
             <p className="mt-2 text-muted-foreground">Номер заявки: <span className="num font-semibold text-foreground">{order.order_number}</span></p>

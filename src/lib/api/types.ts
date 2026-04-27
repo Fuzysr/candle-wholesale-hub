@@ -37,7 +37,6 @@ export type AccessToken = {
 
 export type PasswordResetRequestOut = {
   ok: true;
-  reset_token: string | null;
 };
 
 // ---------- catalog ----------
@@ -82,6 +81,7 @@ export type ProductVariantOut = {
   price_per_piece_usd: number;
   stock_boxes: number;
   reserved_boxes: number;
+  image_url: string | null;
   external_id: string | null;
   last_synced_at: string | null;
   created_at: string;
@@ -164,6 +164,7 @@ export type ProductVariantCreate = {
   price_per_piece_rub: number;
   price_per_piece_usd: number;
   stock_boxes?: number;
+  image_url?: string | null;
   external_id?: string | null;
 };
 
@@ -182,6 +183,8 @@ export type ProductImageUpdate = Partial<ProductImageCreate>;
 export type OrderStatus =
   | "new"
   | "processing"
+  | "awaiting_payment"
+  | "payment_review"
   | "invoiced"
   | "paid"
   | "shipped"
@@ -229,6 +232,7 @@ export type OrderBase = {
   delivery_date: string | null;
   customer_comment: string | null;
   admin_comment: string | null;
+  payment_receipt_url: string | null;
   company_name: string | null;
   contact_name: string | null;
   phone: string | null;

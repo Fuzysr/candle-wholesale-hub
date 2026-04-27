@@ -12,12 +12,12 @@ const catalogLinks: FooterLink[] = [
   { label: "Чайные свечи", to: "/catalog/tealight" },
 ];
 
-// Company info links — `О нас` / `Галерея` don't have dedicated pages yet,
-// so they route to the closest existing page (can be split later).
+// Company info links. `О нас` пока ведёт на `/contacts` — отдельной страницы
+// нет, заменим, когда появится.
 const companyLinks: FooterLink[] = [
   { label: "О нас", to: "/contacts" },
-  { label: "Галерея", to: "/catalog" },
-  { label: "Доставка и оплата", to: "/wholesale-terms" },
+  { label: "Галерея", to: "/gallery" },
+  { label: "Условия и оплата", to: "/wholesale-terms" },
 ];
 
 /** Square VK glyph — lucide-react doesn't ship a VK icon. */
@@ -32,7 +32,7 @@ const SiteFooter = () => {
 
   return (
     <footer className="mt-24 border-t border-border bg-surface">
-      <div className="container grid gap-10 py-14 md:grid-cols-[1.6fr_1fr_1fr_1.1fr]">
+      <div className="container grid gap-8 py-10 sm:grid-cols-2 sm:gap-10 md:py-14 lg:grid-cols-[1.6fr_1fr_1fr_1.1fr]">
         {/* Brand + description */}
         <div>
           <Link
@@ -116,7 +116,7 @@ const SiteFooter = () => {
       </div>
 
       <div className="border-t border-border">
-        <div className="container flex flex-col items-start justify-between gap-2 py-5 text-xs text-muted-foreground md:flex-row md:items-center">
+        <div className="container flex flex-col items-start justify-between gap-2 py-4 text-xs text-muted-foreground sm:flex-row sm:items-center">
           <span>© {year} Wholesale Candles. Все права защищены.</span>
           <div className="flex gap-5">
             <Link

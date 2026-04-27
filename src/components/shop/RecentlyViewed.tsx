@@ -13,7 +13,7 @@ const RecentlyViewed = ({ excludeId, title = "Вы недавно смотрел
 
   return (
     <section className="border-t border-border bg-surface/40">
-      <div className="container py-12">
+      <div className="container py-8 sm:py-12">
         <div className="mb-5 flex items-end justify-between">
           <h2 className="text-xl font-semibold tracking-tight md:text-2xl">{title}</h2>
           <span className="text-xs text-muted-foreground">{items.length}</span>

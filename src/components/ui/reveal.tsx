@@ -25,7 +25,7 @@ const Reveal = ({
   delay = 0,
   y = 28,
   once = true,
-  duration = 1000,
+  duration = 600,
   className,
   style,
   ...rest
@@ -62,7 +62,7 @@ const Reveal = ({
           setVisible(false);
         }
       },
-      { threshold: 0.08, rootMargin: "0px 0px -80px 0px" },
+      { threshold: 0.05, rootMargin: "0px 0px 100px 0px" },
     );
     io.observe(el);
     return () => io.disconnect();

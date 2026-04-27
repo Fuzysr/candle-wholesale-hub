@@ -17,6 +17,7 @@ import { useQueries, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx-js-style";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import Reveal from "@/components/ui/reveal";
 import {
   Dialog,
@@ -82,7 +83,6 @@ const EMPTY_FORM = {
   phone: "",
   inn: "",
   email: "",
-  delivery_address: "",
   delivery_date: "",
   customer_comment: "",
 };
@@ -580,7 +580,6 @@ const QuickOrder = () => {
       phone: f.phone || user.profile.phone || "",
       inn: f.inn || user.profile.inn || "",
       email: f.email || user.user.email || "",
-      delivery_address: f.delivery_address || user.profile.address || "",
     }));
   }, [dialogOpen, user]);
 
@@ -606,7 +605,8 @@ const QuickOrder = () => {
     try {
       const order = await ordersApi.create({
         currency,
-        delivery_address: form.delivery_address || null,
+        // Доставки нет — только самовывоз. Адрес не передаётся.
+        delivery_address: null,
         delivery_date: form.delivery_date || null,
         customer_comment: form.customer_comment || null,
         company_name: form.company_name,
@@ -626,7 +626,6 @@ const QuickOrder = () => {
           contact_name: form.contact_name || null,
           phone: form.phone || null,
           inn: form.inn || null,
-          address: form.delivery_address || null,
         });
         queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY });
       } catch {
@@ -649,6 +648,28 @@ const QuickOrder = () => {
     }
   };
 
+  if (productsQ.isPending) {
+    return (
+      <PublicLayout>
+        <div className="container py-8 md:py-10">
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-8 w-56" />
+              <Skeleton className="h-4 w-72" />
+            </div>
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full rounded-lg" />
+              ))}
+            </div>
+            <Skeleton className="h-24 w-full rounded-lg" />
+          </div>
+        </div>
+      </PublicLayout>
+    );
+  }
+
   return (
     <PublicLayout>
       <div className="container py-8 md:py-10">
@@ -657,7 +678,7 @@ const QuickOrder = () => {
           <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
             <div>
               <div className="eyebrow mb-2">Для опытных закупщиков</div>
-              <h1 className="text-3xl font-semibold tracking-tight">Быстрый заказ</h1>
+              <h1 className="font-semibold tracking-tight text-[clamp(1.5rem,4vw,1.875rem)]">Быстрый заказ</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 Введите артикулы списком, импортируйте Excel или повторите прошлую заявку.
               </p>
@@ -755,7 +776,7 @@ const QuickOrder = () => {
                             "animate-in fade-in slide-in-from-top-1 duration-150",
                             // Expand past the narrow SKU column so product
                             // names have room to breathe.
-                            "min-w-[360px]",
+                            "min-w-[min(360px,calc(100vw-3rem))]",
                           )}
                         >
                           <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/40 px-3 py-1.5">
@@ -1055,24 +1076,15 @@ const QuickOrder = () => {
                 }
               />
               <Field
-                label="Желаемая дата"
+                label="Желаемая дата самовывоза"
                 type="date"
                 value={form.delivery_date}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, delivery_date: e.target.value }))
                 }
               />
-              <div className="md:col-span-2">
-                <Field
-                  label="Адрес доставки или «самовывоз»"
-                  value={form.delivery_address}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      delivery_address: e.target.value,
-                    }))
-                  }
-                />
+              <div className="md:col-span-2 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                Заказы отгружаются только самовывозом со склада. Адрес склада менеджер пришлёт вместе со счётом.
               </div>
               <div className="md:col-span-2">
                 <label className="block">

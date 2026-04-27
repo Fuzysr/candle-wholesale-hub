@@ -18,7 +18,7 @@ const ProductGallery = ({ images, alt }: Props) => {
         />
       </div>
       {list.length > 1 && (
-        <div className="mt-3 grid grid-cols-5 gap-2">
+        <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-5">
           {list.map((src, i) => (
             <button
               key={src + i}

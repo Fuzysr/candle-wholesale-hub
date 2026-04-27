@@ -1,87 +1,75 @@
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Mode = "light" | "dark" | "system";
-
-const MODES: { value: Mode; label: string; Icon: typeof Sun }[] = [
-  { value: "light", label: "Светлая", Icon: Sun },
-  { value: "system", label: "Авто", Icon: Monitor },
-  { value: "dark", label: "Тёмная", Icon: Moon },
-];
-
 /**
- * Segmented 3-button theme switcher — fits inside the profile dropdown and
- * the mobile drawer. Written as a small visual pill so users immediately see
- * all available modes (Светлая / Авто / Тёмная) without an extra click.
+ * Simple icon button that toggles between light and dark themes.
+ * Renders a Sun (in dark mode) or Moon (in light mode) with a smooth
+ * rotate+scale micro-animation on switch.
  *
  * `next-themes` returns `undefined` on the very first render (SSR safety),
- * so we wait for `mounted` before showing the active pill to avoid a flicker.
+ * so we wait for `mounted` before rendering to avoid a flicker.
  */
 const ThemeToggle = ({ className }: { className?: string }) => {
-  const { theme, setTheme, systemTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const current: Mode = mounted ? ((theme as Mode | undefined) ?? "system") : "system";
+  if (!mounted) {
+    // Render an invisible placeholder so layout doesn't shift.
+    return <span className={cn("inline-block h-10 w-10", className)} />;
+  }
 
-  // Used only to show an informational hint under the toggle when the user
-  // has picked "Авто" (follows OS).
-  const resolvedHint =
-    mounted && current === "system"
-      ? systemTheme === "dark"
-        ? " · сейчас тёмная"
-        : " · сейчас светлая"
-      : "";
+  const isDark = resolvedTheme === "dark";
+
+  const toggle = () => {
+    const next = isDark ? "light" : "dark";
+    // Use the View Transitions API for a smooth 60 fps cross-fade.
+    // Falls back to an instant switch on unsupported browsers.
+    if ("startViewTransition" in document) {
+      (document as any).startViewTransition(() => setTheme(next));
+    } else {
+      setTheme(next);
+    }
+  };
 
   return (
-    <div className={cn("w-full", className)}>
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-          Тема оформления
-        </span>
-        {mounted && current === "system" && (
-          <span className="text-[10px] text-muted-foreground/80">{resolvedHint.slice(3)}</span>
+    <button
+      type="button"
+      aria-label={isDark ? "Включить светлую тему" : "Включить тёмную тему"}
+      onClick={toggle}
+      className={cn(
+        "group relative grid h-10 w-10 shrink-0 place-items-center rounded-md",
+        "text-foreground/70 transition-all duration-200 ease-out",
+        "hover:bg-accent/70 hover:text-foreground hover:shadow-sm",
+        "focus-visible:outline-none focus-visible:bg-accent focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:ring-offset-0",
+        "active:scale-90",
+        className,
+      )}
+    >
+      {/* Sun — visible in dark mode */}
+      <Sun
+        className={cn(
+          "absolute h-5 w-5 transition-all duration-500 ease-out",
+          isDark
+            ? "rotate-0 scale-100 opacity-100"
+            : "rotate-90 scale-0 opacity-0",
         )}
-      </div>
-      <div
-        role="radiogroup"
-        aria-label="Тема оформления"
-        className="relative grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/50 p-1"
-      >
-        {MODES.map(({ value, label, Icon }) => {
-          const active = current === value;
-          return (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => setTheme(value)}
-              className={cn(
-                "relative z-10 inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium outline-none transition-all duration-200",
-                "focus-visible:ring-2 focus-visible:ring-primary/40",
-                active
-                  ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icon
-                className={cn(
-                  "h-3.5 w-3.5 transition-colors",
-                  active ? "text-primary" : "text-muted-foreground",
-                )}
-              />
-              <span>{label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+      />
+      {/* Moon — visible in light mode */}
+      <Moon
+        className={cn(
+          "absolute h-5 w-5 transition-all duration-500 ease-out",
+          isDark
+            ? "-rotate-90 scale-0 opacity-0"
+            : "rotate-0 scale-100 opacity-100",
+        )}
+      />
+    </button>
   );
 };
 

@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { authApi, apiErrorMessage } from "@/lib/api";
 import { AUTH_ME_KEY } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -38,14 +39,12 @@ const Auth = () => {
 
     try {
       if (mode === "forgot") {
-        const result = await authApi.requestPasswordReset(form.email);
-        toast.success("Если email зарегистрирован — ссылка отправлена");
-        // Dev fallback: email delivery isn't wired yet, so the backend returns the
-        // raw token when APP_ENV !== production. Jump straight into the reset flow.
-        if (result.reset_token) {
-          navigate(`/reset-password?token=${encodeURIComponent(result.reset_token)}`);
-          return;
-        }
+        await authApi.requestPasswordReset(form.email);
+        // Эндпоинт всегда отвечает `ok: true` — даже если email не
+        // зарегистрирован (защита от user-enumeration). Показываем
+        // нейтральный текст и возвращаем пользователя на логин: дальше
+        // он должен открыть ссылку из письма.
+        toast.success("Если такой email есть в системе — мы отправили письмо со ссылкой");
         setMode("login");
         return;
       }
@@ -95,22 +94,27 @@ const Auth = () => {
               : "Введите email — пришлём ссылку для смены пароля."}
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <div
+            className="mt-6 space-y-4"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !loading) handleSubmit(e as unknown as React.FormEvent);
+            }}
+          >
             {mode === "register" && (
               <>
-                <Field label="Название компании *" required value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} />
-                <Field label="Контактное лицо *" required value={form.contact_name} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} />
-                <Field label="Телефон *" required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                <Field label="Название компании *" autoComplete="off" required value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} />
+                <Field label="Контактное лицо *" autoComplete="off" required value={form.contact_name} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} />
+                <Field label="Телефон *" autoComplete="off" required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               </>
             )}
-            <Field label="Email *" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <Field label="Email *" type="email" autoComplete="off" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             {mode !== "forgot" && (
-              <Field label="Пароль *" type="password" required minLength={6} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <Field label="Пароль *" type="password" autoComplete="new-password" required minLength={6} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             )}
-            <Button type="submit" size="lg" className="w-full" disabled={loading}>
-              {loading ? "..." : mode === "register" ? "Создать аккаунт" : mode === "login" ? "Войти" : "Отправить ссылку"}
+            <Button type="button" size="lg" className="w-full" disabled={loading} onClick={handleSubmit}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === "register" ? "Создать аккаунт" : mode === "login" ? "Войти" : "Отправить ссылку"}
             </Button>
-          </form>
+          </div>
 
           {/*
             Mode-switch prompt below the primary CTA. The copy mirrors the

@@ -9,6 +9,8 @@ class AppRole(str, enum.Enum):
 class OrderStatus(str, enum.Enum):
     new = "new"
     processing = "processing"
+    awaiting_payment = "awaiting_payment"
+    payment_review = "payment_review"
     invoiced = "invoiced"
     paid = "paid"
     shipped = "shipped"

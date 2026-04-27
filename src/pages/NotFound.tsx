@@ -13,8 +13,8 @@ const NotFound = () => {
 
   return (
     <PublicLayout>
-      <div className="container flex min-h-[60vh] flex-col items-center justify-center py-20 text-center">
-        <div className="num text-7xl font-bold text-primary">404</div>
+      <div className="container flex min-h-[60vh] flex-col items-center justify-center py-12 text-center sm:py-20">
+        <div className="num text-5xl font-bold text-primary sm:text-7xl">404</div>
         <h1 className="mt-4 text-2xl font-semibold tracking-tight">Страница не найдена</h1>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
           Возможно, вы перешли по устаревшей ссылке. Вернитесь на главную или откройте каталог.

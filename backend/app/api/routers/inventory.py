@@ -3,6 +3,7 @@
 Authentication is a shared secret in the `x-webhook-secret` header — this
 mirrors the Supabase edge function `inventory-webhook`.
 """
+import hmac
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -18,13 +19,38 @@ from app.schemas.stock import InventoryWebhookIn, InventoryWebhookOut
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
+# Reject obviously-unsafe placeholder values from `.env.example`. We refuse
+# to authenticate any caller against a "well-known" secret because that is
+# functionally identical to having no auth at all.
+_WEAK_WEBHOOK_SECRETS = frozenset({
+    "",
+    "replace-me",
+    "change-me",
+    "secret",
+    "test",
+})
+
 
 async def _verify_webhook_secret(
     x_webhook_secret: str | None = Header(default=None, alias="x-webhook-secret"),
 ) -> None:
-    expected = settings.inventory_webhook_secret
-    if not expected or x_webhook_secret != expected:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized")
+    expected = settings.inventory_webhook_secret or ""
+    presented = x_webhook_secret or ""
+
+    # Defence-in-depth: if the operator left the placeholder secret in
+    # config, treat the endpoint as locked (401 with no further detail).
+    if expected.strip().lower() in _WEAK_WEBHOOK_SECRETS:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized"
+        )
+
+    # `hmac.compare_digest` is constant-time over the length of the
+    # smaller string, which is what we want for this comparison —
+    # `==` would short-circuit on the first mismatched byte.
+    if not hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized"
+        )
 
 
 @router.post(

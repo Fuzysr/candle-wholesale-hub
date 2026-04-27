@@ -129,6 +129,7 @@ class ProductVariant(Base):
     price_per_piece_usd: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     stock_boxes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     reserved_boxes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     external_id: Mapped[str | None] = mapped_column(String, nullable=True)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

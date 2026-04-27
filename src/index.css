@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  LightningBorder — registered custom property for the rotation angle.
+
+  A vanilla CSS custom property (e.g. `--a: 0deg`) is treated by the engine
+  as an opaque string, so animating it produces a discrete jump from "0deg"
+  to "360deg" (no interpolation) — the conic-gradient would not appear to
+  rotate smoothly. Registering the property with `@property` and a
+  `<angle>` syntax tells the engine to interpolate it as a real angle, so
+  CSS keyframes animate it at GPU-driven 60 fps. This is exactly the
+  smooth path we use on touch devices instead of the (jerky on mobile)
+  raf + setAttribute SVG-filter loop.
+
+  Falls back gracefully on browsers without @property support (Firefox <128):
+  the gradient is simply static there, no jank, no errors.
+*/
+@property --lb-a {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes lb-rotate {
+  to {
+    --lb-a: 360deg;
+  }
+}
+
 /* =========================================================
    Wholesale Candles — Design System
    Strict B2B / Functional commerce
@@ -53,6 +80,13 @@
     --ring: 35 90% 50%;
 
     --radius: 0.5rem;
+
+    /* ── Responsive spacing scale ──
+       Used by sections / pages so spacing compresses on small screens
+       without per-component media queries. */
+    --space-section: clamp(2.5rem, 5vw, 5rem);   /* py of page sections */
+    --space-page-y:  clamp(1.5rem, 3vw, 2.5rem); /* py of inner page content */
+    --space-gutter:  clamp(1rem, 2.5vw, 2rem);   /* horizontal gutter */
 
     /* Sidebar (admin) — matches the warmer neutral scale above */
     --sidebar-background: 32 25% 96%;
@@ -118,14 +152,43 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    /* Always reserve space for the vertical scrollbar so Radix dialogs/dropdowns
-       that lock body scroll don't shift the layout horizontally. */
+    /* Reserve scrollbar space on desktop; mobile browsers don't show
+       persistent scrollbars, so `stable` can waste ~15px on iOS/Android. */
     scrollbar-gutter: stable;
+    /*
+      DO NOT set `overflow-x: hidden` on <html>. Mobile Safari (and some
+      Chromium variants) treat the html element as the scroll container in
+      that case and silently break `position: sticky` for any descendant —
+      the sticky header would scroll away with the page. Constraining the
+      horizontal overflow on <body> avoids the new scroll-container while
+      still preventing accidental horizontal scroll.
+    */
+  }
+
+  @media (max-width: 767px) {
+    html {
+      /* Mobile browsers never show a persistent scrollbar track, so
+         `stable` just wastes horizontal space. Reset to auto. */
+      scrollbar-gutter: auto;
+    }
   }
 
   body {
     @apply bg-background text-foreground font-sans;
     font-feature-settings: "cv11", "ss01";
+    /* Containing the horizontal overflow here (instead of on <html>) keeps
+       `position: sticky` working on iOS Safari. */
+    overflow-x: hidden;
+  }
+
+  /* Smooth theme switching via the View Transitions API (see ThemeToggle).
+     The browser captures a screenshot of the old state, applies the DOM
+     change, then cross-fades between frames — 60 fps with zero per-element
+     overhead. On unsupported browsers the switch is instant. */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 350ms;
+    animation-timing-function: ease-in-out;
   }
 
   /* Numbers everywhere are tabular by default in tables, prices, totals */
@@ -161,5 +224,27 @@
   /* Eyebrow label above section titles */
   .eyebrow {
     @apply text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground;
+  }
+
+  /* Minimum 44×44 tap target — apply to small interactive elements on touch */
+  .tap-target {
+    position: relative;
+  }
+  .tap-target::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    /* Expand hit area to at least 44px even if the visual element is smaller */
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@layer utilities {
+  /* Hover-only effects: prevents sticky :hover on touch devices */
+  @media (hover: hover) and (pointer: fine) {
+    .hover-lift:hover {
+      transform: translateY(-2px);
+    }
   }
 }

@@ -9,6 +9,7 @@ export { ordersApi } from "./orders";
 export { stockApi } from "./stock";
 export { profileApi } from "./profile";
 export { companyApi } from "./company";
+export { usersApi } from "./users";
 export { uploadsApi } from "./uploads";
 
 export * from "./types";

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.enums import AppRole
 
@@ -28,8 +28,8 @@ class UserOut(UserBase):
 
 
 class ProfileUpdateIn(BaseModel):
-    company_name: str | None = None
-    contact_name: str | None = None
-    phone: str | None = None
-    inn: str | None = None
-    address: str | None = None
+    company_name: str | None = Field(default=None, max_length=500)
+    contact_name: str | None = Field(default=None, max_length=500)
+    phone: str | None = Field(default=None, max_length=50)
+    inn: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(default=None, max_length=2000)

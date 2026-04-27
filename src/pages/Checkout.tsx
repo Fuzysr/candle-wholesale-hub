@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiErrorMessage, ordersApi, profileApi, stockApi } from "@/lib/api";
 import { AUTH_ME_KEY } from "@/hooks/useAuth";
 import { useAppStore } from "@/store/appStore";
@@ -37,7 +38,6 @@ const Checkout = () => {
     phone: "",
     inn: "",
     email: "",
-    delivery_address: "",
     delivery_date: "",
     customer_comment: "",
   });
@@ -51,7 +51,6 @@ const Checkout = () => {
         phone: user.profile?.phone ?? f.phone,
         inn: user.profile?.inn ?? f.inn,
         email: user.user.email ?? f.email,
-        delivery_address: user.profile?.address ?? f.delivery_address,
       }));
     }
   }, [user]);
@@ -66,6 +65,35 @@ const Checkout = () => {
     const discountAmount = (subtotal * discountPercent) / 100;
     return { totalBoxes, subtotal, discountPercent, discountAmount, total: subtotal - discountAmount };
   }, [items, currency, tiers]);
+
+  // Если хотя бы одной позиции не хватает на складе — заявку отправить
+  // нельзя (бэкенд тоже вернёт 409). Блокируем кнопку и подсказываем,
+  // что нужно вернуться в корзину.
+  const hasStockIssues = items.some(
+    (i) => i.stockBoxes <= 0 || i.boxes > i.stockBoxes,
+  );
+
+  if (authLoading) {
+    return (
+      <PublicLayout>
+        <div className="container py-10">
+          <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+            <div className="space-y-4">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+            <div className="space-y-4">
+              <Skeleton className="h-8 w-32" />
+              <Skeleton className="h-40" />
+            </div>
+          </div>
+        </div>
+      </PublicLayout>
+    );
+  }
 
   if (!authLoading && !user) {
     return (
@@ -93,12 +121,17 @@ const Checkout = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (hasStockIssues) {
+      toast.error("Часть позиций недоступна на складе — поправьте корзину");
+      return;
+    }
     setSubmitting(true);
 
     try {
       const order = await ordersApi.create({
         currency,
-        delivery_address: form.delivery_address || null,
+        // Доставки нет — только самовывоз. Адрес не передаётся.
+        delivery_address: null,
         delivery_date: form.delivery_date || null,
         customer_comment: form.customer_comment || null,
         company_name: form.company_name,
@@ -124,7 +157,6 @@ const Checkout = () => {
           contact_name: form.contact_name || null,
           phone: form.phone || null,
           inn: form.inn || null,
-          address: form.delivery_address || null,
         });
         queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY });
       } catch {
@@ -143,8 +175,8 @@ const Checkout = () => {
   return (
     <PublicLayout>
       <div className="container py-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Оформление заявки</h1>
-        <form onSubmit={handleSubmit} className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
+        <h1 className="font-semibold tracking-tight text-[clamp(1.5rem,4vw,1.875rem)]">Оформление заявки</h1>
+        <form onSubmit={handleSubmit} className="mt-6 grid gap-6 sm:mt-8 sm:gap-8 lg:grid-cols-[1fr_340px]">
           <div className="space-y-6 rounded-lg border border-border bg-surface p-6">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Реквизиты компании</h2>
@@ -158,12 +190,17 @@ const Checkout = () => {
             </div>
 
             <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Доставка</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Самовывоз</h2>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Заказы отгружаются только самовывозом со склада. Адрес склада менеджер пришлёт вместе со счётом.
+              </p>
               <div className="mt-3 grid gap-4 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <Field label="Адрес доставки или «самовывоз»" value={form.delivery_address} onChange={(e) => setForm({ ...form, delivery_address: e.target.value })} />
-                </div>
-                <Field label="Желаемая дата" type="date" value={form.delivery_date} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
+                <Field
+                  label="Желаемая дата самовывоза"
+                  type="date"
+                  value={form.delivery_date}
+                  onChange={(e) => setForm({ ...form, delivery_date: e.target.value })}
+                />
               </div>
             </div>
 
@@ -199,9 +236,23 @@ const Checkout = () => {
                   <span className="price text-2xl">{formatMoney(totals.total, currency)}</span>
                 </div>
               </div>
-              <Button type="submit" size="lg" className="mt-5 w-full" disabled={submitting}>
+              <Button
+                type="submit"
+                size="lg"
+                className="mt-5 w-full"
+                disabled={submitting || hasStockIssues}
+              >
                 {submitting ? "Отправка..." : "Отправить заявку"}
               </Button>
+              {hasStockIssues && (
+                <p className="mt-3 text-[11px] text-destructive">
+                  Часть позиций недоступна на складе.{" "}
+                  <Link to="/cart" className="underline">
+                    Вернуться в корзину
+                  </Link>{" "}
+                  и поправить количество.
+                </p>
+              )}
               <p className="mt-3 text-[11px] text-muted-foreground">
                 Без онлайн-оплаты. Менеджер свяжется и пришлёт счёт в течение 2 часов в рабочее время.
               </p>

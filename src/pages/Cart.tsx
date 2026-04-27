@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Trash2, ShoppingBag } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -33,6 +33,29 @@ const Cart = () => {
     return { totalBoxes, subtotal, discountPercent, discountAmount, total: subtotal - discountAmount };
   }, [items, currency, tiers]);
 
+  // Не даём оформить заявку, если в корзине есть позиции, которых нет на
+  // складе или которых меньше, чем заказано. Сервер тоже блокирует это
+  // (POST /orders → 409), но кнопку лучше отключить заранее.
+  const hasStockIssues = items.some(
+    (i) => i.stockBoxes <= 0 || i.boxes > i.stockBoxes,
+  );
+
+  // Track whether the main "Оформить заявку" button is visible on screen.
+  // When it scrolls out of view, show the mobile sticky bar instead.
+  const checkoutBtnRef = useRef<HTMLButtonElement>(null);
+  const [checkoutBtnVisible, setCheckoutBtnVisible] = useState(true);
+
+  useEffect(() => {
+    const el = checkoutBtnRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setCheckoutBtnVisible(entry.isIntersecting),
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   if (items.length === 0) {
     return (
       <PublicLayout>
@@ -53,18 +76,20 @@ const Cart = () => {
 
   return (
     <PublicLayout>
-      <div className="container py-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Корзина</h1>
+      <div className="container pb-24 pt-8 md:pb-8">
+        <h1 className="font-semibold tracking-tight text-[clamp(1.5rem,4vw,1.875rem)]">Корзина</h1>
         <p className="mt-1 text-sm text-muted-foreground">{items.length} позиц. · {totals.totalBoxes} кор.</p>
 
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
+        <div className="mt-6 grid gap-6 sm:mt-8 sm:gap-8 lg:grid-cols-[1fr_340px]">
           <div className="overflow-hidden rounded-lg border border-border bg-surface">
             {items.map((i) => {
               const price = currency === "RUB" ? i.priceRub : i.priceUsd;
               const lineTotal = price * i.piecesPerBox * i.boxes;
+              const outOfStock = i.stockBoxes <= 0;
+              const overStock = !outOfStock && i.boxes > i.stockBoxes;
               return (
-                <div key={i.variantId} className="flex gap-4 border-b border-border p-4 last:border-b-0">
-                  <img src={getProductImage(i.image)} alt={i.productName} className="h-20 w-20 rounded-md object-cover" loading="lazy" />
+                <div key={i.variantId} className="flex gap-3 border-b border-border p-3 last:border-b-0 sm:gap-4 sm:p-4">
+                  <img src={getProductImage(i.image)} alt={i.productName} className="h-16 w-16 shrink-0 rounded-md object-cover sm:h-20 sm:w-20" loading="lazy" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -76,8 +101,15 @@ const Cart = () => {
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
+                    {(outOfStock || overStock) && (
+                      <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-[11px] text-destructive">
+                        {outOfStock
+                          ? "Нет в наличии — удалите позицию, чтобы оформить заявку"
+                          : `Доступно только ${i.stockBoxes} кор. — уменьшите количество`}
+                      </div>
+                    )}
                     <div className="mt-3 flex items-end justify-between gap-3">
-                      <NumberStepper value={i.boxes} onChange={(n) => setBoxes(i.variantId, n)} min={1} max={i.stockBoxes} />
+                      <NumberStepper value={i.boxes} onChange={(n) => setBoxes(i.variantId, n)} min={1} max={Math.max(1, i.stockBoxes)} />
                       <div className="text-right">
                         <div className="price text-base">{formatMoney(lineTotal, currency)}</div>
                         <div className="text-[11px] text-muted-foreground">{formatMoney(price * i.piecesPerBox, currency)} × {i.boxes} кор</div>
@@ -108,9 +140,20 @@ const Cart = () => {
                 <span className="font-semibold">Итого</span>
                 <span className="price text-2xl">{formatMoney(totals.total, currency)}</span>
               </div>
-              <Button size="lg" className="mt-5 w-full" onClick={() => navigate("/checkout")}>
+              <Button
+                ref={checkoutBtnRef}
+                size="lg"
+                className="mt-5 w-full"
+                disabled={hasStockIssues}
+                onClick={() => navigate("/checkout")}
+              >
                 Оформить заявку
               </Button>
+              {hasStockIssues && (
+                <p className="mt-3 text-[11px] text-destructive">
+                  Часть позиций недоступна на складе — поправьте корзину, чтобы продолжить.
+                </p>
+              )}
               <p className="mt-3 text-[11px] text-muted-foreground">
                 Без онлайн-оплаты. Менеджер пришлёт счёт и реквизиты в течение 2 часов.
               </p>
@@ -118,6 +161,23 @@ const Cart = () => {
           </aside>
         </div>
       </div>
+
+      {/* Mobile sticky checkout bar — only when the main button is scrolled out of view */}
+      {!checkoutBtnVisible && (
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.1)] backdrop-blur md:hidden dark:shadow-[0_-4px_16px_rgba(0,0,0,0.3)]">
+        <Button
+          size="lg"
+          className="w-full gap-2"
+          disabled={hasStockIssues}
+          onClick={() => navigate("/checkout")}
+        >
+          Оформить заявку
+          <span className="ml-1 rounded-md bg-primary-foreground/20 px-2 py-0.5 text-xs">
+            {totals.totalBoxes} кор. · {formatMoney(totals.total, currency)}
+          </span>
+        </Button>
+      </div>
+      )}
     </PublicLayout>
   );
 };

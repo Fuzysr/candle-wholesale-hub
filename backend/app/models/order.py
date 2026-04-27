@@ -43,6 +43,15 @@ class Order(Base):
     delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     customer_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     admin_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Legacy public URL of the receipt object. Kept nullable for back-compat
+    # with rows created before the receipts bucket was made private. New rows
+    # MUST leave this empty and use `payment_receipt_key` instead — the URL
+    # is then minted on demand as a short-lived presigned URL.
+    payment_receipt_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # S3 object key of the uploaded payment receipt, inside
+    # `settings.s3_bucket_receipts` (which is private). Never expose this
+    # directly — always wrap in `storage.presigned_get_url(...)`.
+    payment_receipt_key: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Snapshot of buyer/company info at order time
     company_name: Mapped[str | None] = mapped_column(String, nullable=True)

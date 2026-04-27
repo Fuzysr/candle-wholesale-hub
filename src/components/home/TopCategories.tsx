@@ -29,12 +29,12 @@ const categories: CategoryDef[] = [
 
 const TopCategories = () => {
   return (
-    <section className="container py-16 md:py-20">
+    <section className="container py-12 md:py-20">
       <Reveal>
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
             <div className="eyebrow mb-3">Каталог</div>
-            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
+            <h2 className="font-semibold tracking-tight text-[clamp(1.375rem,3vw,1.875rem)]">
               Популярные категории
             </h2>
           </div>
@@ -48,7 +48,7 @@ const TopCategories = () => {
         </div>
       </Reveal>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-6">
         {categories.map((c, idx) => {
           const Icon = c.Icon;
           return (

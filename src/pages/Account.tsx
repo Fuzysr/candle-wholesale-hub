@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, Navigate, NavLink, useLocation } from "react-router-dom";
 import {
   useQueries,
   useQuery,
@@ -15,23 +15,44 @@ import {
   Inbox,
   LogOut,
   Mail,
+  MailCheck,
   Phone,
+  Loader2,
+  Upload,
+  CheckCircle2,
+  ExternalLink,
 } from "lucide-react";
 import PublicLayout from "@/components/layout/PublicLayout";
 import Reveal from "@/components/ui/reveal";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import ThemeToggle from "@/components/theme-toggle";
 import { AUTH_ME_KEY, signOut, useAuth, type AppUser } from "@/hooks/useAuth";
 import {
   apiErrorMessage,
   authApi,
-  catalogApi,
   ordersApi,
   profileApi,
 } from "@/lib/api";
 import type { Currency, OrderListOut, OrderOut } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import { useCartStore } from "@/store/cartStore";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -47,21 +68,34 @@ const SUPPORT_CONTACT = {
   email: "anna@mirsvechi.ru",
 };
 
+/**
+ * Cooldown между запросами письма со ссылкой для сброса пароля.
+ *
+ * 60 секунд — баланс между UX (дать пользователю перезапросить, если
+ * не пришло быстро) и защитой SMTP-сервера от спама перезапросами.
+ * На бэкенде rate-limit по IP/email отдельно не реализован, так что
+ * клиентский cooldown здесь — единственный ограничитель на стороне
+ * залогиненного пользователя.
+ */
+const RESET_COOLDOWN_MS = 60_000;
+
 /** Short labels + colour classes for each server-side order status. */
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
-  new:        { label: "Новая",          cls: "bg-info/10 text-info" },
-  processing: { label: "В обработке",    cls: "bg-warning/15 text-warning" },
-  invoiced:   { label: "Счёт выставлен", cls: "bg-warning/15 text-warning" },
-  paid:       { label: "Оплачена",       cls: "bg-success/10 text-success" },
-  shipped:    { label: "Отгружена",      cls: "bg-success/10 text-success" },
-  completed:  { label: "Выполнен",       cls: "bg-success/10 text-success" },
-  cancelled:  { label: "Отменена",       cls: "bg-destructive/10 text-destructive" },
+  new:              { label: "Новая",          cls: "bg-info/10 text-info" },
+  processing:       { label: "В обработке",    cls: "bg-warning/15 text-warning" },
+  awaiting_payment: { label: "Ждёт оплаты",   cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
+  payment_review:   { label: "Чек на проверке", cls: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
+  invoiced:         { label: "Счёт выставлен", cls: "bg-warning/15 text-warning" },
+  paid:             { label: "Оплачена",       cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
+  shipped:          { label: "Готов к выдаче",  cls: "bg-success/10 text-success" },
+  completed:        { label: "Завершён",       cls: "bg-muted text-muted-foreground" },
+  cancelled:        { label: "Отменена",       cls: "bg-destructive/10 text-destructive" },
 };
 
 /** Statuses considered "in progress" for the overview counter. */
-const IN_PROGRESS_STATUSES = new Set(["new", "processing", "invoiced"]);
+const IN_PROGRESS_STATUSES = new Set(["new", "processing", "invoiced", "awaiting_payment", "payment_review", "paid"]);
 /** Statuses considered "done" for the overview counter. */
-const COMPLETED_STATUSES = new Set(["paid", "shipped", "completed"]);
+const COMPLETED_STATUSES = new Set(["shipped", "completed"]);
 
 /** Nav items rendered in the left sidebar. `end` is passed to `NavLink`
  *  so the /account index route doesn't highlight when viewing sub-pages. */
@@ -153,8 +187,8 @@ const AccountSidebar = ({ user }: { user: AppUser }) => {
 
   return (
     <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
-      {/* Identity card */}
-      <div className="rounded-lg border border-border bg-surface p-5 text-center shadow-sm">
+      {/* Identity card — no card chrome on mobile, full card on lg+ */}
+      <div className="p-5 text-center lg:rounded-lg lg:border lg:border-border lg:bg-surface lg:shadow-sm">
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-primary/10 text-base font-semibold uppercase tracking-wide text-primary">
           {initials}
         </div>
@@ -184,8 +218,8 @@ const AccountSidebar = ({ user }: { user: AppUser }) => {
         ))}
       </nav>
 
-      {/* Support card */}
-      <div className="rounded-lg border border-border bg-surface p-5 shadow-sm">
+      {/* Support card — hidden on mobile, shown at bottom of page instead */}
+      <div className="hidden rounded-lg border border-border bg-surface p-5 shadow-sm lg:block">
         <div className="text-sm font-semibold">Нужна помощь?</div>
         <a
           href={`tel:${SUPPORT_CONTACT.phone.replace(/[^+\d]/g, "")}`}
@@ -232,6 +266,88 @@ const StatusPill = ({ status }: { status: string }) => {
     </span>
   );
 };
+
+/** Compact order card for mobile — replaces the wide table rows. */
+const MobileOrderCard = ({
+  order: o,
+  detail,
+  onRepeat,
+  canUploadReceipt,
+  hasReceipt,
+  isUploading,
+  onUpload,
+}: {
+  order: OrderListOut;
+  detail?: OrderOut;
+  onRepeat: (id: string) => void;
+  canUploadReceipt?: boolean;
+  hasReceipt?: boolean;
+  isUploading?: boolean;
+  onUpload?: () => void;
+}) => (
+  <div className="rounded-lg border border-border bg-surface p-3.5 shadow-sm">
+    <div className="flex items-start justify-between gap-2">
+      <div>
+        <span className="num text-sm font-semibold">{o.order_number}</span>
+        <span className="ml-2 text-xs text-muted-foreground">
+          {new Date(o.created_at).toLocaleDateString("ru-RU")}
+        </span>
+      </div>
+      <StatusPill status={o.status} />
+    </div>
+
+    <p className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">
+      {composeLabel(o, detail)}
+    </p>
+
+    <div className="mt-2 flex items-center justify-between">
+      <div className="flex items-baseline gap-3">
+        <span className="price text-sm font-semibold">
+          {formatMoney(Number(o.total), o.currency as Currency)}
+        </span>
+        <span className="num text-xs text-muted-foreground">{o.total_boxes} кор.</span>
+      </div>
+      <div className="flex items-center gap-2">
+        {canUploadReceipt && onUpload && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isUploading}
+            onClick={onUpload}
+            className="h-7 gap-1 px-2 text-xs border-amber-500/30 bg-amber-500/10 text-amber-600 hover:border-amber-500/60 hover:bg-amber-500/15 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+          >
+            {isUploading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : hasReceipt ? (
+              <CheckCircle2 className="h-3 w-3" />
+            ) : (
+              <Upload className="h-3 w-3" />
+            )}
+            {hasReceipt ? "Чек" : "Оплатил"}
+          </Button>
+        )}
+        {hasReceipt && detail && (
+          <a
+            href={(detail as OrderOut).payment_receipt_url!}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center text-xs text-primary"
+            title="Открыть чек"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+        <button
+          type="button"
+          onClick={() => onRepeat(o.id)}
+          className={REPEAT_LINK_CLS}
+        >
+          Повторить
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 /* ───────── Overview ───────── */
 
@@ -280,7 +396,7 @@ const AccountOverview = ({ user, orders, onRepeat }: OverviewProps) => {
     <div className="space-y-8">
       <Reveal delay={0} y={18}>
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">
+          <h1 className="font-semibold tracking-tight text-[clamp(1.5rem,4vw,1.875rem)]">
             Добро пожаловать, {firstName}!
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -320,8 +436,22 @@ const AccountOverview = ({ user, orders, onRepeat }: OverviewProps) => {
           {orders.length === 0 ? (
             <EmptyOrdersBlock />
           ) : (
-            <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
-              <table className="w-full text-sm">
+            <>
+            {/* Mobile card list */}
+            <div className="flex flex-col gap-3 md:hidden">
+              {top3.map((o, i) => (
+                <MobileOrderCard
+                  key={o.id}
+                  order={o}
+                  detail={detailQueries[i]?.data}
+                  onRepeat={onRepeat}
+                />
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden overflow-hidden rounded-lg border border-border bg-surface shadow-sm md:block">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
                 <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3">№ заявки</th>
@@ -361,7 +491,9 @@ const AccountOverview = ({ user, orders, onRepeat }: OverviewProps) => {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
+            </>
           )}
         </div>
       </Reveal>
@@ -390,6 +522,8 @@ const AccountOrdersList = ({
   orders: OrderListOut[];
   onRepeat: (orderId: string) => void;
 }) => {
+  const qc = useQueryClient();
+
   /* Fetch full order details for every visible order so the «Состав заказа»
      column can show real product names instead of just box counts. Queries
      share cache keys with the overview + `onRepeat`, so React-Query dedupes
@@ -402,11 +536,66 @@ const AccountOrdersList = ({
     })),
   });
 
+  /* ---------- Receipt upload state ---------- */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingOrderId, setUploadingOrderId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const triggerFileInput = useCallback((orderId: string) => {
+    setUploadingOrderId(orderId);
+    // reset so same file can be picked again
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !uploadingOrderId) return;
+
+      // Client-side guards matching backend limits
+      const MAX_SIZE = 5 * 1024 * 1024;
+      const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/avif", "application/pdf"];
+      if (!ALLOWED.includes(file.type)) {
+        toast.error("Допустимые форматы: JPEG, PNG, WebP, AVIF, PDF");
+        return;
+      }
+      if (file.size > MAX_SIZE) {
+        toast.error("Файл слишком большой (макс. 5 МБ)");
+        return;
+      }
+
+      setIsUploading(true);
+      try {
+        await ordersApi.uploadReceipt(uploadingOrderId, file);
+        toast.success("Чек загружен — ожидайте подтверждения оплаты");
+        // Refresh order lists so the status pill updates immediately
+        qc.invalidateQueries({ queryKey: ["my-orders"] });
+        qc.invalidateQueries({ queryKey: ["order", uploadingOrderId] });
+      } catch (err) {
+        toast.error(apiErrorMessage(err, "Не удалось загрузить чек"));
+      } finally {
+        setIsUploading(false);
+        setUploadingOrderId(null);
+      }
+    },
+    [uploadingOrderId, qc],
+  );
+
   return (
     <div className="space-y-6">
+      {/* Hidden file input shared across all rows */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/avif,application/pdf"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
       <Reveal delay={0} y={18}>
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Мои заявки</h1>
+          <h1 className="font-semibold tracking-tight text-[clamp(1.5rem,4vw,1.875rem)]">Мои заявки</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Все отправленные заявки с актуальным статусом
           </p>
@@ -417,8 +606,32 @@ const AccountOrdersList = ({
         {orders.length === 0 ? (
           <EmptyOrdersBlock />
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
-            <table className="w-full text-sm">
+          <>
+          {/* Mobile card list */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {orders.map((o, i) => {
+              const detail = detailQueries[i]?.data;
+              const canUploadReceipt =
+                o.status === "awaiting_payment" || o.status === "payment_review";
+              const hasReceipt = !!(detail as OrderOut | undefined)?.payment_receipt_url;
+              return (
+                <MobileOrderCard
+                  key={o.id}
+                  order={o}
+                  detail={detail}
+                  onRepeat={onRepeat}
+                  canUploadReceipt={canUploadReceipt}
+                  hasReceipt={hasReceipt}
+                  isUploading={isUploading && uploadingOrderId === o.id}
+                  onUpload={() => triggerFileInput(o.id)}
+                />
+              );
+            })}
+          </div>
+          {/* Desktop table */}
+          <div className="hidden overflow-hidden rounded-lg border border-border bg-surface shadow-sm md:block">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">№ заявки</th>
@@ -431,40 +644,80 @@ const AccountOrdersList = ({
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o, i) => (
-                  <tr key={o.id} className="border-t border-border">
-                    <td className="num whitespace-nowrap px-4 py-3 font-semibold">
-                      {o.order_number}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                      {new Date(o.created_at).toLocaleDateString("ru-RU")}
-                    </td>
-                    <td className="max-w-[360px] truncate px-4 py-3">
-                      {composeLabel(o, detailQueries[i]?.data)}
-                    </td>
-                    <td className="num whitespace-nowrap px-4 py-3 text-right">
-                      {o.total_boxes}
-                    </td>
-                    <td className="price whitespace-nowrap px-4 py-3 text-right">
-                      {formatMoney(Number(o.total), o.currency as Currency)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusPill status={o.status} />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => onRepeat(o.id)}
-                        className={REPEAT_LINK_CLS}
-                      >
-                        Повторить
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {orders.map((o, i) => {
+                  const canUploadReceipt =
+                    o.status === "awaiting_payment" || o.status === "payment_review";
+                  const detail = detailQueries[i]?.data;
+                  const hasReceipt = !!(detail as OrderOut | undefined)?.payment_receipt_url;
+
+                  return (
+                    <tr key={o.id} className="border-t border-border">
+                      <td className="num whitespace-nowrap px-4 py-3 font-semibold">
+                        {o.order_number}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                        {new Date(o.created_at).toLocaleDateString("ru-RU")}
+                      </td>
+                      <td className="max-w-[360px] truncate px-4 py-3">
+                        {composeLabel(o, detail)}
+                      </td>
+                      <td className="num whitespace-nowrap px-4 py-3 text-right">
+                        {o.total_boxes}
+                      </td>
+                      <td className="price whitespace-nowrap px-4 py-3 text-right">
+                        {formatMoney(Number(o.total), o.currency as Currency)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusPill status={o.status} />
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {canUploadReceipt && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isUploading && uploadingOrderId === o.id}
+                              onClick={() => triggerFileInput(o.id)}
+                              className="h-8 gap-1.5 border-amber-500/30 bg-amber-500/10 text-amber-600 hover:border-amber-500/60 hover:bg-amber-500/15 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+                            >
+                              {isUploading && uploadingOrderId === o.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : hasReceipt ? (
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              ) : (
+                                <Upload className="h-3.5 w-3.5" />
+                              )}
+                              {hasReceipt ? "Перезагрузить чек" : "Я оплатил"}
+                            </Button>
+                          )}
+                          {hasReceipt && (
+                            <a
+                              href={(detail as OrderOut).payment_receipt_url!}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                              title="Открыть загруженный чек"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => onRepeat(o.id)}
+                            className={REPEAT_LINK_CLS}
+                          >
+                            Повторить
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+            </div>
           </div>
+          </>
         )}
       </Reveal>
     </div>
@@ -505,13 +758,24 @@ const ReadOnlyField = ({
 
 const AccountProfileForm = ({ user }: { user: AppUser }) => {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   // View vs. edit mode. Defaults to view so the page opens as a read-only
   // summary; «Редактировать профиль» flips to inputs.
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
+
+  // Смена пароля идёт через письмо со ссылкой. Чтобы случайный клик не
+  // сыпал на SMTP, используем два слоя защиты:
+  //   1) `confirmOpen` — AlertDialog с подтверждением перед отправкой;
+  //   2) `cooldownUntil` — отметка времени, до которой кнопка «Отправить
+  //      повторно» заблокирована. Отдельно держим `resetSent`, чтобы
+  //      после истечения cooldown UI не «мигал» обратно к стартовому
+  //      состоянию, а оставался в режиме «мы уже отправили ссылку».
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+  const [cooldownLeft, setCooldownLeft] = useState(0);
 
   const [form, setForm] = useState({
     company_name: "",
@@ -555,22 +819,31 @@ const AccountProfileForm = ({ user }: { user: AppUser }) => {
   };
 
   /*
-    Password reset flow: ask the backend for a reset token tied to the user's
-    email. In production the link is delivered via email and the response is
-    just `ok: true`. In dev (APP_ENV != production) the backend exposes the
-    raw token so we can jump straight into /reset-password for testing.
+    Password reset flow: просим бэкенд выслать ссылку для смены пароля
+    на email пользователя. Ответ всегда `ok: true` (защита от
+    user-enumeration), сам токен к нам не возвращается — он приходит
+    в письме со ссылкой вида `/reset-password?token=...`.
+
+    Кнопка в UI не дёргает API напрямую — она открывает AlertDialog,
+    а уже подтверждение внутри модалки вызывает `confirmSendResetLink`.
+    После успеха включается cooldown 60с, чтобы один и тот же
+    пользователь не мог закидать SMTP-сервер перезапросами.
   */
-  const handleChangePassword = async () => {
+  const handleChangePasswordClick = () => {
+    if (sendingReset) return;
+    if (cooldownLeft > 0) return;
+    setConfirmOpen(true);
+  };
+
+  const confirmSendResetLink = async () => {
+    setConfirmOpen(false);
     if (sendingReset) return;
     setSendingReset(true);
     try {
-      const res = await authApi.requestPasswordReset(user.user.email);
-      if (res.reset_token) {
-        toast.success("Открываем форму смены пароля");
-        navigate(`/reset-password?token=${encodeURIComponent(res.reset_token)}`);
-      } else {
-        toast.success("Ссылка на смену пароля отправлена на email");
-      }
+      await authApi.requestPasswordReset(user.user.email);
+      toast.success("Ссылка на смену пароля отправлена на email");
+      setResetSent(true);
+      setCooldownUntil(Date.now() + RESET_COOLDOWN_MS);
     } catch (err) {
       toast.error(apiErrorMessage(err, "Не удалось отправить ссылку"));
     } finally {
@@ -578,23 +851,118 @@ const AccountProfileForm = ({ user }: { user: AppUser }) => {
     }
   };
 
-  /* ---- Shared security section (same JSX in both modes) ---- */
+  // Тик раз в секунду, пока активен cooldown. Когда время вышло —
+  // обнуляем `cooldownUntil` (флаг `resetSent` остаётся, чтобы UI
+  // продолжал показывать «ссылка отправлена» и кнопку «Отправить
+  // повторно»). Интервал чистим в return-е, чтобы не течь при unmount.
+  useEffect(() => {
+    if (!cooldownUntil) {
+      setCooldownLeft(0);
+      return;
+    }
+    const tick = () => {
+      const left = Math.max(
+        0,
+        Math.ceil((cooldownUntil - Date.now()) / 1000),
+      );
+      setCooldownLeft(left);
+      if (left === 0) setCooldownUntil(null);
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [cooldownUntil]);
+
+  /* ---- Shared security section (same JSX in both modes) ----
+
+     Два визуальных состояния:
+     * `resetSent === false` — дефолт, кнопка «Сменить пароль».
+     * `resetSent === true`  — зелёный success-блок с напоминанием
+       проверить почту + кнопка «Отправить повторно» с cooldown.
+
+     Отдельная модалка подтверждения страхует от случайного клика:
+     запрос к API уходит ТОЛЬКО после подтверждения в AlertDialog. */
+  const resendDisabled = sendingReset || cooldownLeft > 0;
+  const resendLabel = sendingReset
+    ? "Отправка…"
+    : cooldownLeft > 0
+    ? `Отправить повторно через ${cooldownLeft}с`
+    : "Отправить повторно";
+
   const securityCard = (
     <ProfileSectionCard title="Безопасность">
-      <p className="text-sm text-muted-foreground">
-        Для смены пароля мы отправим ссылку на вашу электронную почту{" "}
-        <span className="text-foreground">{user.user.email}</span>
-      </p>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleChangePassword}
-        disabled={sendingReset}
-        className="mt-4"
-      >
-        {sendingReset ? "Отправка…" : "Сменить пароль"}
-      </Button>
+      {resetSent ? (
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-md border border-emerald-200/60 bg-emerald-50 p-4 text-sm dark:border-emerald-900/40 dark:bg-emerald-950/30">
+            <MailCheck
+              className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
+            <div className="space-y-1">
+              <p className="font-medium text-emerald-900 dark:text-emerald-100">
+                Ссылка отправлена
+              </p>
+              <p className="text-emerald-900/80 dark:text-emerald-100/80">
+                Мы отправили письмо на{" "}
+                <span className="font-medium">{user.user.email}</span>.
+                Перейдите по ссылке из письма, чтобы задать новый пароль.
+                Ссылка действительна 60 минут.
+              </p>
+              <p className="text-xs text-emerald-900/70 dark:text-emerald-100/70">
+                Не видите письмо? Проверьте папку «Спам». Если его нет и
+                там — можно запросить ссылку ещё раз.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleChangePasswordClick}
+            disabled={resendDisabled}
+          >
+            {resendLabel}
+          </Button>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Для смены пароля мы отправим ссылку на вашу электронную почту{" "}
+            <span className="text-foreground">{user.user.email}</span>
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleChangePasswordClick}
+            disabled={sendingReset}
+            className="mt-4"
+          >
+            {sendingReset ? "Отправка…" : "Сменить пароль"}
+          </Button>
+        </>
+      )}
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Отправить ссылку для смены пароля?</AlertDialogTitle>
+            <AlertDialogDescription>
+              На вашу почту{" "}
+              <span className="font-medium text-foreground">{user.user.email}</span>{" "}
+              будет отправлено письмо со ссылкой, по которой можно задать
+              новый пароль. Ссылка действительна 60 минут и становится
+              недействительной сразу после смены пароля.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={sendingReset}>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSendResetLink} disabled={sendingReset}>
+              {sendingReset ? "Отправка…" : "Отправить ссылку"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ProfileSectionCard>
   );
 
@@ -799,7 +1167,7 @@ const AccountSettings = () => {
 const Account = () => {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const addItem = useCartStore((s) => s.addItem);
+  const queryClient = useQueryClient();
 
   /* Orders list is shared by Overview and OrdersList, so it lives in the
      shell. React-Query will dedupe if a child also requests it. */
@@ -809,59 +1177,86 @@ const Account = () => {
     enabled: !!user,
   });
 
+  /* ───── Repeat-order modal state ───── */
+  const [repeatOrder, setRepeatOrder] = useState<OrderOut | null>(null);
+  const [repeatLoading, setRepeatLoading] = useState(false);
+  const [repeatSubmitting, setRepeatSubmitting] = useState(false);
+
   /**
-   * "Повторить" — takes the items from a past order and drops them back in
-   * the cart, so the user can edit quantities before checkout. The backend
-   * has no "clone order" endpoint, so we refetch products and cherry-pick
-   * variants by id; anything discontinued is silently skipped.
+   * "Повторить" — fetches the original order and shows a confirmation modal
+   * with the order composition. The user reviews and clicks «Подтвердить»
+   * to submit a brand-new order with the same items instantly.
    */
   const onRepeat = async (orderId: string) => {
+    setRepeatLoading(true);
     try {
       const order = await ordersApi.getById(orderId);
-      const products = await catalogApi.listProducts();
-      let added = 0;
-      for (const item of order.items) {
-        if (!item.variant_id) continue;
-        const product = products.find((p) =>
-          p.variants.some((v) => v.id === item.variant_id),
-        );
-        const variant = product?.variants.find((v) => v.id === item.variant_id);
-        if (!product || !variant) continue;
-        addItem(
-          {
-            variantId: variant.id,
-            productId: product.id,
-            sku: variant.sku,
-            productName: product.name_ru,
-            variantLabel: item.variant_label ?? "",
-            image: product.image_url,
-            piecesPerBox: variant.pieces_per_box,
-            priceRub: Number(variant.price_per_piece_rub),
-            priceUsd: Number(variant.price_per_piece_usd),
-            stockBoxes: Math.max(
-              0,
-              variant.stock_boxes - variant.reserved_boxes,
-            ),
-          },
-          item.boxes,
-        );
-        added++;
-      }
-      if (added === 0) {
-        toast.error("Ни одной позиции из заявки нельзя повторить");
+      if (!order.items.length) {
+        toast.error("Заявка пуста — нечего повторять");
         return;
       }
-      toast.success(`Добавлено в корзину: ${added} позиций`);
+      setRepeatOrder(order);
     } catch (err) {
-      toast.error(apiErrorMessage(err, "Не удалось повторить заявку"));
+      toast.error(apiErrorMessage(err, "Не удалось загрузить заявку"));
+    } finally {
+      setRepeatLoading(false);
+    }
+  };
+
+  const confirmRepeatOrder = async () => {
+    if (!repeatOrder) return;
+    setRepeatSubmitting(true);
+    try {
+      await ordersApi.create({
+        currency: repeatOrder.currency,
+        // Доставки нет — только самовывоз. Адрес не передаётся.
+        delivery_address: null,
+        customer_comment: `Повтор заявки #${repeatOrder.order_number}`,
+        company_name: repeatOrder.company_name,
+        contact_name: repeatOrder.contact_name,
+        phone: repeatOrder.phone,
+        inn: repeatOrder.inn,
+        email: repeatOrder.email,
+        items: repeatOrder.items.map((it) => ({
+          variant_id: it.variant_id,
+          sku: it.sku,
+          product_name: it.product_name,
+          variant_label: it.variant_label,
+          pieces_per_box: it.pieces_per_box,
+          boxes: it.boxes,
+          unit_price: Number(it.unit_price),
+        })),
+      });
+      toast.success("Повторная заявка успешно отправлена!");
+      setRepeatOrder(null);
+      queryClient.invalidateQueries({ queryKey: ["orders", "mine"] });
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Не удалось отправить заявку"));
+    } finally {
+      setRepeatSubmitting(false);
     }
   };
 
   if (loading) {
     return (
       <PublicLayout>
-        <div className="container py-10 text-sm text-muted-foreground">
-          Загрузка…
+        <div className="container py-8">
+          <div className="grid gap-8 lg:grid-cols-[260px_1fr]">
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-full rounded-lg" />
+              <Skeleton className="h-10 w-full rounded-lg" />
+              <Skeleton className="h-10 w-full rounded-lg" />
+              <Skeleton className="h-10 w-full rounded-lg" />
+            </div>
+            <div className="space-y-6">
+              <Skeleton className="h-8 w-48" />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Skeleton className="h-28" />
+                <Skeleton className="h-28" />
+              </div>
+              <Skeleton className="h-48" />
+            </div>
+          </div>
         </div>
       </PublicLayout>
     );
@@ -893,7 +1288,116 @@ const Account = () => {
           <AccountSidebar user={user} />
           <main className="min-w-0">{renderView()}</main>
         </div>
+
+        {/* Support card — mobile only, at the bottom of the page */}
+        <div className="mt-8 rounded-lg border border-border bg-surface p-5 shadow-sm lg:hidden">
+          <div className="text-sm font-semibold">Нужна помощь?</div>
+          <a
+            href={`tel:${SUPPORT_CONTACT.phone.replace(/[^+\d]/g, "")}`}
+            className="mt-2 flex items-center gap-2 text-sm text-primary hover:underline"
+          >
+            <Phone className="h-3.5 w-3.5" />
+            {SUPPORT_CONTACT.phone}
+          </a>
+          <a
+            href={`mailto:${SUPPORT_CONTACT.email}`}
+            className="mt-1.5 flex items-center gap-2 text-sm text-primary hover:underline"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            {SUPPORT_CONTACT.email}
+          </a>
+        </div>
       </div>
+
+      {/* ───── Repeat-order confirmation modal ───── */}
+      <Dialog open={!!repeatOrder} onOpenChange={(o) => !o && setRepeatOrder(null)}>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Повторить заявку {repeatOrder ? `#${repeatOrder.order_number}` : ""}
+            </DialogTitle>
+          </DialogHeader>
+
+          {repeatOrder && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Будет создана новая заявка с тем же составом. Проверьте позиции:
+              </p>
+
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2">SKU</th>
+                      <th className="px-3 py-2">Товар</th>
+                      <th className="px-3 py-2 text-right">Шт/кор</th>
+                      <th className="px-3 py-2 text-right">Кор.</th>
+                      <th className="px-3 py-2 text-right">Цена</th>
+                      <th className="px-3 py-2 text-right">Сумма</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {repeatOrder.items.map((it) => (
+                      <tr key={it.id ?? it.sku} className="border-t border-border">
+                        <td className="num px-3 py-2">{it.sku}</td>
+                        <td className="px-3 py-2">
+                          {it.product_name}
+                          {it.variant_label ? ` · ${it.variant_label}` : ""}
+                        </td>
+                        <td className="num px-3 py-2 text-right">{it.pieces_per_box}</td>
+                        <td className="num px-3 py-2 text-right">{it.boxes}</td>
+                        <td className="num px-3 py-2 text-right">
+                          {Number(it.unit_price).toFixed(2)}
+                        </td>
+                        <td className="price px-3 py-2 text-right">
+                          {formatMoney(
+                            Number(it.line_total),
+                            repeatOrder.currency as Currency,
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-border pt-3 text-sm">
+                <span className="text-muted-foreground">
+                  Коробок:{" "}
+                  <span className="num font-medium text-foreground">
+                    {repeatOrder.total_boxes}
+                  </span>
+                </span>
+                <div className="price text-base font-semibold">
+                  {formatMoney(
+                    Number(repeatOrder.total),
+                    repeatOrder.currency as Currency,
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRepeatOrder(null)}
+              disabled={repeatSubmitting}
+            >
+              Отмена
+            </Button>
+            <Button
+              onClick={confirmRepeatOrder}
+              disabled={repeatSubmitting}
+            >
+              {repeatSubmitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              {repeatSubmitting ? "Отправка…" : "Подтвердить и отправить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PublicLayout>
   );
 };
