@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+export type CartVolumeDiscount = {
+  min_boxes: number;
+  discount_percent: number;
+};
+
 export type CartItem = {
   variantId: string;
   productId: string;
@@ -13,6 +18,7 @@ export type CartItem = {
   priceUsd: number;
   stockBoxes: number;
   boxes: number;
+  volumeDiscounts?: CartVolumeDiscount[];
 };
 
 type CartState = {
@@ -22,6 +28,10 @@ type CartState = {
   remove: (variantId: string) => void;
   clear: () => void;
   totalBoxes: () => number;
+  /** Patch volumeDiscounts for items already in cart (e.g. after fresh API data). */
+  syncDiscounts: (map: Record<string, CartVolumeDiscount[]>) => void;
+  /** Sync stock + discounts from API. Variants missing from API get stockBoxes=0. */
+  syncFromApi: (available: Record<string, { stockBoxes: number; discounts: CartVolumeDiscount[] }>) => void;
 };
 
 export const useCartStore = create<CartState>()(
@@ -29,9 +39,11 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       items: [],
       addItem: (item, boxes = 1) => {
+        if (item.stockBoxes <= 0) return;
         const existing = get().items.find((i) => i.variantId === item.variantId);
         if (existing) {
           const next = Math.min(existing.boxes + boxes, item.stockBoxes);
+          if (next <= 0) return;
           set({
             items: get().items.map((i) =>
               i.variantId === item.variantId ? { ...i, boxes: next } : i,
@@ -39,6 +51,7 @@ export const useCartStore = create<CartState>()(
           });
         } else {
           const safe = Math.min(boxes, item.stockBoxes);
+          if (safe <= 0) return;
           set({ items: [...get().items, { ...item, boxes: safe }] });
         }
       },
@@ -57,6 +70,26 @@ export const useCartStore = create<CartState>()(
         set({ items: get().items.filter((i) => i.variantId !== variantId) }),
       clear: () => set({ items: [] }),
       totalBoxes: () => get().items.reduce((s, i) => s + i.boxes, 0),
+      syncDiscounts: (map) =>
+        set({
+          items: get().items.map((i) =>
+            map[i.variantId] ? { ...i, volumeDiscounts: map[i.variantId] } : i,
+          ),
+        }),
+      syncFromApi: (available) =>
+        set({
+          items: get().items.map((i) => {
+            const fresh = available[i.variantId];
+            if (!fresh) return { ...i, stockBoxes: 0, boxes: 0 };
+            const clamped = Math.min(i.boxes, fresh.stockBoxes);
+            return {
+              ...i,
+              stockBoxes: fresh.stockBoxes,
+              volumeDiscounts: fresh.discounts,
+              boxes: Math.max(clamped, fresh.stockBoxes > 0 ? 1 : 0),
+            };
+          }),
+        }),
     }),
     { name: "wc-cart" },
   ),

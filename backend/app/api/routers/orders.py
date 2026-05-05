@@ -53,7 +53,7 @@ from app.core.email_templates import (
     render_receipt_uploaded_email,
 )
 from app.core.order_state_machine import assert_transition_allowed
-from app.models.catalog import ProductVariant
+from app.models.catalog import ProductVariant, VolumeDiscount
 from app.models.company import CompanySettings
 from app.models.enums import AppRole, OrderStatus, StockMovementType
 from app.models.order import Order, OrderItem, OrderStatusHistory
@@ -117,7 +117,10 @@ async def _resolve_canonical_items(
         rows = (
             await session.execute(
                 select(ProductVariant)
-                .options(selectinload(ProductVariant.product))
+                .options(
+                    selectinload(ProductVariant.product),
+                    selectinload(ProductVariant.volume_discounts),
+                )
                 .where(ProductVariant.id.in_(variant_ids))
                 .with_for_update()
             )
@@ -170,33 +173,51 @@ async def _resolve_canonical_items(
             "pieces_per_box": v.pieces_per_box,
             "boxes": item.boxes,
             "unit_price": _q(unit),
+            "volume_discounts": list(v.volume_discounts),
         })
     return canonical
 
 
+def _best_volume_discount(volume_discounts: list, boxes: int) -> Decimal:
+    """Find the highest applicable per-variant volume discount percent."""
+    best = Decimal("0")
+    for vd in volume_discounts:
+        if boxes >= vd.min_boxes:
+            pct = Decimal(str(vd.discount_percent))
+            if pct > best:
+                best = pct
+    return best
+
+
 def _compute_totals_canonical(
     rows: list[dict],
-    tiers: list[DiscountTier],
 ) -> tuple[int, Decimal, Decimal, Decimal, Decimal, list[Decimal]]:
     """Return `(total_boxes, subtotal, discount_percent, discount_amount, total, line_totals)`
-    in Decimal so money never round-trips through float."""
+    in Decimal so money never round-trips through float.
+
+    Each line applies its own per-variant volume discount independently.
+    `discount_amount` is the sum of all per-line discounts; `discount_percent`
+    is set to 0 (no global order-level discount).
+    """
     line_totals: list[Decimal] = []
     total_boxes = 0
-    subtotal = Decimal("0")
+    subtotal_before = Decimal("0")
+    subtotal_after = Decimal("0")
     for r in rows:
         line = _q(r["unit_price"] * Decimal(r["pieces_per_box"]) * Decimal(r["boxes"]))
+        subtotal_before += line
+        # Per-variant volume discount
+        vd_list = r.get("volume_discounts", [])
+        if vd_list:
+            vd_pct = _best_volume_discount(vd_list, r["boxes"])
+            if vd_pct > 0:
+                line = _q(line * (Decimal("100") - vd_pct) / Decimal("100"))
         line_totals.append(line)
         total_boxes += r["boxes"]
-        subtotal += line
+        subtotal_after += line
 
-    discount_percent = Decimal("0")
-    for t in tiers:
-        if total_boxes >= t.min_boxes and Decimal(str(t.discount_percent)) > discount_percent:
-            discount_percent = Decimal(str(t.discount_percent))
-
-    discount_amount = _q(subtotal * discount_percent / Decimal("100"))
-    total = _q(subtotal - discount_amount)
-    return total_boxes, _q(subtotal), discount_percent, discount_amount, total, line_totals
+    discount_amount = _q(subtotal_before - subtotal_after)
+    return total_boxes, _q(subtotal_before), Decimal("0"), discount_amount, _q(subtotal_after), line_totals
 
 
 async def _load_order(session: AsyncSession, order_id: UUID) -> Order | None:
@@ -370,10 +391,23 @@ async def create_order(
     canonical = await _resolve_canonical_items(session, payload.items, payload.currency)
     _assert_stock_available_canonical(canonical)
 
-    tiers = list((await session.scalars(select(DiscountTier))).all())
     total_boxes, subtotal, discount_percent, discount_amount, total, line_totals = (
-        _compute_totals_canonical(canonical, tiers)
+        _compute_totals_canonical(canonical)
     )
+
+    # Apply global discount tiers on top of any per-variant volume discounts.
+    # The global tier is based on the total number of boxes in the order.
+    global_tiers = (await session.scalars(select(DiscountTier))).all()
+    global_pct = Decimal("0")
+    for tier in global_tiers:
+        pct = Decimal(str(tier.discount_percent))
+        if total_boxes >= tier.min_boxes and pct > global_pct:
+            global_pct = pct
+    if global_pct > 0:
+        global_discount = _q(subtotal * global_pct / Decimal("100"))
+        discount_percent = global_pct
+        discount_amount = _q(discount_amount + global_discount)
+        total = _q(max(Decimal("0"), total - global_discount))
 
     order = Order(
         user_id=user.id,

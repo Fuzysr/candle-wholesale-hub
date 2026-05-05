@@ -20,7 +20,7 @@ const items = [
   {
     icon: FileText,
     title: "Работа по договору",
-    text: "Заявка → счёт на email → оплата по реквизитам. Закрывающие документы в комплекте.",
+    text: "Заявка → счёт на email → оплата по реквизитам.",
   },
 ];
 
@@ -35,11 +35,11 @@ const Benefits = () => {
           </h2>
         </div>
       </Reveal>
-      <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         {items.map(({ icon: Icon, title, text }, idx) => (
           <Reveal key={title} delay={idx * 110} y={20}>
             <div className="group h-full bg-surface p-6 transition-colors duration-300 hover:bg-accent">
-              <div className="grid h-10 w-10 place-items-center rounded-md bg-primary/10 text-primary transition-all duration-300 group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-sm group-hover:shadow-primary/30">
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-sm group-hover:shadow-primary/30">
                 <Icon className="h-5 w-5" />
               </div>
               <h3 className="mt-4 text-base font-semibold transition-colors group-hover:text-primary">{title}</h3>

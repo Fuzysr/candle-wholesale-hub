@@ -30,7 +30,7 @@ const RecentlyViewed = ({ excludeId, title = "Вы недавно смотрел
                   src={getProductImage(p.image_url)}
                   alt={lang === "ru" ? p.name_ru : p.name_en}
                   loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+                  className="h-full w-full object-cover"
                 />
               </div>
               <div className="p-2.5">

@@ -5,13 +5,11 @@ import {
   ShoppingCart,
   Menu,
   Zap,
-  LogOut,
-  LayoutDashboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useCartStore } from "@/store/cartStore";
-import { useAuth, signOut } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import UserMenu from "@/components/layout/UserMenu";
 import ThemeToggle from "@/components/theme-toggle";
@@ -30,7 +28,7 @@ const SiteHeader = () => {
   const navigate = useNavigate();
   const items = useCartStore((s) => s.items);
   const cartCount = items.reduce((s, i) => s + i.boxes, 0);
-  const { user } = useAuth();
+  useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
@@ -43,7 +41,7 @@ const SiteHeader = () => {
   return (
     <>
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/85 shadow-[0_2px_12px_-3px_rgba(0,0,0,0.12)] backdrop-blur supports-[backdrop-filter]:bg-background/70 dark:shadow-[0_2px_12px_-3px_rgba(0,0,0,0.4)]">
-      <div className="container flex h-14 items-center gap-2 sm:h-16 sm:gap-4">
+      <div className="container relative flex h-14 items-center gap-2 sm:h-16 sm:gap-4">
         <Link
           to="/"
           aria-label="На главную"
@@ -67,15 +65,15 @@ const SiteHeader = () => {
           </span>
         </Link>
 
-        {/* Desktop nav — plain links, active-route indicator, no mega-menu */}
-        <nav className="hidden items-center gap-0.5 lg:flex">
+        {/* Desktop nav — pill container, centered in header */}
+        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-0.5 rounded-full border border-border bg-surface/80 px-1.5 py-1 lg:flex">
           {nav.map((item) => (
             <RouterNavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  "group relative inline-flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200",
+                  "group relative inline-flex items-center rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors duration-200",
                   isActive
                     ? "text-foreground"
                     : "text-foreground/70 hover:bg-accent/70 hover:text-foreground",
@@ -123,7 +121,7 @@ const SiteHeader = () => {
               autoCapitalize="off"
               spellCheck={false}
               className={cn(
-                "h-10 w-full rounded-md border border-input bg-surface pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground",
+                "h-10 w-full rounded-full border border-input bg-surface pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground",
                 "transition-all duration-300 ease-out",
                 "hover:border-primary/40",
                 "focus:border-primary/60 focus:bg-background focus:ring-4 focus:ring-primary/15",
@@ -134,30 +132,33 @@ const SiteHeader = () => {
         </form>
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-          {/* Highlighted Quick Order CTA — stands out, always visible on md+ */}
-          {/* Quick Order icon — mobile only */}
-          <Button
-            asChild
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary md:hidden"
-          >
-            <Link to="/quick-order" aria-label="Быстрый заказ">
-              <Zap className="h-4 w-4" />
-            </Link>
-          </Button>
-
-          <LightningBorder className="hidden hover:-translate-y-0.5 transition-transform duration-300 md:inline-flex">
+          {/* FROZEN: Quick Order feature temporarily hidden */}
+          {false && (
+            <>
             <Button
               asChild
-              className="group relative gap-2 shadow-md shadow-primary/25 ring-1 ring-primary/40 hover:shadow-lg hover:shadow-primary/40 transition-shadow duration-300"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary md:hidden"
             >
-              <Link to="/quick-order">
-                <Zap className="h-4 w-4 transition-transform group-hover:scale-110" />
-                Быстрый заказ
+              <Link to="/quick-order" aria-label="Быстрый заказ">
+                <Zap className="h-4 w-4" />
               </Link>
             </Button>
-          </LightningBorder>
+
+            <LightningBorder className="hidden hover:-translate-y-0.5 transition-transform duration-300 md:inline-flex">
+              <Button
+                asChild
+                className="group relative gap-2 shadow-md shadow-primary/25 ring-1 ring-primary/40 hover:shadow-lg hover:shadow-primary/40 transition-shadow duration-300"
+              >
+                <Link to="/quick-order">
+                  <Zap className="h-4 w-4 transition-transform group-hover:scale-110" />
+                  Быстрый заказ
+                </Link>
+              </Button>
+            </LightningBorder>
+            </>
+          )}
 
           {/* Cart */}
           <Button asChild variant="outline" className="relative hidden gap-2 md:inline-flex">
@@ -170,13 +171,13 @@ const SiteHeader = () => {
             </Link>
           </Button>
 
-          {/* Theme toggle — always visible as a simple icon button */}
-          <ThemeToggle className="hidden md:grid" />
-
           {/* Profile — pushed to the far right corner of the header.
               Единый компонент UserMenu для публичного хедера и админки,
               чтобы UX/верстка не расходились между страницами. */}
           <UserMenu alwaysVisible />
+
+          {/* Theme toggle — after login button, far right */}
+          <ThemeToggle className="hidden md:grid" />
 
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
@@ -236,17 +237,19 @@ const SiteHeader = () => {
                 </label>
               </form>
 
-              {/* Highlighted Quick Order CTA — top of the mobile drawer */}
-              <Button
-                asChild
-                className="mt-4 w-full justify-center gap-2 shadow-md shadow-primary/25 ring-1 ring-primary/40"
-                onClick={() => setMobileOpen(false)}
-              >
-                <Link to="/quick-order">
-                  <Zap className="h-4 w-4" />
-                  Быстрый заказ
-                </Link>
-              </Button>
+              {/* FROZEN: Quick Order feature temporarily hidden */}
+              {false && (
+                <Button
+                  asChild
+                  className="mt-4 w-full justify-center gap-2 shadow-md shadow-primary/25 ring-1 ring-primary/40"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <Link to="/quick-order">
+                    <Zap className="h-4 w-4" />
+                    Быстрый заказ
+                  </Link>
+                </Button>
+              )}
 
               <nav className="mt-6 flex flex-col gap-1">
                 {nav.map((item) => (
@@ -277,46 +280,6 @@ const SiteHeader = () => {
                   </RouterNavLink>
                 ))}
               </nav>
-
-              <div className="mt-6 border-t border-border pt-4">
-                {user && (
-                  <div className="flex flex-col gap-1">
-                    <div className="px-3 pb-2 text-xs text-muted-foreground">
-                      <div>Вы вошли как</div>
-                      <div className="truncate font-medium text-foreground">
-                        {user.profile?.company_name || user.user.email}
-                      </div>
-                    </div>
-                    <Link
-                      to="/account"
-                      onClick={() => setMobileOpen(false)}
-                      className="rounded-md px-3 py-2.5 text-sm hover:bg-accent"
-                    >
-                      Мой кабинет
-                    </Link>
-                    {user.isAdmin && (
-                      <Link
-                        to="/admin"
-                        onClick={() => setMobileOpen(false)}
-                        className="inline-flex items-center gap-2 rounded-md px-3 py-2.5 text-sm hover:bg-accent"
-                      >
-                        <LayoutDashboard className="h-4 w-4" /> Админка
-                      </Link>
-                    )}
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await signOut();
-                        setMobileOpen(false);
-                        navigate("/");
-                      }}
-                      className="inline-flex items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm text-destructive hover:bg-destructive/10"
-                    >
-                      <LogOut className="h-4 w-4" /> Выйти
-                    </button>
-                  </div>
-                )}
-              </div>
 
               {/* Theme switcher — simple icon toggle at the bottom of the drawer */}
               <div className="mt-4 flex items-center justify-between border-t border-border pt-4">

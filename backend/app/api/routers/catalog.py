@@ -24,6 +24,8 @@ from app.models.catalog import (
     ProductVariant,
     Scent,
     Shape,
+    VariantImage,
+    VolumeDiscount,
 )
 from app.schemas.catalog import (
     AttributeCreate,
@@ -41,6 +43,12 @@ from app.schemas.catalog import (
     ProductVariantCreate,
     ProductVariantOut,
     ProductVariantUpdate,
+    VariantImageCreate,
+    VariantImageOut,
+    VariantImageUpdate,
+    VolumeDiscountCreate,
+    VolumeDiscountOut,
+    VolumeDiscountUpdate,
 )
 
 router = APIRouter(tags=["catalog"])
@@ -58,8 +66,10 @@ def _attribute_model(kind: AttrKind):
 
 
 def _product_query():
+    variant_loader = selectinload(Product.variants)
     return select(Product).options(
-        selectinload(Product.variants),
+        variant_loader.selectinload(ProductVariant.volume_discounts),
+        variant_loader.selectinload(ProductVariant.images),
         selectinload(Product.images),
         selectinload(Product.category),
         selectinload(Product.material),
@@ -360,7 +370,20 @@ async def create_variant(
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="SKU already used") from exc
-    await session.refresh(variant)
+    return await _load_full_variant(session, variant.id)
+
+
+async def _load_full_variant(session: AsyncSession, variant_id: UUID) -> ProductVariant:
+    variant = await session.scalar(
+        select(ProductVariant)
+        .options(
+            selectinload(ProductVariant.volume_discounts),
+            selectinload(ProductVariant.images),
+        )
+        .where(ProductVariant.id == variant_id)
+    )
+    if variant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="variant not found")
     return variant
 
 
@@ -384,8 +407,7 @@ async def update_variant(
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="SKU already used") from exc
-    await session.refresh(variant)
-    return variant
+    return await _load_full_variant(session, variant_id)
 
 
 @router.delete(
@@ -457,4 +479,199 @@ async def delete_image(image_id: UUID, session: AsyncSession = Depends(db_sessio
     if image is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="image not found")
     await session.delete(image)
+    await session.commit()
+
+
+# ========================================================================
+# Admin: volume discounts (per-variant)
+# ========================================================================
+
+
+@router.get(
+    "/variants/{variant_id}/volume-discounts",
+    response_model=list[VolumeDiscountOut],
+)
+async def list_volume_discounts(
+    variant_id: UUID, session: AsyncSession = Depends(db_session)
+) -> list[VolumeDiscount]:
+    variant = await session.get(ProductVariant, variant_id)
+    if variant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="variant not found")
+    res = await session.scalars(
+        select(VolumeDiscount)
+        .where(VolumeDiscount.variant_id == variant_id)
+        .order_by(VolumeDiscount.min_boxes)
+    )
+    return list(res.all())
+
+
+@router.post(
+    "/admin/variants/{variant_id}/volume-discounts",
+    response_model=VolumeDiscountOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+)
+async def create_volume_discount(
+    variant_id: UUID,
+    payload: VolumeDiscountCreate,
+    session: AsyncSession = Depends(db_session),
+) -> VolumeDiscount:
+    variant = await session.get(ProductVariant, variant_id)
+    if variant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="variant not found")
+    tier = VolumeDiscount(variant_id=variant_id, **payload.model_dump())
+    session.add(tier)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="min_boxes already exists for this variant",
+        ) from exc
+    await session.refresh(tier)
+    return tier
+
+
+@router.patch(
+    "/admin/volume-discounts/{discount_id}",
+    response_model=VolumeDiscountOut,
+    dependencies=[Depends(require_admin)],
+)
+async def update_volume_discount(
+    discount_id: UUID,
+    payload: VolumeDiscountUpdate,
+    session: AsyncSession = Depends(db_session),
+) -> VolumeDiscount:
+    tier = await session.get(VolumeDiscount, discount_id)
+    if tier is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="discount not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(tier, k, v)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="min_boxes already exists for this variant",
+        ) from exc
+    await session.refresh(tier)
+    return tier
+
+
+@router.delete(
+    "/admin/volume-discounts/{discount_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
+async def delete_volume_discount(
+    discount_id: UUID, session: AsyncSession = Depends(db_session)
+) -> None:
+    tier = await session.get(VolumeDiscount, discount_id)
+    if tier is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="discount not found")
+    await session.delete(tier)
+    await session.commit()
+
+
+@router.put(
+    "/admin/variants/{variant_id}/volume-discounts",
+    response_model=list[VolumeDiscountOut],
+    dependencies=[Depends(require_admin)],
+)
+async def replace_volume_discounts(
+    variant_id: UUID,
+    payload: list[VolumeDiscountCreate],
+    session: AsyncSession = Depends(db_session),
+) -> list[VolumeDiscount]:
+    """Replace all volume discount tiers for a variant at once."""
+    variant = await session.get(ProductVariant, variant_id)
+    if variant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="variant not found")
+    # Delete existing
+    existing = await session.scalars(
+        select(VolumeDiscount).where(VolumeDiscount.variant_id == variant_id)
+    )
+    for row in existing.all():
+        await session.delete(row)
+    await session.flush()
+    # Insert new
+    tiers: list[VolumeDiscount] = []
+    for item in payload:
+        tier = VolumeDiscount(variant_id=variant_id, **item.model_dump())
+        session.add(tier)
+        tiers.append(tier)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="duplicate min_boxes in payload",
+        ) from exc
+    for t in tiers:
+        await session.refresh(t)
+    return sorted(tiers, key=lambda t: t.min_boxes)
+
+
+# ========================================================================
+# Admin: variant images
+# ========================================================================
+
+
+@router.post(
+    "/admin/variants/{variant_id}/images",
+    response_model=VariantImageOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+)
+async def create_variant_image(
+    variant_id: UUID,
+    payload: VariantImageCreate,
+    session: AsyncSession = Depends(db_session),
+) -> VariantImage:
+    variant = await session.get(ProductVariant, variant_id)
+    if variant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="variant not found")
+    img = VariantImage(variant_id=variant_id, **payload.model_dump())
+    session.add(img)
+    await session.commit()
+    await session.refresh(img)
+    return img
+
+
+@router.patch(
+    "/admin/variant-images/{image_id}",
+    response_model=VariantImageOut,
+    dependencies=[Depends(require_admin)],
+)
+async def update_variant_image(
+    image_id: UUID,
+    payload: VariantImageUpdate,
+    session: AsyncSession = Depends(db_session),
+) -> VariantImage:
+    img = await session.get(VariantImage, image_id)
+    if img is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="image not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(img, k, v)
+    await session.commit()
+    await session.refresh(img)
+    return img
+
+
+@router.delete(
+    "/admin/variant-images/{image_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
+async def delete_variant_image(
+    image_id: UUID,
+    session: AsyncSession = Depends(db_session),
+) -> None:
+    img = await session.get(VariantImage, image_id)
+    if img is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="image not found")
+    await session.delete(img)
     await session.commit()

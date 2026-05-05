@@ -39,10 +39,22 @@ export type RestoreOutcome =
   | { kind: "scroll-position"; scrollY: number; reason: "no-card" | "card-missing" }
   | { kind: "top"; reason: "fallback" };
 
+const isCatalogPath = (p: string): boolean =>
+  p === "/catalog" || p.startsWith("/catalog/");
+
 const isMatchingPathname = (
   snapshot: CatalogRestoreState,
   currentPathname: string,
-): boolean => snapshot.pathname === currentPathname;
+): boolean => {
+  // Exact match — ideal case.
+  if (snapshot.pathname === currentPathname) return true;
+  // Both are catalog routes — the "Back to catalog" link from a product
+  // page may point to `/catalog/{slug}` while the snapshot was saved on
+  // `/catalog` (or vice-versa). Treat all catalog paths as matching so
+  // scroll position / highlighted card survive the transition.
+  if (isCatalogPath(snapshot.pathname) && isCatalogPath(currentPathname)) return true;
+  return false;
+};
 
 /**
  * Centralised restore orchestration for the catalog page.

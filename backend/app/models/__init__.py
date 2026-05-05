@@ -13,6 +13,7 @@ from app.models.catalog import (
     ProductVariant,
     Scent,
     Shape,
+    VolumeDiscount,
 )
 from app.models.company import CompanySettings
 from app.models.enums import AppRole, OrderStatus, StockMovementType
@@ -40,6 +41,7 @@ __all__ = [
     "OrderStatusHistory",
     "DiscountTier",
     "StockMovement",
+    "VolumeDiscount",
     "CompanySettings",
     "PasswordReset",
     "RefreshToken",

@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { authApi, apiErrorMessage } from "@/lib/api";
 import { AUTH_ME_KEY } from "@/hooks/useAuth";
+import { isPasswordValid } from "@/lib/password";
+import PasswordStrength from "@/components/PasswordStrength";
 import { toast } from "sonner";
 
 const Field = ({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
   <label className="block">
     <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-    <input {...props} className="h-10 w-full rounded-md border border-input bg-surface px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+    <input {...props} className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm outline-none transition-all duration-200 ease-out placeholder:text-muted-foreground/60 hover:border-primary/30 focus:border-primary/60 focus:bg-background focus:ring-4 focus:ring-primary/15" />
   </label>
 );
 
@@ -50,6 +52,10 @@ const Auth = () => {
       }
 
       if (mode === "register") {
+        if (!isPasswordValid(form.password)) {
+          toast.error("Пароль не соответствует требованиям безопасности");
+          return;
+        }
         await authApi.register({
           email: form.email,
           password: form.password,
@@ -75,8 +81,8 @@ const Auth = () => {
 
   return (
     <PublicLayout>
-      <div className="container max-w-md py-12">
-        <div className="rounded-lg border border-border bg-surface p-6">
+      <div className="mx-auto w-full max-w-xl px-4 py-12">
+        <div className="rounded-2xl border border-border bg-surface p-8 sm:p-10">
           {/*
             Header is centered on a single-column card — we dropped the
             Register/Login tab bar in favour of an inline mode-switch
@@ -109,7 +115,10 @@ const Auth = () => {
             )}
             <Field label="Email *" type="email" autoComplete="off" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             {mode !== "forgot" && (
-              <Field label="Пароль *" type="password" autoComplete="new-password" required minLength={6} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <>
+                <Field label="Пароль *" type="password" autoComplete="new-password" required minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+                <PasswordStrength password={form.password} show={mode === "register"} />
+              </>
             )}
             <Button type="button" size="lg" className="w-full" disabled={loading} onClick={handleSubmit}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === "register" ? "Создать аккаунт" : mode === "login" ? "Войти" : "Отправить ссылку"}

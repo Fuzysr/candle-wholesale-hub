@@ -14,7 +14,7 @@ export type { CatalogTrackingApi, CatalogTrackingInput } from "./useCatalogTrack
 export { useProductCardRefs } from "./useProductCardRefs";
 export type { ProductCardRefs } from "./useProductCardRefs";
 
-export { removeLegacyKeys } from "./storage";
+export { removeLegacyKeys, clearState as clearCatalogRestoreState } from "./storage";
 
 export {
   DEFAULT_FILTER_STATE,

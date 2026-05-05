@@ -684,7 +684,7 @@ const QuickOrder = () => {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-surface px-3 text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent hover:shadow-sm">
+              <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-surface px-3 text-sm font-medium transition-colors duration-200 hover:border-amber/40 hover:bg-accent">
                 <Upload className="h-4 w-4" /> Импорт Excel
                 <input
                   type="file"
@@ -757,7 +757,7 @@ const QuickOrder = () => {
                         className={cn(
                           "num h-9 w-full rounded-md border border-input bg-background px-2 text-sm uppercase tracking-wider outline-none transition-all duration-200",
                           "hover:border-primary/30",
-                          "focus:border-primary/60 focus:ring-4 focus:ring-primary/15",
+                          "focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
                         )}
                       />
                       {r.error && (
@@ -821,7 +821,7 @@ const QuickOrder = () => {
                                       </span>
                                     )}
                                     <span className="flex min-w-0 flex-1 flex-col">
-                                      <span className="num truncate text-xs font-semibold uppercase tracking-wider text-primary">
+                                      <span className="num truncate text-xs font-semibold uppercase tracking-wider text-amber">
                                         {m.v.sku}
                                       </span>
                                       <span className="truncate text-sm font-medium text-foreground">
@@ -958,7 +958,7 @@ const QuickOrder = () => {
                 </span>
               </div>
               {discount > 0 && (
-                <div className="font-medium text-primary">Скидка {discount}%</div>
+                <div className="font-medium text-amber">Скидка {discount}%</div>
               )}
             </div>
             <div className="text-right">
@@ -1019,7 +1019,7 @@ const QuickOrder = () => {
                   </span>
                 </span>
                 {discount > 0 && (
-                  <span className="font-medium text-primary">
+                  <span className="font-medium text-amber">
                     Скидка {discount}%
                   </span>
                 )}

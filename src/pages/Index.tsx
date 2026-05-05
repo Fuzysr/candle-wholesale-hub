@@ -2,7 +2,8 @@ import PublicLayout from "@/components/layout/PublicLayout";
 import Hero from "@/components/home/Hero";
 import Benefits from "@/components/home/Benefits";
 import TopCategories from "@/components/home/TopCategories";
-import QuickOrderTeaser from "@/components/home/QuickOrderTeaser";
+// FROZEN: Quick Order feature temporarily hidden
+// import QuickOrderTeaser from "@/components/home/QuickOrderTeaser";
 import HowItWorks from "@/components/home/HowItWorks";
 
 const Index = () => {
@@ -11,7 +12,8 @@ const Index = () => {
       <Hero />
       <Benefits />
       <TopCategories />
-      <QuickOrderTeaser />
+      {/* FROZEN: Quick Order feature temporarily hidden */}
+      {/* <QuickOrderTeaser /> */}
       <HowItWorks />
     </PublicLayout>
   );

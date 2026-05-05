@@ -79,7 +79,7 @@
     --input: 32 22% 86%;
     --ring: 35 90% 50%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
     /* ── Responsive spacing scale ──
        Used by sections / pages so spacing compresses on small screens
@@ -141,6 +141,12 @@
     --sidebar-border: 26 15% 18%;
     --sidebar-ring: 35 92% 58%;
   }
+}
+
+/* Force container side padding — overrides Tailwind config for reliability */
+.container {
+  padding-left: clamp(2rem, 8vw, 18rem) !important;
+  padding-right: clamp(2rem, 8vw, 18rem) !important;
 }
 
 @layer base {
@@ -247,4 +253,16 @@
       transform: translateY(-2px);
     }
   }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+@keyframes loader {
+  0% { transform: scaleX(0); transform-origin: left; }
+  50% { transform: scaleX(1); transform-origin: left; }
+  51% { transform: scaleX(1); transform-origin: right; }
+  100% { transform: scaleX(0); transform-origin: right; }
 }

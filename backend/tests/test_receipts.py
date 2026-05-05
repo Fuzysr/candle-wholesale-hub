@@ -269,7 +269,7 @@ async def test_other_client_cannot_see_receipt_url(
 
     reg = await client.post(
         "/auth/register",
-        json={"email": "snooper@example.com", "password": "snoop-pw-123"},
+        json={"email": "snooper@example.com", "password": "Snoop-pw-123"},
     )
     assert reg.status_code == 201
     snooper_token = reg.json()["access"]

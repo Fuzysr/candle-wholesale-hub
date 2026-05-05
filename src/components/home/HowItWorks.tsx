@@ -46,7 +46,7 @@ const HowItWorks = () => {
           </div>
         </Reveal>
 
-        <ol className="grid gap-px overflow-hidden rounded-lg border border-border bg-border grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
+        <ol className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
           {steps.map((s, idx) => (
             <Reveal key={s.n} delay={idx * 130} y={20}>
               <li className="group h-full bg-surface p-6 transition-colors duration-300 hover:bg-accent">

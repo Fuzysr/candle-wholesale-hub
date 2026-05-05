@@ -282,10 +282,7 @@ const Contacts = () => {
             <form
               onSubmit={onSubmit}
               autoComplete="off"
-              className={cn(
-                "rounded-xl border border-border bg-surface p-6 shadow-sm md:p-7",
-                "lg:sticky lg:top-24",
-              )}
+              className="rounded-xl border border-border bg-surface p-6 shadow-sm md:p-7"
             >
               <h2 className="text-xl font-semibold tracking-tight">Напишите нам</h2>
               <p className="mt-1 text-xs text-muted-foreground">

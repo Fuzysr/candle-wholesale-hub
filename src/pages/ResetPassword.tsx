@@ -4,6 +4,8 @@ import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { apiErrorMessage, authApi } from "@/lib/api";
+import { isPasswordValid } from "@/lib/password";
+import PasswordStrength from "@/components/PasswordStrength";
 import { toast } from "sonner";
 
 const ResetPassword = () => {
@@ -18,7 +20,7 @@ const ResetPassword = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return toast.error("Токен восстановления отсутствует в ссылке");
-    if (password.length < 6) return toast.error("Минимум 6 символов");
+    if (!isPasswordValid(password)) return toast.error("Пароль не соответствует требованиям безопасности");
     if (password !== confirm) return toast.error("Пароли не совпадают");
     setLoading(true);
     try {
@@ -50,11 +52,12 @@ const ResetPassword = () => {
               <input
                 type="password"
                 required
-                minLength={6}
+                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
+              <PasswordStrength password={password} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -63,7 +66,7 @@ const ResetPassword = () => {
               <input
                 type="password"
                 required
-                minLength={6}
+                minLength={8}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"

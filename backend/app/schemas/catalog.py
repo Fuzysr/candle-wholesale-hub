@@ -70,6 +70,27 @@ class CategoryRef(_ORM):
     name_en: str
 
 
+# ---------- Volume discounts ----------
+
+
+class VolumeDiscountOut(_ORM):
+    id: UUID
+    variant_id: UUID
+    min_boxes: int
+    discount_percent: float
+    created_at: datetime
+
+
+class VolumeDiscountCreate(BaseModel):
+    min_boxes: int = Field(ge=1)
+    discount_percent: float = Field(gt=0, le=100)
+
+
+class VolumeDiscountUpdate(BaseModel):
+    min_boxes: int | None = Field(default=None, ge=1)
+    discount_percent: float | None = Field(default=None, gt=0, le=100)
+
+
 # ---------- Product variants & images ----------
 
 
@@ -90,6 +111,8 @@ class ProductVariantOut(_ORM):
     last_synced_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    volume_discounts: list[VolumeDiscountOut] = []
+    images: list["VariantImageOut"] = []
 
 
 class ProductVariantCreate(BaseModel):
@@ -116,6 +139,27 @@ class ProductVariantUpdate(BaseModel):
     stock_boxes: int | None = Field(default=None, ge=0)
     image_url: str | None = None
     external_id: str | None = None
+
+
+class VariantImageOut(_ORM):
+    id: UUID
+    variant_id: UUID
+    url: str
+    alt: str | None
+    sort_order: int
+    created_at: datetime
+
+
+class VariantImageCreate(BaseModel):
+    url: str = Field(min_length=1)
+    alt: str | None = None
+    sort_order: int = 0
+
+
+class VariantImageUpdate(BaseModel):
+    url: str | None = None
+    alt: str | None = None
+    sort_order: int | None = None
 
 
 class ProductImageOut(_ORM):

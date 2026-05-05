@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -141,6 +141,34 @@ class ProductVariant(Base):
     stock_movements: Mapped[list["StockMovement"]] = relationship(
         back_populates="variant", cascade="all, delete-orphan", passive_deletes=True
     )
+    volume_discounts: Mapped[list["VolumeDiscount"]] = relationship(
+        back_populates="variant", cascade="all, delete-orphan", passive_deletes=True,
+        order_by="VolumeDiscount.min_boxes",
+    )
+    images: Mapped[list["VariantImage"]] = relationship(
+        back_populates="variant", cascade="all, delete-orphan", passive_deletes=True,
+        order_by="VariantImage.sort_order",
+    )
+
+
+class VolumeDiscount(Base):
+    __tablename__ = "volume_discounts"
+    __table_args__ = (
+        UniqueConstraint("variant_id", "min_boxes", name="uq_volume_discount_variant_min"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    variant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("product_variants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    min_boxes: Mapped[int] = mapped_column(Integer, nullable=False)
+    discount_percent: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    variant: Mapped["ProductVariant"] = relationship(back_populates="volume_discounts")
 
 
 class ProductImage(Base):
@@ -158,3 +186,20 @@ class ProductImage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     product: Mapped["Product"] = relationship(back_populates="images")
+
+
+class VariantImage(Base):
+    __tablename__ = "variant_images"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    variant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("product_variants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    alt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    variant: Mapped["ProductVariant"] = relationship(back_populates="images")

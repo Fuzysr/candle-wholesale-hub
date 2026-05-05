@@ -1,14 +1,33 @@
-from pydantic import BaseModel, EmailStr, Field
+import re
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.user import UserOut
+
+_PASSWORD_RE = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}$")
+_PASSWORD_HINT = (
+    "Пароль должен содержать минимум 8 символов, одну заглавную, "
+    "одну строчную букву и одну цифру"
+)
+
+
+def _validate_password_strength(v: str) -> str:
+    if not _PASSWORD_RE.match(v):
+        raise ValueError(_PASSWORD_HINT)
+    return v
 
 
 class RegisterIn(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
     company_name: str | None = None
     contact_name: str | None = None
     phone: str | None = None
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        return _validate_password_strength(v)
 
 
 class LoginIn(BaseModel):
@@ -61,7 +80,12 @@ class PasswordResetRequestIn(BaseModel):
 
 class PasswordResetConfirmIn(BaseModel):
     token: str
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        return _validate_password_strength(v)
 
 
 class PasswordResetRequestOut(BaseModel):

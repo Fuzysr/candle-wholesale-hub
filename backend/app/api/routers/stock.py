@@ -59,6 +59,7 @@ async def admin_stock_movement(
         select(ProductVariant)
         .options(selectinload(ProductVariant.product))
         .where(ProductVariant.id == payload.variant_id)
+        .with_for_update()
     )
     if variant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="variant not found")

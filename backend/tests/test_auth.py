@@ -9,7 +9,7 @@ async def test_register_returns_tokens_and_user(client):
         "/auth/register",
         json={
             "email": "buyer@example.com",
-            "password": "s3cret123",
+            "password": "S3cret123",
             "company_name": "ACME",
         },
     )
@@ -23,7 +23,7 @@ async def test_register_returns_tokens_and_user(client):
 
 
 async def test_register_duplicate_returns_409(client):
-    payload = {"email": "dup@example.com", "password": "s3cret123"}
+    payload = {"email": "dup@example.com", "password": "S3cret123"}
     assert (await client.post("/auth/register", json=payload)).status_code == 201
     dup = await client.post("/auth/register", json=payload)
     assert dup.status_code == 409
@@ -31,7 +31,7 @@ async def test_register_duplicate_returns_409(client):
 
 async def test_login_wrong_password(client):
     await client.post(
-        "/auth/register", json={"email": "u1@example.com", "password": "correcthorse"}
+        "/auth/register", json={"email": "u1@example.com", "password": "CorrectHorse1"}
     )
     resp = await client.post(
         "/auth/login", json={"email": "u1@example.com", "password": "wrong"}
@@ -52,7 +52,7 @@ async def test_me_returns_authenticated_user(client, client_token, auth_headers)
 
 async def test_refresh_issues_new_access(client):
     register = await client.post(
-        "/auth/register", json={"email": "rt@example.com", "password": "pw123456"}
+        "/auth/register", json={"email": "rt@example.com", "password": "Pw123456x"}
     )
     refresh_token = register.json()["refresh"]
     resp = await client.post("/auth/refresh", json={"refresh": refresh_token})

@@ -16,6 +16,10 @@ import type {
   ProductVariantCreate,
   ProductVariantOut,
   ProductVariantUpdate,
+  VariantImageCreate,
+  VariantImageOut,
+  VolumeDiscountCreate,
+  VolumeDiscountOut,
 } from "./types";
 
 export const catalogApi = {
@@ -57,4 +61,13 @@ export const catalogApi = {
   updateImage: (id: string, body: ProductImageUpdate) =>
     http.patch<ProductImageOut>(`/admin/images/${id}`, body),
   deleteImage: (id: string) => http.delete<void>(`/admin/images/${id}`),
+
+  // ---------- variant images ----------
+  createVariantImage: (variantId: string, body: VariantImageCreate) =>
+    http.post<VariantImageOut>(`/admin/variants/${variantId}/images`, body),
+  deleteVariantImage: (id: string) => http.delete<void>(`/admin/variant-images/${id}`),
+
+  // ---------- volume discounts ----------
+  replaceVolumeDiscounts: (variantId: string, body: VolumeDiscountCreate[]) =>
+    http.put<VolumeDiscountOut[]>(`/admin/variants/${variantId}/volume-discounts`, body),
 };

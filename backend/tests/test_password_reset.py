@@ -115,7 +115,7 @@ async def test_reset_confirm_changes_password_and_deletes_token(
 
     resp = await client.post(
         "/auth/password/reset-confirm",
-        json={"token": raw_token, "password": "new-very-strong"},
+        json={"token": raw_token, "password": "New-very-strong1"},
     )
     assert resp.status_code == 204
 
@@ -129,7 +129,7 @@ async def test_reset_confirm_changes_password_and_deletes_token(
     # Новый пароль работает.
     new = await client.post(
         "/auth/login",
-        json={"email": client_user.email, "password": "new-very-strong"},
+        json={"email": client_user.email, "password": "New-very-strong1"},
     )
     assert new.status_code == 200
 
@@ -142,7 +142,7 @@ async def test_reset_confirm_changes_password_and_deletes_token(
 async def test_reset_confirm_rejects_unknown_token(client):
     resp = await client.post(
         "/auth/password/reset-confirm",
-        json={"token": "no-such-token-in-db", "password": "whatever-12"},
+        json={"token": "no-such-token-in-db", "password": "Whatever-12x"},
     )
     assert resp.status_code == 400
     assert resp.json()["detail"] == "invalid reset token"
@@ -163,7 +163,7 @@ async def test_reset_confirm_rejects_expired_token(client, client_user, session)
 
     resp = await client.post(
         "/auth/password/reset-confirm",
-        json={"token": raw_token, "password": "new-very-strong"},
+        json={"token": raw_token, "password": "New-very-strong1"},
     )
     assert resp.status_code == 400
 
@@ -187,13 +187,13 @@ async def test_reset_confirm_is_single_use(client, client_user, session):
 
     first = await client.post(
         "/auth/password/reset-confirm",
-        json={"token": raw_token, "password": "first-password"},
+        json={"token": raw_token, "password": "First-password1"},
     )
     assert first.status_code == 204
 
     second = await client.post(
         "/auth/password/reset-confirm",
-        json={"token": raw_token, "password": "second-password"},
+        json={"token": raw_token, "password": "Second-password1"},
     )
     assert second.status_code == 400
 
@@ -215,7 +215,7 @@ async def test_reset_confirm_rejects_token_for_disabled_user(
 
     resp = await client.post(
         "/auth/password/reset-confirm",
-        json={"token": raw_token, "password": "new-very-strong"},
+        json={"token": raw_token, "password": "New-very-strong1"},
     )
     assert resp.status_code == 400
 

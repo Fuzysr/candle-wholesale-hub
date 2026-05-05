@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  X,
 } from "lucide-react";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,8 @@ import {
   type ProductOut,
   type ProductVariantOut,
   type UserOut,
+  type VariantImageOut,
+  uploadsApi,
 } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { downloadInvoicePdf } from "@/lib/invoicePdf";
@@ -441,6 +444,16 @@ const Admin = () => {
   const [productGallery, setProductGallery] = useState<GalleryImage[]>([]);
   const [editingCategory, setEditingCategory] = useState<Partial<AdminCategory> | null>(null);
   const [editingVariant, setEditingVariant] = useState<(Partial<AdminVariant> & { product_id: string }) | null>(null);
+  const [variantDiscounts, setVariantDiscounts] = useState<{ min_boxes: number; discount_percent: number }[]>([]);
+  const [variantImages, setVariantImages] = useState<VariantImageOut[]>([]);
+  const [variantImgUploading, setVariantImgUploading] = useState(false);
+  const [bulkVariant, setBulkVariant] = useState<{ product_id: string } | null>(null);
+  const [bulkSizes, setBulkSizes] = useState("");
+  const [bulkColors, setBulkColors] = useState("");
+  const [bulkPiecesPerBox, setBulkPiecesPerBox] = useState(1);
+  const [bulkPrice, setBulkPrice] = useState(0);
+  const [bulkSkuPrefix, setBulkSkuPrefix] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
   const [stockOpVariant, setStockOpVariant] = useState<StockOpVariant | null>(null);
   const [editingLookup, setEditingLookup] = useState<{ kind: LookupKind; data: Partial<Lookup> } | null>(null);
   const [editingDiscount, setEditingDiscount] = useState<Partial<DiscountTierOut> | null>(null);
@@ -508,7 +521,10 @@ const Admin = () => {
     });
   };
 
-  const reloadProducts = () => queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+  const reloadProducts = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+    queryClient.invalidateQueries({ queryKey: ["products"] });
+  };
   const reloadCategories = () => queryClient.invalidateQueries({ queryKey: ["categories"] });
   const reloadAttributes = (kind: AttributeKind) =>
     queryClient.invalidateQueries({ queryKey: ["attributes", kind] });
@@ -693,17 +709,75 @@ const Admin = () => {
     };
 
     try {
-      if (editingVariant.id) {
-        await catalogApi.updateVariant(editingVariant.id, body);
+      let variantId = editingVariant.id;
+      if (variantId) {
+        await catalogApi.updateVariant(variantId, body);
       } else {
-        await catalogApi.createVariant(editingVariant.product_id, body);
+        const created = await catalogApi.createVariant(editingVariant.product_id, body);
+        variantId = created.id;
       }
+      // Save volume discounts
+      const validDiscounts = variantDiscounts.filter((d) => d.min_boxes > 0 && d.discount_percent > 0);
+      await catalogApi.replaceVolumeDiscounts(variantId, validDiscounts);
       toast.success("Сохранено");
       setEditingVariant(null);
+      setVariantDiscounts([]);
       reloadProducts();
     } catch (err) {
       toast.error(apiErrorMessage(err, "Не удалось сохранить вариацию"));
     }
+  };
+
+  const saveBulkVariants = async () => {
+    if (!bulkVariant) return;
+    const sizes = bulkSizes.split(",").map((s) => s.trim()).filter(Boolean);
+    const colors = bulkColors.split(",").map((s) => s.trim()).filter(Boolean);
+    if (sizes.length === 0 && colors.length === 0) return toast.error("Укажите хотя бы размеры или цвета");
+    if (!bulkSkuPrefix.trim()) return toast.error("Укажите SKU-префикс");
+
+    // Build combinations
+    const combos: { size: string | null; color: string | null; skuSuffix: string }[] = [];
+    if (sizes.length > 0 && colors.length > 0) {
+      for (const s of sizes) for (const c of colors) combos.push({ size: s, color: c, skuSuffix: `${s}-${c}` });
+    } else if (sizes.length > 0) {
+      for (const s of sizes) combos.push({ size: s, color: null, skuSuffix: s });
+    } else {
+      for (const c of colors) combos.push({ size: null, color: c, skuSuffix: c });
+    }
+
+    setBulkSaving(true);
+    let ok = 0;
+    let fail = 0;
+    for (const combo of combos) {
+      try {
+        const sku = `${bulkSkuPrefix.trim()}-${combo.skuSuffix}`.toUpperCase().replace(/\s+/g, "-");
+        await catalogApi.createVariant(bulkVariant.product_id, {
+          sku,
+          size: combo.size,
+          color: combo.color,
+          shape: null,
+          pieces_per_box: bulkPiecesPerBox,
+          price_per_piece_rub: bulkPrice,
+          price_per_piece_usd: 0,
+          stock_boxes: 0,
+          image_url: null,
+          external_id: null,
+        });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    setBulkSaving(false);
+    if (ok > 0) toast.success(`Создано ${ok} вариаций`);
+    if (fail > 0) toast.error(`Не удалось создать ${fail} шт. (возможно дубли SKU)`);
+    setBulkVariant(null);
+    setBulkSizes("");
+    setBulkColors("");
+    setBulkSkuPrefix("");
+    setBulkPrice(0);
+    setBulkPiecesPerBox(1);
+    reloadProducts();
   };
 
   const deleteVariant = async (id: string) => {
@@ -1239,12 +1313,13 @@ const Admin = () => {
   const productStockTotal = (p: AdminProduct) =>
     (p.variants ?? []).reduce((s, v) => s + Math.max(0, v.stock_boxes), 0);
   const productStatus = (p: AdminProduct): { label: string; cls: string } => {
+    if (!p.is_published) return { label: "Снят", cls: "bg-muted text-muted-foreground" };
     const variants = p.variants ?? [];
     const total = variants.reduce(
       (s, v) => s + Math.max(0, v.stock_boxes),
       0,
     );
-    if (total === 0) return { label: "Нет", cls: "bg-muted text-muted-foreground" };
+    if (total === 0) return { label: "Нет", cls: "bg-destructive/15 text-destructive" };
     if (variants.some((v) => v.stock_boxes > 0 && v.stock_boxes <= 5)) {
       return { label: "Мало", cls: "bg-warning/15 text-warning" };
     }
@@ -1411,8 +1486,8 @@ const Admin = () => {
             <KpiCard
               label="Активных клиентов"
               value={activeClients}
-              delta={lowStock > 0 ? `${lowStock} SKU мало на складе` : "склад в норме"}
-              deltaTone={lowStock > 0 ? "warn" : "muted"}
+              delta={activeClients > 0 ? `${activeClients} с заказами` : "пока нет клиентов"}
+              deltaTone={activeClients > 0 ? "ok" : "muted"}
             />
           </div>
 
@@ -2197,18 +2272,31 @@ const Admin = () => {
                               <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                 Вариации ({p.variants?.length ?? 0})
                               </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  setEditingVariant({
-                                    product_id: p.id,
-                                    pieces_per_box: 1,
-                                  })
-                                }
-                              >
-                                <Plus className="h-3.5 w-3.5" /> Вариация
-                              </Button>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setBulkSkuPrefix(p.slug?.toUpperCase() ?? "");
+                                    setBulkVariant({ product_id: p.id });
+                                  }}
+                                >
+                                  <Plus className="h-3.5 w-3.5" /> Генератор
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setVariantDiscounts([]);
+                                    setEditingVariant({
+                                      product_id: p.id,
+                                      pieces_per_box: 1,
+                                    });
+                                  }}
+                                >
+                                  <Plus className="h-3.5 w-3.5" /> Вариация
+                                </Button>
+                              </div>
                             </div>
                             <div className="overflow-x-auto rounded-md border border-border bg-surface">
                               <table className="w-full text-xs">
@@ -2229,8 +2317,8 @@ const Admin = () => {
                                     <tr key={v.id} className="border-t border-border">
                                       <td className="px-3 py-2">
                                         <div className="h-8 w-8 overflow-hidden rounded bg-muted">
-                                          {v.image_url ? (
-                                            <img src={v.image_url} alt="" className="h-full w-full object-cover" />
+                                          {(v.images?.[0]?.url ?? v.image_url) ? (
+                                            <img src={(v.images?.[0]?.url ?? v.image_url)!} alt="" className="h-full w-full object-cover" />
                                           ) : (
                                             <div className="flex h-full w-full items-center justify-center text-[9px] text-muted-foreground">—</div>
                                           )}
@@ -2247,7 +2335,11 @@ const Admin = () => {
                                           <Button
                                             size="sm"
                                             variant="ghost"
-                                            onClick={() => setEditingVariant(v)}
+                                            onClick={() => {
+                                              setVariantDiscounts((v.volume_discounts ?? []).map((vd) => ({ min_boxes: vd.min_boxes, discount_percent: vd.discount_percent })));
+                                              setVariantImages([...(v.images ?? [])].sort((a, b) => a.sort_order - b.sort_order));
+                                              setEditingVariant(v);
+                                            }}
                                           >
                                             <Pencil className="h-3 w-3" />
                                           </Button>
@@ -2546,7 +2638,7 @@ const Admin = () => {
       </Dialog>
 
       {/* VARIANT DIALOG */}
-      <Dialog open={!!editingVariant} onOpenChange={(o) => !o && setEditingVariant(null)}>
+      <Dialog open={!!editingVariant} onOpenChange={(o) => { if (!o) { setEditingVariant(null); setVariantDiscounts([]); setVariantImages([]); } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>{editingVariant?.id ? "Редактировать вариацию" : "Новая вариация"}</DialogTitle></DialogHeader>
           {editingVariant && (
@@ -2559,17 +2651,211 @@ const Admin = () => {
               <Field label="Остаток (коробок)" type="number" min={0} value={editingVariant.stock_boxes ?? 0} onChange={(e) => setEditingVariant({ ...editingVariant, stock_boxes: Number(e.target.value) })} />
               <Field label="Цена за шт. (RUB)" type="number" min={0} step={0.01} value={editingVariant.price_per_piece_rub ?? 0} onChange={(e) => setEditingVariant({ ...editingVariant, price_per_piece_rub: Number(e.target.value) })} />
               <div className="md:col-span-2">
-                <ImageUpload
-                  value={editingVariant.image_url ?? null}
-                  onChange={(url) => setEditingVariant({ ...editingVariant, image_url: url })}
-                />
-                <p className="mt-1 text-[11px] text-muted-foreground">Фото вариации — используется вместо общего фото товара, если задано.</p>
+                {editingVariant.id ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Фото вариации ({variantImages.length})
+                      </span>
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/jpeg,image/png,image/webp,image/avif"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const files = e.target.files;
+                            if (!files?.length || !editingVariant.id) return;
+                            setVariantImgUploading(true);
+                            let added = 0;
+                            for (const file of Array.from(files)) {
+                              if (file.size > 5 * 1024 * 1024) { toast.error(`${file.name}: больше 5 МБ`); continue; }
+                              try {
+                                const { url } = await uploadsApi.uploadProductImage(file);
+                                const img = await catalogApi.createVariantImage(editingVariant.id, { url, sort_order: variantImages.length + added });
+                                setVariantImages((prev) => [...prev, img]);
+                                added++;
+                              } catch (err) {
+                                toast.error(apiErrorMessage(err, `${file.name}: ошибка`));
+                              }
+                            }
+                            setVariantImgUploading(false);
+                            if (added) { toast.success(`Загружено: ${added}`); reloadProducts(); }
+                            e.target.value = "";
+                          }}
+                        />
+                        <Button type="button" size="sm" variant="outline" asChild disabled={variantImgUploading}>
+                          <span>{variantImgUploading ? "Загрузка..." : "Добавить фото"}</span>
+                        </Button>
+                      </label>
+                    </div>
+                    {variantImages.length === 0 ? (
+                      <div className="rounded-md border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                        Нет фото. Нажмите «Добавить фото».
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                        {variantImages.map((img, i) => (
+                          <div key={img.id} className="group relative overflow-hidden rounded-md border border-border bg-muted">
+                            <img src={img.url} alt="" className="aspect-square w-full object-cover" />
+                            {i === 0 && (
+                              <span className="absolute left-1 top-1 inline-flex items-center gap-0.5 rounded-sm bg-primary px-1.5 py-0.5 text-[9px] font-semibold uppercase text-primary-foreground">
+                                главное
+                              </span>
+                            )}
+                            <div className="absolute inset-x-0 bottom-0 flex justify-end bg-background/85 p-1 opacity-0 transition-opacity group-hover:opacity-100">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await catalogApi.deleteVariantImage(img.id);
+                                    try { await uploadsApi.delete(img.url); } catch { /* ignore */ }
+                                    setVariantImages((prev) => prev.filter((x) => x.id !== img.id));
+                                    reloadProducts();
+                                  } catch (err) {
+                                    toast.error(apiErrorMessage(err, "Не удалось удалить"));
+                                  }
+                                }}
+                                className="rounded-sm p-1 text-destructive hover:bg-destructive/10"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-[11px] text-muted-foreground">JPG / PNG / WebP, до 5 МБ. Первое фото — главное.</p>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                    Сохраните вариацию, чтобы добавить фото
+                  </div>
+                )}
+              </div>
+              <div className="md:col-span-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Скидки по объёму</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setVariantDiscounts([...variantDiscounts, { min_boxes: 0, discount_percent: 0 }])}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Порог
+                  </Button>
+                </div>
+                {variantDiscounts.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    {variantDiscounts.map((d, i) => (
+                      <div key={i} className="flex items-end gap-2">
+                        <label className="flex-1">
+                          <span className="mb-0.5 block text-[11px] text-muted-foreground">от (кор.)</span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={d.min_boxes || ""}
+                            onChange={(e) => {
+                              const next = [...variantDiscounts];
+                              next[i] = { ...next[i], min_boxes: Number(e.target.value) };
+                              setVariantDiscounts(next);
+                            }}
+                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          />
+                        </label>
+                        <label className="flex-1">
+                          <span className="mb-0.5 block text-[11px] text-muted-foreground">Скидка %</span>
+                          <input
+                            type="number"
+                            min={0.01}
+                            max={100}
+                            step={0.01}
+                            value={d.discount_percent || ""}
+                            onChange={(e) => {
+                              const next = [...variantDiscounts];
+                              next[i] = { ...next[i], discount_percent: Number(e.target.value) };
+                              setVariantDiscounts(next);
+                            }}
+                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          />
+                        </label>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-destructive hover:text-destructive"
+                          onClick={() => setVariantDiscounts(variantDiscounts.filter((_, j) => j !== i))}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {variantDiscounts.length === 0 && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">Нет скидок — нажмите «Порог», чтобы добавить.</p>
+                )}
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingVariant(null)}>Отмена</Button>
+            <Button variant="outline" onClick={() => { setEditingVariant(null); setVariantDiscounts([]); setVariantImages([]); }}>Отмена</Button>
             <Button onClick={saveVariant}>Сохранить</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* BULK VARIANT GENERATOR DIALOG */}
+      <Dialog open={!!bulkVariant} onOpenChange={(o) => { if (!o) { setBulkVariant(null); setBulkSizes(""); setBulkColors(""); setBulkSkuPrefix(""); setBulkPrice(0); setBulkPiecesPerBox(1); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Генератор вариаций</DialogTitle></DialogHeader>
+          {bulkVariant && (
+            <div className="grid gap-4">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Размеры (через запятую)</label>
+                <input
+                  value={bulkSizes}
+                  onChange={(e) => setBulkSizes(e.target.value)}
+                  placeholder="Ø50×100, Ø60×150, Ø80×200"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Оставьте пустым, если размер один или не нужен</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Цвета (через запятую)</label>
+                <input
+                  value={bulkColors}
+                  onChange={(e) => setBulkColors(e.target.value)}
+                  placeholder="Медовый, Белый, Красный"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Оставьте пустым, если цвет один или не нужен</p>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="SKU-префикс *" value={bulkSkuPrefix} onChange={(e) => setBulkSkuPrefix(e.target.value)} />
+                <Field label="Шт. в коробке" type="number" min={1} value={bulkPiecesPerBox} onChange={(e) => setBulkPiecesPerBox(Number(e.target.value))} />
+                <Field label="Цена за шт. (₽)" type="number" min={0} step={0.01} value={bulkPrice} onChange={(e) => setBulkPrice(Number(e.target.value))} />
+              </div>
+              {(() => {
+                const sizes = bulkSizes.split(",").map((s) => s.trim()).filter(Boolean);
+                const colors = bulkColors.split(",").map((s) => s.trim()).filter(Boolean);
+                const count = sizes.length > 0 && colors.length > 0 ? sizes.length * colors.length : Math.max(sizes.length, colors.length);
+                return count > 0 ? (
+                  <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    Будет создано <span className="font-semibold text-foreground">{count}</span> вариаций
+                    {sizes.length > 0 && colors.length > 0 && (
+                      <span> ({sizes.length} размер{sizes.length > 1 ? "ов" : ""} × {colors.length} цвет{colors.length > 1 ? (colors.length < 5 ? "а" : "ов") : ""})</span>
+                    )}
+                  </div>
+                ) : null;
+              })()}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setBulkVariant(null); setBulkSizes(""); setBulkColors(""); }}>Отмена</Button>
+            <Button onClick={saveBulkVariants} disabled={bulkSaving}>
+              {bulkSaving ? "Создание..." : "Создать"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

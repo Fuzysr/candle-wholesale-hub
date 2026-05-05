@@ -229,7 +229,7 @@ const Checkout = () => {
                 <div className="flex justify-between"><span className="text-muted-foreground">Коробок</span><span className="num">{totals.totalBoxes}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Сумма</span><span className="price">{formatMoney(totals.subtotal, currency)}</span></div>
                 {totals.discountPercent > 0 && (
-                  <div className="flex justify-between text-primary"><span>Скидка {totals.discountPercent}%</span><span className="price">−{formatMoney(totals.discountAmount, currency)}</span></div>
+                  <div className="flex justify-between text-amber"><span>Скидка {totals.discountPercent}%</span><span className="price">−{formatMoney(totals.discountAmount, currency)}</span></div>
                 )}
                 <div className="flex items-baseline justify-between border-t border-border pt-3">
                   <span className="font-semibold">К оплате</span>

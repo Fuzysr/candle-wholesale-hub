@@ -19,6 +19,8 @@ import axios, {
 import { tokenStore } from "./token-store";
 import type { AccessToken } from "./types";
 
+type RefreshOut = { access: string; refresh: string; token_type: string };
+
 const BASE_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   `${window.location.protocol}//${window.location.hostname}:8000`;
@@ -48,12 +50,12 @@ const refreshAccessToken = async (): Promise<string | null> => {
   const refresh = tokenStore.getRefresh();
   if (!refresh) return null;
   try {
-    const { data } = await axios.post<AccessToken>(
+    const { data } = await axios.post<RefreshOut>(
       `${BASE_URL}/auth/refresh`,
       { refresh },
       { withCredentials: false },
     );
-    tokenStore.setAccessOnly(data.access);
+    tokenStore.set(data.access, data.refresh);
     return data.access;
   } catch {
     tokenStore.clear();
@@ -81,9 +83,12 @@ api.interceptors.response.use(
 
     if (status === 401 && shouldAttemptRefresh(original)) {
       if (!refreshPromise) refreshPromise = refreshAccessToken();
-      const newToken = await refreshPromise.finally(() => {
+      let newToken: string | null = null;
+      try {
+        newToken = await refreshPromise;
+      } finally {
         refreshPromise = null;
-      });
+      }
       if (newToken && original) {
         original._retry = true;
         const headers =

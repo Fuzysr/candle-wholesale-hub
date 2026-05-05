@@ -53,6 +53,7 @@ import {
   productMinBoxPrice,
   productTotalStock,
   productGalleryUrls,
+  variantCoverUrl,
   variantBoxPrice,
   variantPrice,
   variantLabel,
@@ -136,15 +137,25 @@ const renderHighlighted = (text: string, query: string): ReactNode => {
   );
 };
 
+// ── Lightweight filter persistence (survives clearState) ──────────────
+const FILTERS_KEY = "catalog_filters";
+
+const readSavedFilters = (): Record<string, unknown> | null => {
+  try {
+    const raw = sessionStorage.getItem(FILTERS_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+  } catch { return null; }
+};
+
+const writeSavedFilters = (f: Record<string, unknown>) => {
+  try { sessionStorage.setItem(FILTERS_KEY, JSON.stringify(f)); } catch {}
+};
+
 const Catalog = () => {
   const { categorySlug } = useParams();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  // Read the persisted snapshot ONCE on mount. The hook returns the saved
-  // filters/page so they can be used as `useState` lazy initialisers below;
-  // the actual viewport restore (`applyRestore`) runs later, after data has
-  // loaded and product cards have rendered.
   const restore = useCatalogRestore(pathname);
   const cardRefs = useProductCardRefs();
 
@@ -155,20 +166,20 @@ const Catalog = () => {
   const setCartBoxes = useCartStore((s) => s.setBoxes);
   const removeFromCart = useCartStore((s) => s.remove);
 
-  // Filter / sort / view state. Each call's lazy initialiser pulls from the
-  // restore snapshot when it exists so a returning user sees their previous
-  // selection without an extra render+effect cycle.
+  // Restore filters: prefer restore snapshot, then our lightweight
+  // sessionStorage copy, then defaults.
+  const saved = readSavedFilters();
   const initial = restore.initialFilters;
-  const [view, setView] = useState<View>(() => (initial?.view as View) ?? "grid");
+  const [view, setView] = useState<View>(() => (initial?.view ?? saved?.view as View) ?? "grid");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [onlyInStock, setOnlyInStock] = useState(() => initial?.onlyInStock ?? true);
-  const [colorIds, setColorIds] = useState<Set<string>>(() => new Set(initial?.colorIds ?? []));
-  const [materialIds, setMaterialIds] = useState<Set<string>>(() => new Set(initial?.materialIds ?? []));
-  const [scentIds, setScentIds] = useState<Set<string>>(() => new Set(initial?.scentIds ?? []));
-  const [shapeIds, setShapeIds] = useState<Set<string>>(() => new Set(initial?.shapeIds ?? []));
-  const [sort, setSort] = useState<SortKey>(() => (initial?.sort as SortKey) ?? "newest");
+  const [onlyInStock, setOnlyInStock] = useState(() => initial?.onlyInStock ?? (saved?.onlyInStock as boolean | undefined) ?? true);
+  const [colorIds, setColorIds] = useState<Set<string>>(() => new Set((initial?.colorIds) ?? []));
+  const [materialIds, setMaterialIds] = useState<Set<string>>(() => new Set((initial?.materialIds) ?? []));
+  const [scentIds, setScentIds] = useState<Set<string>>(() => new Set((initial?.scentIds) ?? []));
+  const [shapeIds, setShapeIds] = useState<Set<string>>(() => new Set((initial?.shapeIds) ?? []));
+  const [sort, setSort] = useState<SortKey>(() => (initial?.sort ?? saved?.sort as SortKey) ?? "newest");
   const [openCats, setOpenCats] = useState<Set<string>>(new Set());
-  const [categoryIds, setCategoryIds] = useState<Set<string>>(() => new Set(initial?.categoryIds ?? []));
+  const [categoryIds, setCategoryIds] = useState<Set<string>>(() => new Set((initial?.categoryIds) ?? []));
   const [priceMin, setPriceMin] = useState(() => initial?.priceMin ?? "");
   const [priceMax, setPriceMax] = useState(() => initial?.priceMax ?? "");
 
@@ -179,12 +190,20 @@ const Catalog = () => {
     address bar shareable/bookmarkable without churning browser history on
     every character.
   */
-  // URL `?q=` is canonical (shareable). Fall back to the restore snapshot
-  // only when no URL param is present at all (`null`, not empty string).
   const [searchInput, setSearchInput] = useState(
     () => params.get("q") ?? initial?.search ?? "",
   );
   const search = searchInput.trim().toLowerCase();
+
+  // Persist filters to a separate sessionStorage key so they survive
+  // clearState() and are restored on next catalog visit.
+  useEffect(() => {
+    writeSavedFilters({
+      view,
+      sort,
+      onlyInStock,
+    });
+  }, [view, sort, onlyInStock]);
 
   useEffect(() => {
     const trimmed = searchInput.trim();
@@ -566,11 +585,15 @@ const Catalog = () => {
       sku: v.sku,
       productName: productName(p, lang),
       variantLabel: variantLabel(v),
-      image: v.image_url ?? productGalleryUrls(p)[0] ?? p.image_url,
+      image: variantCoverUrl(p, v),
       piecesPerBox: v.pieces_per_box,
       priceRub: Number(v.price_per_piece_rub),
       priceUsd: Number(v.price_per_piece_usd),
       stockBoxes: availableBoxes(v),
+      volumeDiscounts: (v.volume_discounts ?? []).map((vd) => ({
+        min_boxes: vd.min_boxes,
+        discount_percent: vd.discount_percent,
+      })),
     }, qty);
     toast.success(`${v.sku} · ${qty} кор. в корзине`);
   };
@@ -1299,7 +1322,7 @@ const Catalog = () => {
                     // cards after the 12th reveal almost simultaneously.
                     const delay = Math.min(i, 11) * 20;
                     return (
-                      <Reveal key={v.id} delay={delay}>
+                      <Reveal key={v.id} delay={delay} className="h-full">
                         <ProductCard
                           p={p}
                           v={v}
@@ -1330,35 +1353,18 @@ const Catalog = () => {
                     />
                   ))}
                 </div>
-                {/* Desktop table view */}
-                <div className="hidden overflow-x-auto rounded-lg border border-border bg-surface shadow-sm md:block">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/60">
-                      <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-                        <th className="w-14 px-3 py-3"></th>
-                        <th className="px-3 py-3">Артикул</th>
-                        <th className="px-3 py-3">Товар</th>
-                        <th className="px-3 py-3">Вариация</th>
-                        <th className="px-3 py-3 text-right">Шт/кор</th>
-                        <th className="px-3 py-3 text-right">Остаток</th>
-                        <th className="px-3 py-3 text-right">Цена</th>
-                        <th className="w-36 px-3 py-3 text-right">Кор.</th>
-                        <th className="px-3 py-3"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pagedItems.map(({ p, v }, i) => (
-                        <TableRow
-                          key={v.id}
-                          p={p}
-                          v={v}
-                          onAdd={handleAdd}
-                          index={i}
-                          registerRef={cardRefs.registerRef}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
+                {/* Desktop list view — horizontal cards like Kufar */}
+                <div className="hidden flex-col divide-y divide-border rounded-lg border border-border bg-surface shadow-sm md:flex">
+                  {pagedItems.map(({ p, v }, i) => (
+                    <TableRow
+                      key={v.id}
+                      p={p}
+                      v={v}
+                      onAdd={handleAdd}
+                      index={i}
+                      registerRef={cardRefs.registerRef}
+                    />
+                  ))}
                 </div>
                 </>
               )}
@@ -1550,7 +1556,7 @@ const ProductCard = ({
   onRemove: () => void;
   registerRef?: (variantId: string, node: HTMLElement | null) => void;
 }) => {
-  const cover = v.image_url ?? productGalleryUrls(p)[0] ?? p.image_url;
+  const cover = variantCoverUrl(p, v);
   const stock = availableBoxes(v);
   const inCart = cartBoxes > 0;
 
@@ -1558,7 +1564,12 @@ const ProductCard = ({
     <article
       ref={(el) => registerRef?.(v.id, el)}
       data-variant-id={v.id}
-      className="group relative flex flex-col overflow-hidden rounded-lg border border-border bg-surface transition-all duration-300 ease-out hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/15"
+      className={cn(
+        "group relative flex h-full flex-col overflow-hidden rounded-lg border bg-surface transition-all duration-300 ease-out",
+        stock > 0
+          ? "border-border hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/15"
+          : "border-border/50 opacity-60 grayscale",
+      )}
     >
       <Link
         to={`/product/${p.slug}?variant=${v.id}`}
@@ -1585,13 +1596,13 @@ const ProductCard = ({
         </div>
         <Link
           to={`/product/${p.slug}?variant=${v.id}`}
-          className="mt-1 line-clamp-2 text-sm font-bold leading-snug text-foreground transition-colors hover:text-primary"
+          className="mt-1 line-clamp-2 h-[2.5em] text-sm font-bold leading-snug text-foreground transition-colors hover:text-primary"
         >
           {productName(p, lang)}
         </Link>
-        <div className="mt-1 text-xs text-muted-foreground">{variantLabel(v)}</div>
+        <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">{variantLabel(v)}</div>
 
-        <div className="mt-2 flex items-baseline justify-between sm:mt-3">
+        <div className="mt-auto flex items-baseline justify-between pt-2 sm:pt-3">
           <div>
             <div className="price text-base font-bold sm:text-lg">{formatMoney(variantBoxPrice(v, currency), currency)}</div>
             <div className="text-[11px] text-muted-foreground">
@@ -1625,9 +1636,10 @@ const ProductCard = ({
           ) : (
             <Button
               onClick={onAdd}
+              disabled={stock <= 0}
               className="w-full transition-all duration-200 hover:shadow-md hover:shadow-primary/25"
             >
-              + В корзину
+              {stock > 0 ? "+ В корзину" : "Нет в наличии"}
             </Button>
           )}
         </div>
@@ -1658,7 +1670,7 @@ const MobileListRow = ({
   const setCartBoxes = useCartStore((s) => s.setBoxes);
   const removeFromCart = useCartStore((s) => s.remove);
   const stock = availableBoxes(v);
-  const cover = v.image_url ?? productGalleryUrls(p)[0] ?? p.image_url;
+  const cover = variantCoverUrl(p, v);
   const inCart = Boolean(cartItem);
   const delayMs = Math.min(index, 13) * 20;
 
@@ -1666,7 +1678,10 @@ const MobileListRow = ({
     <div
       ref={(el) => registerRef?.(v.id, el)}
       data-variant-id={v.id}
-      className="flex gap-3 p-3 animate-in fade-in slide-in-from-bottom-1 fill-mode-both duration-500 ease-out"
+      className={cn(
+        "flex gap-3 p-3 animate-in fade-in slide-in-from-bottom-1 fill-mode-both duration-500 ease-out",
+        stock <= 0 && "opacity-60 grayscale",
+      )}
       style={{ animationDelay: `${delayMs}ms` }}
     >
       <Link
@@ -1717,8 +1732,8 @@ const MobileListRow = ({
               </button>
             </div>
           ) : (
-            <Button size="sm" className="h-8 text-xs" onClick={() => onAdd(p, v, 1)}>
-              В корзину
+            <Button size="sm" className="h-8 text-xs" onClick={() => onAdd(p, v, 1)} disabled={stock <= 0}>
+              {stock > 0 ? "В корзину" : "Нет"}
             </Button>
           )}
           <StockIndicator stockBoxes={stock} />
@@ -1755,79 +1770,86 @@ const TableRow = ({
   const removeFromCart = useCartStore((s) => s.remove);
   const [qty, setQty] = useState(1);
   const stock = availableBoxes(v);
-  const cover = v.image_url ?? productGalleryUrls(p)[0] ?? p.image_url;
+  const cover = variantCoverUrl(p, v);
   const inCart = Boolean(cartItem);
-  // Cap stagger so large lists don't drag — rows after the 14th come in fast.
   const delayMs = Math.min(index, 13) * 20;
 
   return (
-    <tr
+    <div
       ref={(el) => registerRef?.(v.id, el)}
       data-variant-id={v.id}
-      className="border-t border-border transition-colors hover:bg-accent/30 animate-in fade-in slide-in-from-bottom-1 fill-mode-both duration-500 ease-out"
+      className={cn(
+        "flex items-center gap-5 px-4 py-4 transition-colors hover:bg-accent/30 animate-in fade-in slide-in-from-bottom-1 fill-mode-both duration-500 ease-out",
+        stock <= 0 && "opacity-60 grayscale",
+      )}
       style={{ animationDelay: `${delayMs}ms` }}
     >
-      <td className="px-3 py-2.5">
+      {/* Thumbnail */}
+      <Link
+        to={`/product/${p.slug}?variant=${v.id}`}
+        className="block h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
+        aria-label={productName(p, lang)}
+      >
+        <img
+          src={getProductImage(cover)}
+          alt={productName(p, lang)}
+          loading="lazy"
+          className="h-full w-full object-cover transition-transform duration-300 hover:scale-110"
+        />
+      </Link>
+
+      {/* Info — middle */}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="text-lg font-bold">
+          {formatMoney(variantBoxPrice(v, currency), currency)}
+        </div>
         <Link
           to={`/product/${p.slug}?variant=${v.id}`}
-          className="block h-12 w-12 overflow-hidden rounded-md border border-border bg-muted"
-          aria-label={productName(p, lang)}
+          className="line-clamp-1 text-sm font-medium text-foreground transition-colors hover:text-primary"
         >
-          <img
-            src={getProductImage(cover)}
-            alt={productName(p, lang)}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-300 hover:scale-110"
-          />
-        </Link>
-      </td>
-      <td className="num px-3 py-2.5 text-xs text-muted-foreground">{v.sku}</td>
-      <td className="px-3 py-2.5">
-        <Link to={`/product/${p.slug}?variant=${v.id}`} className="font-medium transition-colors hover:text-primary">
           {productName(p, lang)}
         </Link>
-      </td>
-      <td className="px-3 py-2.5 text-xs text-muted-foreground">{variantLabel(v)}</td>
-      <td className="num px-3 py-2.5 text-right">{v.pieces_per_box}</td>
-      <td className="px-3 py-2.5 text-right">
-        <StockIndicator stockBoxes={stock} />
-      </td>
-      <td className="px-3 py-2.5 text-right">
-        <div className="price">{formatMoney(variantBoxPrice(v, currency), currency)}</div>
-        <div className="text-[11px] text-muted-foreground">
-          {formatMoney(variantPrice(v, currency), currency)} × {v.pieces_per_box}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+          <span>{variantLabel(v)}</span>
+          <span>·</span>
+          <span>{v.pieces_per_box} шт/кор</span>
+          <span>·</span>
+          <span className="num">{v.sku}</span>
+          <span>·</span>
+          <StockIndicator stockBoxes={stock} />
         </div>
-      </td>
-      <td className="px-3 py-2.5 text-right">
+      </div>
+
+      {/* Actions — right side */}
+      <div className="flex shrink-0 items-center gap-3">
         {inCart ? (
-          <NumberStepper
-            value={cartItem!.boxes}
-            onChange={(n) => setCartBoxes(v.id, n)}
-            min={1}
-            max={stock}
-            size="sm"
-          />
+          <>
+            <NumberStepper
+              value={cartItem!.boxes}
+              onChange={(n) => setCartBoxes(v.id, n)}
+              min={1}
+              max={stock}
+              size="sm"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => removeFromCart(v.id)}
+              className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="mr-1 h-3.5 w-3.5" /> Убрать
+            </Button>
+          </>
         ) : (
-          <NumberStepper value={qty} onChange={setQty} min={1} max={stock} size="sm" />
+          <>
+            {stock > 0 && <NumberStepper value={qty} onChange={setQty} min={1} max={stock} size="sm" />}
+            <Button size="sm" onClick={() => onAdd(p, v, qty)} disabled={stock <= 0}>
+              {stock > 0 ? "В корзину" : "Нет в наличии"}
+            </Button>
+          </>
         )}
-      </td>
-      <td className="px-3 py-2.5 text-right">
-        {inCart ? (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => removeFromCart(v.id)}
-            className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          >
-            <Trash2 className="mr-1 h-3.5 w-3.5" /> Убрать
-          </Button>
-        ) : (
-          <Button size="sm" onClick={() => onAdd(p, v, qty)}>
-            В корзину
-          </Button>
-        )}
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 };
 

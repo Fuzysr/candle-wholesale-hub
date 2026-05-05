@@ -37,7 +37,7 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 async def _register(client, email: str = "rot@example.com") -> dict:
     resp = await client.post(
         "/auth/register",
-        json={"email": email, "password": "rotation-pw-123"},
+        json={"email": email, "password": "Rotation-pw-123"},
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
@@ -171,13 +171,13 @@ async def test_logout_does_not_revoke_sibling_session(client, session):
     # пользователь, два refresh).
     reg = await client.post(
         "/auth/register",
-        json={"email": "two-devices@example.com", "password": "device-pw-1234"},
+        json={"email": "two-devices@example.com", "password": "Device-pw-1234"},
     )
     refresh_a = reg.json()["refresh"]
 
     login = await client.post(
         "/auth/login",
-        json={"email": "two-devices@example.com", "password": "device-pw-1234"},
+        json={"email": "two-devices@example.com", "password": "Device-pw-1234"},
     )
     assert login.status_code == 200
     refresh_b = login.json()["refresh"]
@@ -304,12 +304,12 @@ async def test_login_creates_separate_family(client, session):
     """Login и register — две разные семьи у одного юзера."""
     await client.post(
         "/auth/register",
-        json={"email": "fam@example.com", "password": "fam-pw-1234"},
+        json={"email": "fam@example.com", "password": "Fam-pw-1234"},
     )
 
     log = await client.post(
         "/auth/login",
-        json={"email": "fam@example.com", "password": "fam-pw-1234"},
+        json={"email": "fam@example.com", "password": "Fam-pw-1234"},
     )
     assert log.status_code == 200
 
@@ -393,12 +393,12 @@ async def test_password_reset_revokes_all_refresh_tokens(client, session):
     # Регистрируем юзера с двумя сессиями.
     reg = await client.post(
         "/auth/register",
-        json={"email": "reset-revoke@example.com", "password": "pw-very-good"},
+        json={"email": "reset-revoke@example.com", "password": "Pw-very-good1"},
     )
     rt_a = reg.json()["refresh"]
     log = await client.post(
         "/auth/login",
-        json={"email": "reset-revoke@example.com", "password": "pw-very-good"},
+        json={"email": "reset-revoke@example.com", "password": "Pw-very-good1"},
     )
     rt_b = log.json()["refresh"]
 
@@ -422,7 +422,7 @@ async def test_password_reset_revokes_all_refresh_tokens(client, session):
 
     confirm = await client.post(
         "/auth/password/reset-confirm",
-        json={"token": raw_token, "password": "brand-new-pw-9876"},
+        json={"token": raw_token, "password": "Brand-new-pw-9876"},
     )
     assert confirm.status_code == 204
 

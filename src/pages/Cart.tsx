@@ -9,29 +9,52 @@ import { useAppStore } from "@/store/appStore";
 import { formatMoney } from "@/lib/format";
 import { getProductImage } from "@/lib/productImages";
 import NumberStepper from "@/components/shop/NumberStepper";
-import DiscountProgressBar from "@/components/shop/DiscountProgressBar";
-import { stockApi } from "@/lib/api";
-import { computeDiscount } from "@/lib/catalog";
+import { computeLineVolumeDiscount } from "@/lib/catalog";
+import { catalogApi } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 const Cart = () => {
   const navigate = useNavigate();
-  const { items, setBoxes, remove, clear } = useCartStore();
+  const { items, setBoxes, remove, clear, syncFromApi } = useCartStore();
   const { currency } = useAppStore();
-  const { data: tiers = [] } = useQuery({
-    queryKey: ["discount-tiers"],
-    queryFn: () => stockApi.listDiscountTiers(),
+
+  // Sync stock & discounts from API — unpublished/deleted variants get stockBoxes=0
+  const { data: products } = useQuery({
+    queryKey: ["products"],
+    queryFn: () => catalogApi.listProducts(),
+    staleTime: 60_000,
   });
+  useEffect(() => {
+    if (!products || items.length === 0) return;
+    const available: Record<string, { stockBoxes: number; discounts: { min_boxes: number; discount_percent: number }[] }> = {};
+    for (const p of products) {
+      for (const v of p.variants ?? []) {
+        available[v.id] = {
+          stockBoxes: Math.max(0, (v.stock_boxes ?? 0) - (v.reserved_boxes ?? 0)),
+          discounts: (v.volume_discounts ?? []).map((vd) => ({
+            min_boxes: vd.min_boxes,
+            discount_percent: vd.discount_percent,
+          })),
+        };
+      }
+    }
+    syncFromApi(available);
+  }, [products]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totals = useMemo(() => {
     const totalBoxes = items.reduce((s, i) => s + i.boxes, 0);
-    const subtotal = items.reduce((s, i) => {
+    let subtotalBefore = 0;
+    let subtotalAfter = 0;
+    for (const i of items) {
       const price = currency === "RUB" ? i.priceRub : i.priceUsd;
-      return s + price * i.piecesPerBox * i.boxes;
-    }, 0);
-    const discountPercent = computeDiscount(totalBoxes, tiers);
-    const discountAmount = (subtotal * discountPercent) / 100;
-    return { totalBoxes, subtotal, discountPercent, discountAmount, total: subtotal - discountAmount };
-  }, [items, currency, tiers]);
+      const line = price * i.piecesPerBox * i.boxes;
+      subtotalBefore += line;
+      const vdPercent = computeLineVolumeDiscount(i.boxes, i.volumeDiscounts);
+      subtotalAfter += vdPercent > 0 ? line * (100 - vdPercent) / 100 : line;
+    }
+    const discountAmount = subtotalBefore - subtotalAfter;
+    return { totalBoxes, subtotal: subtotalBefore, discountAmount, total: subtotalAfter };
+  }, [items, currency]);
 
   // Не даём оформить заявку, если в корзине есть позиции, которых нет на
   // складе или которых меньше, чем заказано. Сервер тоже блокирует это
@@ -84,11 +107,13 @@ const Cart = () => {
           <div className="overflow-hidden rounded-lg border border-border bg-surface">
             {items.map((i) => {
               const price = currency === "RUB" ? i.priceRub : i.priceUsd;
-              const lineTotal = price * i.piecesPerBox * i.boxes;
+              const lineBefore = price * i.piecesPerBox * i.boxes;
+              const vdPercent = computeLineVolumeDiscount(i.boxes, i.volumeDiscounts);
+              const lineTotal = vdPercent > 0 ? lineBefore * (100 - vdPercent) / 100 : lineBefore;
               const outOfStock = i.stockBoxes <= 0;
               const overStock = !outOfStock && i.boxes > i.stockBoxes;
               return (
-                <div key={i.variantId} className="flex gap-3 border-b border-border p-3 last:border-b-0 sm:gap-4 sm:p-4">
+                <div key={i.variantId} className={cn("flex gap-3 border-b border-border p-3 last:border-b-0 sm:gap-4 sm:p-4", outOfStock && "opacity-50 grayscale")}>
                   <img src={getProductImage(i.image)} alt={i.productName} className="h-16 w-16 shrink-0 rounded-md object-cover sm:h-20 sm:w-20" loading="lazy" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3">
@@ -111,8 +136,18 @@ const Cart = () => {
                     <div className="mt-3 flex items-end justify-between gap-3">
                       <NumberStepper value={i.boxes} onChange={(n) => setBoxes(i.variantId, n)} min={1} max={Math.max(1, i.stockBoxes)} />
                       <div className="text-right">
-                        <div className="price text-base">{formatMoney(lineTotal, currency)}</div>
-                        <div className="text-[11px] text-muted-foreground">{formatMoney(price * i.piecesPerBox, currency)} × {i.boxes} кор</div>
+                        {vdPercent > 0 ? (
+                          <>
+                            <div className="price text-base">{formatMoney(lineTotal, currency)}</div>
+                            <div className="text-[11px] text-muted-foreground line-through">{formatMoney(lineBefore, currency)}</div>
+                            <div className="text-[11px] font-medium text-amber">−{vdPercent}%</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="price text-base">{formatMoney(lineTotal, currency)}</div>
+                            <div className="text-[11px] text-muted-foreground">{formatMoney(price * i.piecesPerBox, currency)} × {i.boxes} кор</div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -125,15 +160,13 @@ const Cart = () => {
           </div>
 
           <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-            <DiscountProgressBar totalBoxes={totals.totalBoxes} tiers={tiers} />
-
             <div className="rounded-lg border border-border bg-surface p-5">
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Товаров</span><span className="num">{items.length}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Коробок</span><span className="num">{totals.totalBoxes}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Сумма</span><span className="price">{formatMoney(totals.subtotal, currency)}</span></div>
-                {totals.discountPercent > 0 && (
-                  <div className="flex justify-between text-primary"><span>Скидка {totals.discountPercent}%</span><span className="price">−{formatMoney(totals.discountAmount, currency)}</span></div>
+                {totals.discountAmount > 0 && (
+                  <div className="flex justify-between text-amber"><span>Скидка</span><span className="price">−{formatMoney(totals.discountAmount, currency)}</span></div>
                 )}
               </div>
               <div className="mt-4 flex items-baseline justify-between border-t border-border pt-4">

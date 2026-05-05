@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { catalogApi, stockApi } from "@/lib/api";
+import { catalogApi } from "@/lib/api";
 import { useAppStore } from "@/store/appStore";
 import { useCartStore } from "@/store/cartStore";
 import {
@@ -24,10 +24,12 @@ import NumberStepper from "@/components/shop/NumberStepper";
 import ProductGallery from "@/components/shop/ProductGallery";
 import RecentlyViewed from "@/components/shop/RecentlyViewed";
 import { useRecentlyViewed } from "@/hooks/useRecentlyViewed";
+import { clearCatalogRestoreState } from "@/features/catalog-restore";
 import { toast } from "sonner";
 
 const ProductPage = () => {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const urlVariantId = searchParams.get("variant");
   const { currency, lang } = useAppStore();
@@ -42,11 +44,6 @@ const ProductPage = () => {
     enabled: !!slug,
     retry: (_count, err) => !(axios.isAxiosError(err) && err.response?.status === 404),
   });
-  const { data: tiers = [] } = useQuery({
-    queryKey: ["discount-tiers"],
-    queryFn: () => stockApi.listDiscountTiers(),
-  });
-
   const product = productQuery.data ?? null;
 
   // Initial variant selection when the product is first loaded.
@@ -94,8 +91,6 @@ const ProductPage = () => {
 
   const variant: ProductVariant | undefined = product.variants?.find((v) => v.id === variantId) ?? product.variants?.[0];
 
-  const sizes = Array.from(new Set(product.variants?.map((v) => v.size).filter(Boolean) as string[]));
-  const colors = Array.from(new Set(product.variants?.map((v) => v.color).filter(Boolean) as string[]));
   const stock = variant ? availableBoxes(variant) : 0;
 
   const gallery = variantGalleryUrls(product, variant);
@@ -108,11 +103,15 @@ const ProductPage = () => {
       sku: variant.sku,
       productName: productName(product, lang),
       variantLabel: variantLabel(variant),
-      image: gallery[0] ?? product.image_url,
+      image: gallery[0] ?? null,
       piecesPerBox: variant.pieces_per_box,
       priceRub: Number(variant.price_per_piece_rub),
       priceUsd: Number(variant.price_per_piece_usd),
       stockBoxes: stock,
+      volumeDiscounts: (variant.volume_discounts ?? []).map((vd) => ({
+        min_boxes: vd.min_boxes,
+        discount_percent: vd.discount_percent,
+      })),
     }, qty);
     toast.success(`${variant.sku} · ${qty} кор. в корзине`);
   };
@@ -126,9 +125,16 @@ const ProductPage = () => {
   return (
     <PublicLayout>
       <div className="container py-6">
-        <Link to={product.category ? `/catalog/${product.category.slug}` : "/catalog"} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <button
+          type="button"
+          onClick={() => {
+            clearCatalogRestoreState();
+            navigate("/catalog");
+          }}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
           <ArrowLeft className="h-4 w-4" /> Назад в каталог
-        </Link>
+        </button>
       </div>
       <div className="container grid gap-6 pb-10 sm:gap-10 sm:pb-16 lg:grid-cols-2">
         <ProductGallery images={gallery} alt={productName(product, lang)} />
@@ -155,45 +161,20 @@ const ProductPage = () => {
             </dl>
           )}
 
-          {sizes.length > 1 && (
+          {product.variants?.length > 1 && (
             <div className="mt-6">
-              <div className="mb-2 text-xs text-muted-foreground">Размер</div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Вариация</div>
               <div className="flex flex-wrap gap-2">
-                {sizes.map((s) => {
-                  const active = variant?.size === s;
+                {product.variants.map((v) => {
+                  const active = v.id === variant?.id;
+                  const label = variantLabel(v) || v.sku;
                   return (
                     <button
-                      key={s}
-                      onClick={() => {
-                        const next = product.variants?.find((v) => v.size === s && (variant ? v.color === variant.color : true)) ?? product.variants?.find((v) => v.size === s);
-                        if (next) { setVariantId(next.id); setQty(1); }
-                      }}
-                      className={`min-h-[44px] rounded-md border px-3 py-1.5 text-sm ${active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-accent"}`}
+                      key={v.id}
+                      onClick={() => { setVariantId(v.id); setQty(1); }}
+                      className={`min-h-[44px] rounded-md border px-3 py-1.5 text-sm transition-colors ${active ? "border-primary bg-primary/15 font-medium text-primary" : "border-border hover:bg-accent"}`}
                     >
-                      {s}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {colors.length > 1 && (
-            <div className="mt-4">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Цвет</div>
-              <div className="flex flex-wrap gap-2">
-                {colors.map((c) => {
-                  const active = variant?.color === c;
-                  return (
-                    <button
-                      key={c}
-                      onClick={() => {
-                        const next = product.variants?.find((v) => v.color === c && (variant ? v.size === variant.size : true)) ?? product.variants?.find((v) => v.color === c);
-                        if (next) { setVariantId(next.id); setQty(1); }
-                      }}
-                      className={`min-h-[44px] rounded-md border px-3 py-1.5 text-sm ${active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-accent"}`}
-                    >
-                      {c}
+                      {label}
                     </button>
                   );
                 })}
@@ -211,14 +192,14 @@ const ProductPage = () => {
                 </div>
               </div>
 
-              {tiers.length > 0 && (
+              {variant.volume_discounts?.length > 0 && (
                 <div className="mt-6 rounded-lg border border-border bg-surface p-4">
-                  <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Сетка скидок по объёму</div>
+                  <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Скидки по объёму</div>
                   <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {tiers.map((t) => (
-                      <div key={t.min_boxes} className="rounded-md border border-border bg-background p-2 text-center">
-                        <div className="num text-xs text-muted-foreground">от {t.min_boxes} кор</div>
-                        <div className="price text-base text-primary">−{t.discount_percent}%</div>
+                    {variant.volume_discounts.map((vd) => (
+                      <div key={vd.id} className="rounded-md border border-amber/30 bg-amber/5 p-2 text-center">
+                        <div className="num text-xs text-muted-foreground">от {vd.min_boxes} кор</div>
+                        <div className="price text-base text-amber">−{vd.discount_percent}%</div>
                       </div>
                     ))}
                   </div>
@@ -230,7 +211,7 @@ const ProductPage = () => {
                   <div className="mb-1 text-xs text-muted-foreground">Количество коробок</div>
                   <NumberStepper value={qty} onChange={setQty} min={1} max={stock || 1} />
                 </div>
-                <Button size="lg" disabled={stock <= 0} onClick={handleAdd} className="flex-1">
+                <Button size="lg" disabled={stock <= 0} onClick={handleAdd} className="w-full sm:flex-1">
                   Добавить в корзину
                 </Button>
               </div>

@@ -33,7 +33,12 @@ export const authApi = {
   me: async (): Promise<UserOut> => http.get<UserOut>("/auth/me"),
 
   logout: () => {
+    const refresh = tokenStore.getRefresh();
     tokenStore.clear();
+    if (refresh) {
+      // Best-effort server-side revocation — don't block the UI.
+      http.post("/auth/logout", { refresh }).catch(() => {});
+    }
   },
 
   requestPasswordReset: (email: string): Promise<PasswordResetRequestOut> =>

@@ -141,7 +141,7 @@ async def test_my_orders_isolated_per_user(
     # a second user must not see the first user's orders
     reg = await client.post(
         "/auth/register",
-        json={"email": "peeper@x.com", "password": "pwpwpw"},
+        json={"email": "peeper@x.com", "password": "Pwpwpw123"},
     )
     other_token = reg.json()["access"]
 

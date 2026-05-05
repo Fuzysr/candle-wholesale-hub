@@ -7,6 +7,7 @@ import type {
   ProductOut,
   ProductVariantOut,
 } from "@/lib/api";
+import type { CartVolumeDiscount } from "@/store/cartStore";
 
 // Re-exports so existing pages keep using the short type names while the
 // canonical definitions live in `@/lib/api`.
@@ -41,6 +42,20 @@ export const computeDiscount = (totalBoxes: number, tiers: DiscountTier[]) => {
     }
   }
   return percent;
+};
+
+export const computeLineVolumeDiscount = (
+  boxes: number,
+  volumeDiscounts: CartVolumeDiscount[] | undefined,
+): number => {
+  if (!volumeDiscounts?.length) return 0;
+  let best = 0;
+  for (const vd of volumeDiscounts) {
+    if (boxes >= vd.min_boxes && vd.discount_percent > best) {
+      best = vd.discount_percent;
+    }
+  }
+  return best;
 };
 
 export const nextDiscountTier = (totalBoxes: number, tiers: DiscountTier[]) => {
@@ -84,13 +99,26 @@ export const productGalleryUrls = (p: Product): string[] => {
 };
 
 /**
- * Возвращает галерею для конкретной вариации: если у неё есть свой
- * `image_url`, он идёт первым, затем общая галерея товара (без дубля).
- * Если у вариации нет своего фото — возвращает обычную галерею товара.
+ * Возвращает галерею для конкретной вариации.
+ * Приоритет: variant.images → variant.image_url (legacy) → product gallery.
+ * Если у вариации есть своя галерея — показываем только её.
  */
 export const variantGalleryUrls = (p: Product, v: ProductVariant | undefined): string[] => {
-  const base = productGalleryUrls(p);
+  const vImages = (v?.images ?? [])
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((i) => i.url);
+  if (vImages.length > 0) return vImages;
   const vImg = v?.image_url ?? null;
+  const base = productGalleryUrls(p);
   if (!vImg) return base;
   return [vImg, ...base.filter((u) => u !== vImg)];
+};
+
+/**
+ * Возвращает URL обложки вариации (первое фото).
+ */
+export const variantCoverUrl = (p: Product, v: ProductVariant): string | null => {
+  const urls = variantGalleryUrls(p, v);
+  return urls[0] ?? null;
 };

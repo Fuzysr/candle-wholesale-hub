@@ -69,6 +69,34 @@ export type AttributeOut = {
 
 export type AttributeKind = "materials" | "scents" | "shapes";
 
+export type VolumeDiscountOut = {
+  id: string;
+  variant_id: string;
+  min_boxes: number;
+  discount_percent: number;
+  created_at: string;
+};
+
+export type VolumeDiscountCreate = {
+  min_boxes: number;
+  discount_percent: number;
+};
+
+export type VariantImageOut = {
+  id: string;
+  variant_id: string;
+  url: string;
+  alt: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type VariantImageCreate = {
+  url: string;
+  alt?: string | null;
+  sort_order?: number;
+};
+
 export type ProductVariantOut = {
   id: string;
   product_id: string;
@@ -86,6 +114,8 @@ export type ProductVariantOut = {
   last_synced_at: string | null;
   created_at: string;
   updated_at: string;
+  volume_discounts: VolumeDiscountOut[];
+  images: VariantImageOut[];
 };
 
 export type ProductImageOut = {
