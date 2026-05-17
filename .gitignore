@@ -27,3 +27,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.windsurf/
+skills-lock.json
+
+# Test output
+pytest_out.txt
+test-results/
+playwright-report/
+
+# Temp / local clones
+my-clone/

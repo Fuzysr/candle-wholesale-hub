@@ -12,3 +12,8 @@ dist/
 build/
 .coverage
 htmlcov/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
