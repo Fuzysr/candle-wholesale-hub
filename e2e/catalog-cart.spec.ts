@@ -119,19 +119,109 @@ test.describe("Корзина", () => {
   });
 });
 
-test.describe("Checkout", () => {
-  test("checkout без авторизации редиректит на /auth", async ({ page }) => {
+test.describe("Checkout — гостевой", () => {
+  test("checkout без авторизации показывает форму (без редиректа)", async ({ page }) => {
+    // Гость должен иметь возможность открыть /checkout — даже с пустой
+    // корзиной (страница покажет «Корзина пуста», но НЕ редиректит на /auth).
     await page.goto("/");
     await page.evaluate(() => localStorage.clear());
 
     await page.goto("/checkout");
     await page.waitForLoadState("networkidle");
 
-    // Должен либо редиректить на /auth, либо показать сообщение о необходимости войти
-    const isAuth = page.url().includes("/auth");
-    const loginPrompt = page.getByText(/войти|авторизуйтесь|необходимо войти/i);
-    const loginPromptCount = await loginPrompt.count();
+    expect(page.url()).not.toContain("/auth");
+    // Либо форма оформления, либо «Корзина пуста» — обе валидны.
+    const hasForm = await page.getByLabel(/email/i).count();
+    const emptyCart = await page.getByText(/корзина пуста/i).count();
+    expect(hasForm + emptyCart).toBeGreaterThan(0);
+  });
 
-    expect(isAuth || loginPromptCount > 0).toBeTruthy();
+  test("API: POST /orders без авторизации создаёт заявку и юзера", async ({ request }) => {
+    // 1. Берём первый доступный вариант из публичного API.
+    const apiBase = process.env.E2E_API_URL || "http://localhost:8000";
+    const res = await request.get(`${apiBase}/products`);
+    expect(res.ok()).toBeTruthy();
+    type Variant = { id: string; sku: string; stock_boxes: number; pieces_per_box: number };
+    type Product = { variants: Variant[] };
+    const products = (await res.json()) as Product[];
+    const inStock = products
+      .flatMap((p) => p.variants)
+      .find((v) => v.stock_boxes > 0);
+    if (!inStock) {
+      test.skip(true, "Нет товаров в наличии для гостевого checkout");
+      return;
+    }
+
+    // 2. POST /orders без Authorization-заголовка.
+    // OrderItemIn требует sku/product_name/pieces_per_box/unit_price (бэк
+    // их canonicalize-ит из БД, но pydantic валидирует на входе).
+    const item = {
+      variant_id: inStock.id,
+      sku: inStock.sku,
+      product_name: "e2e guest",
+      pieces_per_box: inStock.pieces_per_box,
+      boxes: 1,
+      unit_price: 0,
+    };
+    const guestEmail = `guest-${Date.now()}@example.com`;
+    const orderRes = await request.post(`${apiBase}/orders`, {
+      data: {
+        currency: "RUB",
+        items: [item],
+        company_name: "Гость ООО",
+        contact_name: "Гость Тестов",
+        phone: "+7 999 000-00-00",
+        email: guestEmail,
+        customer_comment: "e2e guest checkout",
+      },
+    });
+    if (orderRes.status() !== 201) {
+      console.log("POST /orders status:", orderRes.status(), "body:", await orderRes.text());
+    }
+    expect(orderRes.status()).toBe(201);
+    const order = await orderRes.json();
+    expect(order.id).toBeTruthy();
+    expect(order.order_number).toBeTruthy();
+    expect(order.email).toBe(guestEmail);
+
+    // 3. Без email → 400 (валидация гостевого checkout на бэке).
+    const badRes = await request.post(`${apiBase}/orders`, {
+      data: {
+        currency: "RUB",
+        items: [item],
+        contact_name: "Без email",
+      },
+    });
+    expect(badRes.status()).toBe(400);
+  });
+
+  test("OrderSuccess показывает заказ из router state без авторизации", async ({ page }) => {
+    // Гость не имеет токена → GET /orders/{id} вернёт 401. Поэтому
+    // Checkout прокидывает order через router state. Имитируем это.
+    await page.goto("/");
+    await page.evaluate(() => localStorage.clear());
+
+    // Подделываем переход с location.state как из Checkout.
+    await page.evaluate(() => {
+      const fakeOrder = {
+        id: "fake-order-id",
+        order_number: "TEST-0001",
+        total: "1234.00",
+        currency: "RUB",
+        email: "guest@example.com",
+      };
+      window.history.replaceState(
+        { usr: { order: fakeOrder, guest: true } },
+        "",
+        "/order/success/fake-order-id",
+      );
+    });
+    await page.goto("/order/success/fake-order-id", {
+      waitUntil: "networkidle",
+    });
+
+    await expect(page.getByText(/заявка отправлена/i)).toBeVisible();
+    // На "/order/success/..." гость видит подсказку про «Забыли пароль?».
+    await expect(page.getByText(/забыли пароль/i)).toBeVisible();
   });
 });

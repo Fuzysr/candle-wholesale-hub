@@ -362,7 +362,7 @@ async def test_receipt_admin_email_does_not_contain_direct_url():
     fetched, and stripping them per-template would only obscure intent.
     """
     plain, html = render_receipt_uploaded_email(
-        order_number="WC-2026-0001",
+        order_number="CW-2026-0001",
         company_name="ACME",
         contact_name="John Doe",
     )

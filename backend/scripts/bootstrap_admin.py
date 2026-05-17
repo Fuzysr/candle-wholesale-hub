@@ -118,7 +118,7 @@ async def ensure_admin() -> tuple[str, str, str]:
                 email=settings.bootstrap_admin_email.lower(),
                 password_hash=hash_password(password),
                 role=AppRole.admin,
-                company_name="Candle Wholesale Hub",
+                company_name="CANDWAX",
                 contact_name="Admin",
                 phone="+7 000 000-00-00",
             )
@@ -201,9 +201,6 @@ async def seed_discount_tiers() -> None:
 
 async def main() -> None:
     user_id, email, password = await ensure_admin()
-    await seed_categories()
-    await seed_products()
-    await seed_discount_tiers()
 
     banner = "=" * 60
     print()

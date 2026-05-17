@@ -177,4 +177,34 @@ describe("cartStore", () => {
       expect(useCartStore.getState().items[0].boxes).toBe(0);
     });
   });
+
+  describe("restoreItem (undo)", () => {
+    it("restores boxes to previous value for existing item", () => {
+      useCartStore.getState().addItem(makeItem({ variantId: "v-1" }), 3);
+      useCartStore.getState().addItem(makeItem({ variantId: "v-1" }), 2); // boxes=5
+      useCartStore.getState().restoreItem("v-1", 3);
+      expect(useCartStore.getState().items[0].boxes).toBe(3);
+    });
+
+    it("removes the item entirely when prevBoxes <= 0", () => {
+      useCartStore.getState().addItem(makeItem({ variantId: "v-1" }), 1);
+      useCartStore.getState().restoreItem("v-1", 0);
+      expect(useCartStore.getState().items).toHaveLength(0);
+    });
+
+    it("does nothing for non-existent variant when prevBoxes > 0", () => {
+      useCartStore.getState().addItem(makeItem({ variantId: "v-1" }), 1);
+      useCartStore.getState().restoreItem("v-other", 5);
+      expect(useCartStore.getState().items).toHaveLength(1);
+      expect(useCartStore.getState().items[0].boxes).toBe(1);
+    });
+
+    it("allows restoring beyond stockBoxes (bypasses setBoxes clamp)", () => {
+      // restoreItem must accept any value — used to undo back to a state
+      // that may have been valid at add-time but no longer fits clamp logic
+      useCartStore.getState().addItem(makeItem({ variantId: "v-1", stockBoxes: 10 }), 5);
+      useCartStore.getState().restoreItem("v-1", 999);
+      expect(useCartStore.getState().items[0].boxes).toBe(999);
+    });
+  });
 });

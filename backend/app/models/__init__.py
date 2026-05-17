@@ -16,6 +16,7 @@ from app.models.catalog import (
     VolumeDiscount,
 )
 from app.models.company import CompanySettings
+from app.models.contact import ContactMessage
 from app.models.enums import AppRole, OrderStatus, StockMovementType
 from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.password_reset import PasswordReset
@@ -43,6 +44,7 @@ __all__ = [
     "StockMovement",
     "VolumeDiscount",
     "CompanySettings",
+    "ContactMessage",
     "PasswordReset",
     "RefreshToken",
 ]

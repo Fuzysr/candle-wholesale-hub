@@ -287,7 +287,7 @@ def upgrade() -> None:
         AS $$
         BEGIN
           IF NEW.order_number IS NULL OR NEW.order_number = '' THEN
-            NEW.order_number := 'WC-' || nextval('public.order_number_seq');
+            NEW.order_number := 'CW-' || nextval('public.order_number_seq');
           END IF;
           RETURN NEW;
         END;
@@ -444,8 +444,8 @@ def upgrade() -> None:
     op.create_table(
         "company_settings",
         sa.Column("id", sa.Integer(), primary_key=True, server_default=sa.text("1")),
-        sa.Column("legal_name", sa.Text(), nullable=False, server_default=sa.text("'ООО «Свечной двор»'")),
-        sa.Column("short_name", sa.Text(), nullable=False, server_default=sa.text("'Свечной двор'")),
+        sa.Column("legal_name", sa.Text(), nullable=False, server_default=sa.text("'ООО «CANDWAX»'")),
+        sa.Column("short_name", sa.Text(), nullable=False, server_default=sa.text("'CANDWAX'")),
         sa.Column("inn", sa.Text(), nullable=False, server_default=sa.text("''")),
         sa.Column("kpp", sa.Text(), nullable=False, server_default=sa.text("''")),
         sa.Column("ogrn", sa.Text(), nullable=False, server_default=sa.text("''")),

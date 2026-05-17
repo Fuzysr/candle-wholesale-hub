@@ -1,4 +1,4 @@
-# Candle Wholesale Hub — Backend (FastAPI)
+# CANDWAX — Backend (FastAPI)
 
 FastAPI + PostgreSQL + JWT backend that replaced the earlier Supabase layer.
 

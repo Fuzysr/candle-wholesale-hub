@@ -46,6 +46,7 @@ export type CategoryOut = {
   slug: string;
   name_ru: string;
   name_en: string;
+  icon: string | null;
   parent_id: string | null;
   sort_order: number;
   created_at: string;
@@ -107,6 +108,19 @@ export type ProductVariantOut = {
   pieces_per_box: number;
   price_per_piece_rub: number;
   price_per_piece_usd: number;
+  // Габариты товара (мм)
+  length_mm: number | null;
+  width_mm: number | null;
+  height_mm: number | null;
+  // Физические характеристики
+  weight_gr: number | null;
+  burn_time_hours: number | null;
+  // Упаковка / транспортная коробка (ТК)
+  packages_per_box: number | null;
+  box_length_mm: number | null;
+  box_width_mm: number | null;
+  box_height_mm: number | null;
+  box_weight_gr: number | null;
   stock_boxes: number;
   reserved_boxes: number;
   image_url: string | null;
@@ -154,6 +168,7 @@ export type CategoryCreate = {
   slug: string;
   name_ru: string;
   name_en: string;
+  icon?: string | null;
   parent_id?: string | null;
   sort_order?: number;
 };
@@ -193,6 +208,16 @@ export type ProductVariantCreate = {
   pieces_per_box: number;
   price_per_piece_rub: number;
   price_per_piece_usd: number;
+  length_mm?: number | null;
+  width_mm?: number | null;
+  height_mm?: number | null;
+  weight_gr?: number | null;
+  burn_time_hours?: number | null;
+  packages_per_box?: number | null;
+  box_length_mm?: number | null;
+  box_width_mm?: number | null;
+  box_height_mm?: number | null;
+  box_weight_gr?: number | null;
   stock_boxes?: number;
   image_url?: string | null;
   external_id?: string | null;

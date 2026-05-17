@@ -107,7 +107,7 @@ async def _send_reset_email_safe(
     клиент всегда получает одинаковый ``ok: true`` (см. комментарий
     в эндпоинте reset-request про защиту от enumeration).
     """
-    subject = f"Сброс пароля в {sender.company_name or 'Candle Wholesale'}"
+    subject = f"Сброс пароля в {sender.company_name or 'CANDWAX'}"
     plain_body, html_body = render_password_reset_email(
         reset_url=reset_url,
         ttl_minutes=ttl_minutes,
@@ -532,7 +532,7 @@ async def password_reset_request(
 
     company = await session.get(CompanySettings, _COMPANY_SETTINGS_ID)
     sender = EmailSender(
-        company_name=(company.short_name if company else "Candle Wholesale"),
+        company_name=(company.short_name if company else "CANDWAX"),
         phone=(company.phone if company else ""),
         email=(company.email if company else ""),
     )

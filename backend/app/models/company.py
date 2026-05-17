@@ -13,8 +13,8 @@ class CompanySettings(Base):
     __table_args__ = (CheckConstraint("id = 1", name="singleton"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, server_default=text("1"))
-    legal_name: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'ООО «Свечной двор»'"))
-    short_name: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'Свечной двор'"))
+    legal_name: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'ООО «CANDWAX»'"))
+    short_name: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'CANDWAX'"))
     inn: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
     kpp: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
     ogrn: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))

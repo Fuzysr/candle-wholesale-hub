@@ -26,6 +26,7 @@ import RecentlyViewed from "@/components/shop/RecentlyViewed";
 import { useRecentlyViewed } from "@/hooks/useRecentlyViewed";
 import { clearCatalogRestoreState } from "@/features/catalog-restore";
 import { toast } from "sonner";
+import AddToCartConfirm from "@/components/shop/AddToCartConfirm";
 
 const ProductPage = () => {
   const { slug } = useParams();
@@ -95,7 +96,14 @@ const ProductPage = () => {
 
   const gallery = variantGalleryUrls(product, variant);
 
+  const [showConfirm, setShowConfirm] = useState(false);
+
   const handleAdd = () => {
+    if (!variant) return;
+    setShowConfirm(true);
+  };
+
+  const executeAdd = () => {
     if (!variant) return;
     addItem({
       variantId: variant.id,
@@ -160,6 +168,33 @@ const ProductPage = () => {
               ))}
             </dl>
           )}
+
+          {variant && (() => {
+            const specs: { label: string; value: string }[] = [];
+            if (variant.length_mm) specs.push({ label: "Длина", value: `${variant.length_mm} мм` });
+            if (variant.width_mm) specs.push({ label: "Ширина", value: `${variant.width_mm} мм` });
+            if (variant.height_mm) specs.push({ label: "Высота", value: `${variant.height_mm} мм` });
+            if (variant.weight_gr) specs.push({ label: "Вес", value: `${variant.weight_gr} г` });
+            if (variant.burn_time_hours) specs.push({ label: "Время горения", value: `${variant.burn_time_hours} ч` });
+            specs.push({ label: "Шт. в коробке", value: `${variant.pieces_per_box}` });
+            if (variant.packages_per_box) specs.push({ label: "Упаковок в ТК", value: `${variant.packages_per_box}` });
+            if (variant.box_length_mm && variant.box_width_mm && variant.box_height_mm)
+              specs.push({ label: "Габариты ТК", value: `${variant.box_length_mm}×${variant.box_width_mm}×${variant.box_height_mm} мм` });
+            if (variant.box_weight_gr) specs.push({ label: "Вес ТК", value: `${(variant.box_weight_gr / 1000).toFixed(2)} кг` });
+            return specs.length > 1 ? (
+              <div className="mt-5">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Характеристики</div>
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-2 rounded-md border border-border bg-surface p-3 text-sm sm:grid-cols-2">
+                  {specs.map((s) => (
+                    <div key={s.label} className="flex justify-between gap-2 border-b border-border/50 pb-1.5 last:border-0">
+                      <dt className="text-muted-foreground">{s.label}</dt>
+                      <dd className="num font-medium">{s.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ) : null;
+          })()}
 
           {product.variants?.length > 1 && (
             <div className="mt-6">
@@ -227,6 +262,17 @@ const ProductPage = () => {
       </div>
 
       <RecentlyViewed excludeId={product.id} />
+
+      <AddToCartConfirm
+        open={showConfirm}
+        title="Добавить в корзину?"
+        description={variant ? `${variant.sku} · ${variantLabel(variant)} — ${qty} кор.` : undefined}
+        onCancel={() => setShowConfirm(false)}
+        onConfirm={() => {
+          setShowConfirm(false);
+          executeAdd();
+        }}
+      />
     </PublicLayout>
   );
 };

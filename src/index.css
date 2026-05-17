@@ -1,268 +1,532 @@
 @tailwind base;
+
 @tailwind components;
+
 @tailwind utilities;
 
+
+
 /*
+
   LightningBorder — registered custom property for the rotation angle.
 
+
+
   A vanilla CSS custom property (e.g. `--a: 0deg`) is treated by the engine
+
   as an opaque string, so animating it produces a discrete jump from "0deg"
+
   to "360deg" (no interpolation) — the conic-gradient would not appear to
+
   rotate smoothly. Registering the property with `@property` and a
+
   `<angle>` syntax tells the engine to interpolate it as a real angle, so
+
   CSS keyframes animate it at GPU-driven 60 fps. This is exactly the
+
   smooth path we use on touch devices instead of the (jerky on mobile)
+
   raf + setAttribute SVG-filter loop.
 
+
+
   Falls back gracefully on browsers without @property support (Firefox <128):
+
   the gradient is simply static there, no jank, no errors.
+
 */
+
 @property --lb-a {
+
   syntax: "<angle>";
+
   initial-value: 0deg;
+
   inherits: false;
+
 }
+
+
 
 @keyframes lb-rotate {
+
   to {
+
     --lb-a: 360deg;
+
   }
+
 }
 
+
+
 /* =========================================================
-   Wholesale Candles — Design System
+
+   CANDWAX — Design System
+
    Strict B2B / Functional commerce
+
    All colors in HSL.
+
    ========================================================= */
 
+
+
 @layer base {
+
   :root {
-    /* Surfaces — warmed amber-cream palette (slightly bumped from the previous
-       cooler variant so the whole canvas feels cosier, candle-shop vibe). */
-    --background: 34 42% 95%;        /* warm cream page bg */
-    --surface: 36 38% 98%;           /* cards, tables — soft ivory */
-    --foreground: 25 15% 12%;        /* near-black warm */
 
-    --card: 36 38% 98%;
-    --card-foreground: 25 15% 12%;
+    /* Surfaces — neutral black/white palette with orange accent.
 
-    --popover: 36 38% 98%;
-    --popover-foreground: 25 15% 12%;
+       No warm cream, just clean off-white background and pure white cards. */
 
-    /* Primary — warm amber (signature) */
-    --primary: 35 90% 50%;
-    --primary-foreground: 25 30% 10%;
-    --primary-hover: 35 90% 45%;
+    --background: 0 0% 98%;          /* near-white page bg */
 
-    /* Secondary — neutral (warm) */
-    --secondary: 32 25% 93%;
-    --secondary-foreground: 25 15% 18%;
+    --surface: 0 0% 100%;            /* cards, tables — pure white */
 
-    --muted: 32 25% 95%;
-    --muted-foreground: 30 10% 40%;
+    --foreground: 0 0% 9%;           /* near-black neutral */
 
-    --accent: 32 25% 93%;
-    --accent-foreground: 25 15% 18%;
+
+
+    --card: 0 0% 100%;
+
+    --card-foreground: 0 0% 9%;
+
+
+
+    --popover: 0 0% 100%;
+
+    --popover-foreground: 0 0% 9%;
+
+
+
+    /* Primary — vivid orange (signature accent) */
+
+    --primary: 24 95% 53%;
+
+    --primary-foreground: 0 0% 100%;
+
+    --primary-hover: 24 95% 48%;
+
+
+
+    /* Secondary — neutral cool grey */
+
+    --secondary: 0 0% 96%;
+
+    --secondary-foreground: 0 0% 18%;
+
+
+
+    --muted: 0 0% 96%;
+
+    --muted-foreground: 0 0% 42%;
+
+
+
+    --accent: 0 0% 94%;
+
+    --accent-foreground: 0 0% 18%;
+
+
 
     /* Status */
+
     --success: 145 55% 38%;
+
     --success-foreground: 0 0% 100%;
+
     --warning: 38 95% 50%;
-    --warning-foreground: 25 30% 10%;
+
+    --warning-foreground: 0 0% 9%;
+
     --destructive: 0 70% 50%;
+
     --destructive-foreground: 0 0% 100%;
+
     --info: 210 80% 50%;
+
     --info-foreground: 0 0% 100%;
 
+
+
     /* Borders & rings */
-    --border: 32 22% 88%;
-    --input: 32 22% 86%;
-    --ring: 35 90% 50%;
+
+    --border: 0 0% 90%;
+
+    --input: 0 0% 88%;
+
+    --ring: 24 95% 53%;
+
+
 
     --radius: 0.75rem;
 
+
+
     /* ── Responsive spacing scale ──
+
        Used by sections / pages so spacing compresses on small screens
+
        without per-component media queries. */
+
     --space-section: clamp(2.5rem, 5vw, 5rem);   /* py of page sections */
+
     --space-page-y:  clamp(1.5rem, 3vw, 2.5rem); /* py of inner page content */
+
     --space-gutter:  clamp(1rem, 2.5vw, 2rem);   /* horizontal gutter */
 
-    /* Sidebar (admin) — matches the warmer neutral scale above */
-    --sidebar-background: 32 25% 96%;
-    --sidebar-foreground: 25 15% 18%;
-    --sidebar-primary: 35 90% 50%;
-    --sidebar-primary-foreground: 25 30% 10%;
-    --sidebar-accent: 32 22% 90%;
-    --sidebar-accent-foreground: 25 15% 18%;
-    --sidebar-border: 32 22% 86%;
-    --sidebar-ring: 35 90% 50%;
+
+
+    /* Sidebar (admin) — neutral grey scale */
+
+    --sidebar-background: 0 0% 97%;
+
+    --sidebar-foreground: 0 0% 18%;
+
+    --sidebar-primary: 24 95% 53%;
+
+    --sidebar-primary-foreground: 0 0% 100%;
+
+    --sidebar-accent: 0 0% 92%;
+
+    --sidebar-accent-foreground: 0 0% 18%;
+
+    --sidebar-border: 0 0% 88%;
+
+    --sidebar-ring: 24 95% 53%;
+
   }
+
+
 
   .dark {
-    /* Warm amber-cocoa dark palette — evokes candlelight rather than default
-       cold charcoal. Hue anchored ~26 (brown-amber), saturation raised vs the
-       original grays so the surface actually reads warm, not neutral. */
-    --background: 26 22% 8%;
-    --surface: 26 18% 13%;
-    --foreground: 38 30% 95%;
 
-    --card: 26 18% 13%;
-    --card-foreground: 38 30% 95%;
-    --popover: 26 18% 13%;
-    --popover-foreground: 38 30% 95%;
+    /* Neutral charcoal dark palette with vivid orange accent. */
 
-    --primary: 35 92% 58%;
-    --primary-foreground: 26 40% 10%;
-    --primary-hover: 35 92% 63%;
+    --background: 0 0% 7%;
 
-    --secondary: 26 15% 18%;
-    --secondary-foreground: 38 30% 95%;
-    --muted: 26 15% 16%;
-    --muted-foreground: 32 15% 68%;
-    --accent: 26 15% 18%;
-    --accent-foreground: 38 30% 95%;
+    --surface: 0 0% 11%;
+
+    --foreground: 0 0% 96%;
+
+
+
+    --card: 0 0% 11%;
+
+    --card-foreground: 0 0% 96%;
+
+    --popover: 0 0% 11%;
+
+    --popover-foreground: 0 0% 96%;
+
+
+
+    --primary: 24 95% 58%;
+
+    --primary-foreground: 0 0% 9%;
+
+    --primary-hover: 24 95% 63%;
+
+
+
+    --secondary: 0 0% 16%;
+
+    --secondary-foreground: 0 0% 96%;
+
+    --muted: 0 0% 14%;
+
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 0 0% 16%;
+
+    --accent-foreground: 0 0% 96%;
+
+
 
     --success: 145 50% 48%;
+
     --warning: 38 95% 58%;
+
     --destructive: 0 68% 58%;
+
     --info: 210 80% 62%;
 
-    --border: 26 15% 20%;
-    --input: 26 15% 22%;
-    --ring: 35 92% 58%;
 
-    --sidebar-background: 26 20% 10%;
-    --sidebar-foreground: 38 30% 95%;
-    --sidebar-primary: 35 92% 58%;
-    --sidebar-primary-foreground: 26 40% 10%;
-    --sidebar-accent: 26 15% 16%;
-    --sidebar-accent-foreground: 38 30% 95%;
-    --sidebar-border: 26 15% 18%;
-    --sidebar-ring: 35 92% 58%;
+
+    --border: 0 0% 18%;
+
+    --input: 0 0% 20%;
+
+    --ring: 24 95% 58%;
+
+
+
+    --sidebar-background: 0 0% 9%;
+
+    --sidebar-foreground: 0 0% 96%;
+
+    --sidebar-primary: 24 95% 58%;
+
+    --sidebar-primary-foreground: 0 0% 9%;
+
+    --sidebar-accent: 0 0% 14%;
+
+    --sidebar-accent-foreground: 0 0% 96%;
+
+    --sidebar-border: 0 0% 16%;
+
+    --sidebar-ring: 24 95% 58%;
+
   }
+
 }
+
+
 
 /* Force container side padding — overrides Tailwind config for reliability */
+
 .container {
-  padding-left: clamp(2rem, 8vw, 18rem) !important;
-  padding-right: clamp(2rem, 8vw, 18rem) !important;
+
+  padding-left: clamp(1rem, 3vw, 3rem) !important;
+
+  padding-right: clamp(1rem, 3vw, 3rem) !important;
+
 }
+
+
 
 @layer base {
+
   * {
+
     @apply border-border;
+
   }
+
+
 
   html {
+
     -webkit-font-smoothing: antialiased;
+
     -moz-osx-font-smoothing: grayscale;
+
     text-rendering: optimizeLegibility;
+
     /* Reserve scrollbar space on desktop; mobile browsers don't show
+
        persistent scrollbars, so `stable` can waste ~15px on iOS/Android. */
+
     scrollbar-gutter: stable;
+
     /*
+
       DO NOT set `overflow-x: hidden` on <html>. Mobile Safari (and some
+
       Chromium variants) treat the html element as the scroll container in
+
       that case and silently break `position: sticky` for any descendant —
+
       the sticky header would scroll away with the page. Constraining the
+
       horizontal overflow on <body> avoids the new scroll-container while
+
       still preventing accidental horizontal scroll.
+
     */
+
   }
+
+
 
   @media (max-width: 767px) {
+
     html {
+
       /* Mobile browsers never show a persistent scrollbar track, so
+
          `stable` just wastes horizontal space. Reset to auto. */
+
       scrollbar-gutter: auto;
+
     }
+
   }
+
+
 
   body {
+
     @apply bg-background text-foreground font-sans;
+
     font-feature-settings: "cv11", "ss01";
+
     /* Containing the horizontal overflow here (instead of on <html>) keeps
+
        `position: sticky` working on iOS Safari. */
+
     overflow-x: hidden;
+
   }
+
+
 
   /* Smooth theme switching via the View Transitions API (see ThemeToggle).
+
      The browser captures a screenshot of the old state, applies the DOM
+
      change, then cross-fades between frames — 60 fps with zero per-element
+
      overhead. On unsupported browsers the switch is instant. */
+
   ::view-transition-old(root),
+
   ::view-transition-new(root) {
+
     animation-duration: 350ms;
+
     animation-timing-function: ease-in-out;
+
   }
+
+
 
   /* Numbers everywhere are tabular by default in tables, prices, totals */
+
   .num,
+
   table td,
+
   table th {
+
     font-variant-numeric: tabular-nums;
+
   }
+
+
 
   /* Subtle, fast focus ring */
+
   :focus-visible {
+
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+
   }
+
+
 
   /* Selection */
+
   ::selection {
+
     background-color: hsl(var(--primary) / 0.25);
+
     color: hsl(var(--foreground));
+
   }
+
 }
+
+
 
 @layer components {
+
   /* Reusable price typography */
+
   .price {
+
     @apply font-mono font-semibold tabular-nums tracking-tight;
+
   }
+
+
 
   /* Hairline divider used in dense tables */
+
   .hairline {
+
     @apply border-t border-border;
+
   }
+
+
 
   /* Eyebrow label above section titles */
+
   .eyebrow {
+
     @apply text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground;
+
   }
+
+
 
   /* Minimum 44×44 tap target — apply to small interactive elements on touch */
+
   .tap-target {
+
     position: relative;
+
   }
+
   .tap-target::after {
+
     content: "";
+
     position: absolute;
+
     inset: -6px;
+
     /* Expand hit area to at least 44px even if the visual element is smaller */
+
     min-width: 44px;
+
     min-height: 44px;
+
   }
+
 }
+
+
 
 @layer utilities {
+
   /* Hover-only effects: prevents sticky :hover on touch devices */
+
   @media (hover: hover) and (pointer: fine) {
+
     .hover-lift:hover {
+
       transform: translateY(-2px);
+
     }
+
   }
+
 }
+
+
 
 @keyframes shimmer {
+
   0% { transform: translateX(-100%); }
+
   100% { transform: translateX(400%); }
+
 }
 
+
+
 @keyframes loader {
+
   0% { transform: scaleX(0); transform-origin: left; }
+
   50% { transform: scaleX(1); transform-origin: left; }
+
   51% { transform: scaleX(1); transform-origin: right; }
+
   100% { transform: scaleX(0); transform-origin: right; }
+
 }
+

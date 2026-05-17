@@ -1,4 +1,4 @@
-# Candle Wholesale Hub
+# CANDWAX
 
 Wholesale candle storefront + back-office. The stack is split in two:
 

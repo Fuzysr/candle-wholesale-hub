@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from_email: str = ""
-    smtp_from_name: str = "Candle Wholesale"
+    smtp_from_name: str = "CANDWAX"
     smtp_use_tls: bool = True
 
     # Bootstrap admin

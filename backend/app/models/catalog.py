@@ -19,6 +19,7 @@ class Category(Base):
     slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     name_ru: Mapped[str] = mapped_column(String, nullable=False)
     name_en: Mapped[str] = mapped_column(String, nullable=False)
+    icon: Mapped[str | None] = mapped_column(String(64), nullable=True)
     parent_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("categories.id", ondelete="SET NULL"),
@@ -127,6 +128,19 @@ class ProductVariant(Base):
     pieces_per_box: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     price_per_piece_rub: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     price_per_piece_usd: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    # Габариты товара (мм)
+    length_mm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    width_mm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height_mm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Физические характеристики
+    weight_gr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    burn_time_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Упаковка / транспортная коробка (ТК)
+    packages_per_box: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    box_length_mm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    box_width_mm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    box_height_mm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    box_weight_gr: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stock_boxes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     reserved_boxes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)

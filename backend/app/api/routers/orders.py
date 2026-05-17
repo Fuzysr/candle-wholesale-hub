@@ -36,7 +36,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import db_session, get_current_user, require_admin
+from app.api.deps import db_session, get_current_user, get_current_user_optional, require_admin
+from app.core.security import hash_password
+import secrets
 from app.api.pagination import PaginationParams, pagination_params
 from app.core import storage
 from app.core.config import settings as app_settings
@@ -47,9 +49,13 @@ from app.core.email_templates import (
     EmailSender,
     PaymentDetails,
     render_awaiting_payment_email,
+    render_new_order_admin_email,
     render_order_contact_email,
+    render_order_created_email,
     render_order_ready_email,
+    order_status_label,
     render_order_rejected_email,
+    render_order_status_changed_email,
     render_receipt_uploaded_email,
 )
 from app.core.order_state_machine import assert_transition_allowed
@@ -382,9 +388,46 @@ async def _ship_reservation(session: AsyncSession, order: Order) -> None:
 @router.post("/orders", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 async def create_order(
     payload: OrderCreate,
-    user: User = Depends(get_current_user),
+    background_tasks: BackgroundTasks,
+    user: User | None = Depends(get_current_user_optional),
     session: AsyncSession = Depends(db_session),
 ) -> Order:
+    # Guest checkout: if no authenticated user, derive one from payload
+    # contact info. Email + contact_name are required so the manager can
+    # follow up; the auto-created account is "claimable" later via the
+    # standard "Forgot password" flow.
+    if user is None:
+        guest_email = (payload.email or "").strip().lower()
+        guest_name = (payload.contact_name or "").strip()
+        if not guest_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="email is required for guest checkout",
+            )
+        if not guest_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="contact_name is required for guest checkout",
+            )
+        existing = await session.scalar(select(User).where(User.email == guest_email))
+        if existing is not None:
+            user = existing
+        else:
+            # Random unguessable password — guest must use "Forgot password"
+            # to claim the account. Marked active so they receive emails.
+            user = User(
+                email=guest_email,
+                password_hash=hash_password(secrets.token_urlsafe(32)),
+                role=AppRole.client,
+                company_name=payload.company_name or None,
+                contact_name=guest_name,
+                phone=payload.phone or None,
+                inn=payload.inn or None,
+                is_active=True,
+            )
+            session.add(user)
+            await session.flush()
+
     # Resolve every item against `product_variants` (FOR UPDATE) — this both
     # locks rows for the stock-availability check and ignores any tampered
     # `unit_price`/`pieces_per_box` coming from the client (#price-canonicalisation).
@@ -467,6 +510,60 @@ async def create_order(
     full = await _load_order(session, order.id)
     assert full is not None
     await _attach_presigned_receipt(full)
+
+    # --- Письмо клиенту: «Заявка создана, ожидает подтверждения» ---
+    # Отправляется в фоне, чтобы не задерживать ответ на checkout. Если
+    # SMTP не настроен или email отсутствует, письмо просто не уходит.
+    total_str = f"{float(full.total):,.2f}".replace(",", " ")
+    to_email = full.email
+    if not to_email:
+        to_email = user.email
+    if to_email and app_settings.smtp_host:
+        company = await session.get(CompanySettings, _COMPANY_SETTINGS_ID)
+        sender = _build_email_sender(company)
+        plain_body, html_body = render_order_created_email(
+            order_number=full.order_number,
+            total=total_str,
+            currency=full.currency,
+            sender=sender,
+            customer_name=full.contact_name,
+        )
+        background_tasks.add_task(
+            _send_email_safe,
+            to_email=to_email,
+            subject=f"Заявка №{full.order_number} принята",
+            body=plain_body,
+            html_body=html_body,
+        )
+
+    # --- Письмо админам: «Поступила новая заявка» ---
+    if app_settings.smtp_host:
+        admin_rows = (
+            await session.scalars(
+                select(User).where(User.role == AppRole.admin, User.is_active.is_(True))
+            )
+        ).all()
+        if admin_rows:
+            admin_plain, admin_html = render_new_order_admin_email(
+                order_number=full.order_number,
+                total=total_str,
+                currency=full.currency,
+                total_boxes=full.total_boxes,
+                company_name=full.company_name,
+                contact_name=full.contact_name,
+                phone=full.phone,
+                email=full.email or user.email,
+            )
+            admin_subject = f"Новая заявка №{full.order_number}"
+            for adm in admin_rows:
+                background_tasks.add_task(
+                    _send_email_safe,
+                    to_email=adm.email,
+                    subject=admin_subject,
+                    body=admin_plain,
+                    html_body=admin_html,
+                )
+
     return full
 
 
@@ -555,6 +652,7 @@ async def admin_get_order(
 async def admin_update_order(
     order_id: UUID,
     payload: OrderUpdateAdmin,
+    background_tasks: BackgroundTasks,
     admin: User = Depends(require_admin),
     session: AsyncSession = Depends(db_session),
 ) -> Order:
@@ -591,10 +689,42 @@ async def admin_update_order(
             )
         )
 
+    # Snapshot до commit (commit инвалидирует ORM-атрибуты).
+    new_status_value = order.status.value if status_changed else None
+    snapshot_email = order.email
+    snapshot_user_id = order.user_id
+    snapshot_order_number = order.order_number
+    snapshot_contact_name = order.contact_name
+    snapshot_admin_comment = payload.admin_comment
+
     await session.commit()
     full = await _load_order(session, order.id)
     assert full is not None
     await _attach_presigned_receipt(full)
+
+    # --- Письмо клиенту об изменении статуса ---
+    # PATCH — generic эндпоинт: у статусов awaiting_payment / cancelled /
+    # shipped есть свои отдельные кнопки в админке, которые отправляют
+    # специализированные шаблоны. Здесь же отправляем универсальное
+    # уведомление для любого изменения, включая «paid», «processing» и
+    # т.п. — клиент должен узнавать о КАЖДОЙ смене статуса.
+    if status_changed and new_status_value:
+        to_email = snapshot_email
+        if not to_email:
+            user_obj = await session.get(User, snapshot_user_id)
+            to_email = user_obj.email if user_obj else None
+        if to_email:
+            company = await session.get(CompanySettings, _COMPANY_SETTINGS_ID)
+            _queue_status_change_email(
+                background_tasks,
+                to_email=to_email,
+                order_number=snapshot_order_number,
+                new_status=new_status_value,
+                comment=snapshot_admin_comment,
+                sender=_build_email_sender(company),
+                customer_name=snapshot_contact_name,
+            )
+
     return full
 
 
@@ -646,6 +776,63 @@ async def _send_email_safe(
 _COMPANY_SETTINGS_ID = 1
 
 
+def _build_email_sender(company: CompanySettings | None) -> EmailSender:
+    """Сборка `EmailSender` из настроек компании (или дефолтных значений).
+
+    Вынесено в отдельный helper, потому что повторяется в каждой точке
+    отправки писем по заявкам.
+    """
+    return EmailSender(
+        company_name=company.short_name if company else "CANDWAX",
+        phone=company.phone if company else "",
+        email=company.email if company else "",
+    )
+
+
+async def _resolve_order_email(session: AsyncSession, order: Order) -> str | None:
+    """Email клиента: сначала snapshot заявки, потом профиль пользователя."""
+    if order.email:
+        return order.email
+    user = await session.get(User, order.user_id)
+    return user.email if user else None
+
+
+def _queue_status_change_email(
+    background_tasks: BackgroundTasks,
+    *,
+    to_email: str,
+    order_number: str,
+    new_status: str,
+    comment: str | None,
+    sender: EmailSender,
+    customer_name: str | None,
+) -> None:
+    """Поставить в фоновую очередь письмо о смене статуса заявки.
+
+    Используется только для статусов БЕЗ специализированного шаблона
+    (paid, payment_review, processing, completed). Approve/reject/
+    mark-ready отправляют свои собственные письма и не должны звать
+    этот helper, иначе клиент получит две нотификации на одно событие.
+    """
+    if not app_settings.smtp_host or not to_email:
+        return
+    plain_body, html_body = render_order_status_changed_email(
+        order_number=order_number,
+        new_status=new_status,
+        comment=comment,
+        sender=sender,
+        customer_name=customer_name,
+    )
+    subject = f"Заявка №{order_number}: {order_status_label(new_status)}"
+    background_tasks.add_task(
+        _send_email_safe,
+        to_email=to_email,
+        subject=subject,
+        body=plain_body,
+        html_body=html_body,
+    )
+
+
 @router.post(
     "/admin/orders/{order_id}/contact",
     response_model=OrderContactOut,
@@ -694,7 +881,7 @@ async def admin_contact_order_customer(
     # Build branded HTML + plain-text from the company settings singleton.
     company = await session.get(CompanySettings, _COMPANY_SETTINGS_ID)
     sender = EmailSender(
-        company_name=company.short_name if company else "Candle Wholesale",
+        company_name=company.short_name if company else "CANDWAX",
         phone=company.phone if company else "",
         email=company.email if company else "",
     )
@@ -767,7 +954,7 @@ async def admin_approve_order(
     company = await session.get(CompanySettings, _COMPANY_SETTINGS_ID)
     if to_email and company and app_settings.smtp_host:
         sender = EmailSender(
-            company_name=company.short_name if company else "Candle Wholesale",
+            company_name=company.short_name if company else "CANDWAX",
             phone=company.phone if company else "",
             email=company.email if company else "",
         )
@@ -864,7 +1051,7 @@ async def admin_reject_order(
     company = await session.get(CompanySettings, _COMPANY_SETTINGS_ID)
     if to_email and app_settings.smtp_host:
         sender = EmailSender(
-            company_name=company.short_name if company else "Candle Wholesale",
+            company_name=company.short_name if company else "CANDWAX",
             phone=company.phone if company else "",
             email=company.email if company else "",
         )
@@ -1045,6 +1232,22 @@ async def upload_payment_receipt(
                 html_body=html_body,
             )
 
+        # --- И клиенту: подтверждение, что чек получен и заявка ушла на проверку ---
+        # Клиент сам инициировал действие, но письмо нужно для аудит-trail
+        # и чтобы он видел в почте полную хронологию статусов заявки.
+        client_email = order.email or user.email
+        if client_email:
+            company = await session.get(CompanySettings, _COMPANY_SETTINGS_ID)
+            _queue_status_change_email(
+                background_tasks,
+                to_email=client_email,
+                order_number=order.order_number,
+                new_status=OrderStatus.payment_review.value,
+                comment="Чек получен, заявка передана на проверку оплаты",
+                sender=_build_email_sender(company),
+                customer_name=order.contact_name,
+            )
+
     presigned = await storage.presigned_get_url(
         app_settings.s3_bucket_receipts, key
     )
@@ -1070,18 +1273,26 @@ class ConfirmPaymentOut(BaseModel):
 )
 async def admin_confirm_payment(
     order_id: UUID,
+    background_tasks: BackgroundTasks,
     admin: User = Depends(require_admin),
     session: AsyncSession = Depends(db_session),
 ) -> ConfirmPaymentOut:
     """Админ подтверждает получение оплаты → статус `paid`.
 
     Допустимый исходный статус: payment_review.
+    Клиенту отправляется письмо «Оплата подтверждена».
     """
     order = await session.get(Order, order_id)
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="order not found")
 
     assert_transition_allowed(order.status, OrderStatus.paid)
+
+    # Snapshot до commit.
+    snapshot_email = order.email
+    snapshot_user_id = order.user_id
+    snapshot_order_number = order.order_number
+    snapshot_contact_name = order.contact_name
 
     order.status = OrderStatus.paid
     session.add(
@@ -1093,6 +1304,24 @@ async def admin_confirm_payment(
         )
     )
     await session.commit()
+
+    # --- Письмо клиенту: «Оплата подтверждена» ---
+    to_email = snapshot_email
+    if not to_email:
+        user_obj = await session.get(User, snapshot_user_id)
+        to_email = user_obj.email if user_obj else None
+    if to_email:
+        company = await session.get(CompanySettings, _COMPANY_SETTINGS_ID)
+        _queue_status_change_email(
+            background_tasks,
+            to_email=to_email,
+            order_number=snapshot_order_number,
+            new_status=OrderStatus.paid.value,
+            comment="Оплата подтверждена администратором",
+            sender=_build_email_sender(company),
+            customer_name=snapshot_contact_name,
+        )
+
     return ConfirmPaymentOut(new_status=OrderStatus.paid.value)
 
 
@@ -1150,7 +1379,7 @@ async def admin_mark_ready(
     company = await session.get(CompanySettings, _COMPANY_SETTINGS_ID)
     if to_email and app_settings.smtp_host:
         sender = EmailSender(
-            company_name=company.short_name if company else "Candle Wholesale",
+            company_name=company.short_name if company else "CANDWAX",
             phone=company.phone if company else "",
             email=company.email if company else "",
         )

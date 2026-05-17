@@ -88,10 +88,10 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       boxShadow: {
-        sm: "0 1px 3px 0 hsl(25 15% 12% / 0.03)",
-        DEFAULT: "0 2px 8px -2px hsl(25 15% 12% / 0.05), 0 1px 3px -1px hsl(25 15% 12% / 0.04)",
-        md: "0 6px 20px -4px hsl(25 15% 12% / 0.07)",
-        lg: "0 12px 32px -8px hsl(25 15% 12% / 0.09)",
+        sm: "0 1px 3px 0 hsl(0 0% 0% / 0.04)",
+        DEFAULT: "0 2px 8px -2px hsl(0 0% 0% / 0.06), 0 1px 3px -1px hsl(0 0% 0% / 0.05)",
+        md: "0 6px 20px -4px hsl(0 0% 0% / 0.08)",
+        lg: "0 12px 32px -8px hsl(0 0% 0% / 0.1)",
       },
       transitionTimingFunction: {
         out: "cubic-bezier(0.16, 1, 0.3, 1)",

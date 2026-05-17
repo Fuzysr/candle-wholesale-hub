@@ -22,7 +22,25 @@ import {
   ChevronRight,
   Menu,
   X,
+  GripVertical,
+  MessageSquare,
+  Check,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -71,6 +89,7 @@ import {
   type VariantImageOut,
   uploadsApi,
 } from "@/lib/api";
+import { contactApi, type ContactMessageOut } from "@/lib/api/contact";
 import { formatMoney } from "@/lib/format";
 import { downloadInvoicePdf } from "@/lib/invoicePdf";
 import { cn } from "@/lib/utils";
@@ -133,6 +152,7 @@ type Tab =
   | "products"
   | "categories"
   | "clients"
+  | "messages"
   | "stock"
   | "discounts"
   | "settings";
@@ -142,12 +162,13 @@ type Tab =
  * dashboard-stat bag below, so Заявки can surface the «new-orders» count as a
  * red pill without each call-site rebuilding the label.
  */
-const NAV: { key: Tab; label: string; icon: ComponentType<{ className?: string }>; badgeKey?: "newOrders" }[] = [
+const NAV: { key: Tab; label: string; icon: ComponentType<{ className?: string }>; badgeKey?: "newOrders" | "newMessages" }[] = [
   { key: "dashboard", label: "Дашборд", icon: LayoutDashboard },
   { key: "orders", label: "Заявки", icon: ClipboardList, badgeKey: "newOrders" },
   { key: "products", label: "Товары", icon: Package },
   { key: "categories", label: "Категории", icon: Tag },
   { key: "clients", label: "Клиенты", icon: Users },
+  { key: "messages", label: "Обращения", icon: MessageSquare, badgeKey: "newMessages" },
   { key: "stock", label: "Склад", icon: Warehouse },
   { key: "discounts", label: "Скидки", icon: Percent },
   { key: "settings", label: "Настройки", icon: SettingsIcon },
@@ -160,6 +181,7 @@ const TAB_TITLE: Record<Tab, string> = {
   products: "Товары",
   categories: "Категории",
   clients: "Клиенты",
+  messages: "Обращения",
   stock: "Склад",
   discounts: "Скидки",
   settings: "Настройки",
@@ -171,18 +193,20 @@ const AdminSidebar = ({
   tab,
   setTab,
   newOrdersBadge,
+  newMessagesBadge,
   onSignOut,
 }: {
   tab: Tab;
   setTab: (t: Tab) => void;
   newOrdersBadge: number;
+  newMessagesBadge: number;
   onSignOut: () => void;
 }) => {
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar-background lg:flex">
-      {/* Brand block — matches the «МирСвечи admin» mark in the design. */}
+      {/* Brand block */}
       <Link to="/" className="flex items-center gap-2 border-b border-sidebar-border px-5 py-5">
-        <span className="text-lg font-semibold tracking-tight text-foreground">МирСвечи</span>
+        <span className="text-lg font-semibold tracking-tight text-foreground">CANDWAX</span>
         <span className="rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
           admin
         </span>
@@ -192,7 +216,8 @@ const AdminSidebar = ({
         {NAV.map((n) => {
           const Icon = n.icon;
           const active = tab === n.key;
-          const badge = n.badgeKey === "newOrders" && newOrdersBadge > 0 ? newOrdersBadge : null;
+          const badgeVal = n.badgeKey === "newOrders" ? newOrdersBadge : n.badgeKey === "newMessages" ? newMessagesBadge : 0;
+          const badge = badgeVal > 0 ? badgeVal : null;
           return (
             <button
               key={n.key}
@@ -282,6 +307,7 @@ const AdminShell = ({
   setTab,
   user,
   newOrdersBadge,
+  newMessagesBadge,
   onSignOut,
   actions,
   children,
@@ -290,6 +316,7 @@ const AdminShell = ({
   setTab: (t: Tab) => void;
   user: AppUser;
   newOrdersBadge: number;
+  newMessagesBadge: number;
   onSignOut: () => void;
   actions?: React.ReactNode;
   children: React.ReactNode;
@@ -297,7 +324,7 @@ const AdminShell = ({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   return (
     <div className="flex min-h-screen bg-muted/30">
-      <AdminSidebar tab={tab} setTab={setTab} newOrdersBadge={newOrdersBadge} onSignOut={onSignOut} />
+      <AdminSidebar tab={tab} setTab={setTab} newOrdersBadge={newOrdersBadge} newMessagesBadge={newMessagesBadge} onSignOut={onSignOut} />
 
       {/* Mobile admin nav Sheet */}
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
@@ -305,7 +332,7 @@ const AdminShell = ({
           <div className="flex h-full flex-col bg-sidebar-background">
             <SheetHeader className="border-b border-sidebar-border px-5 py-4">
               <SheetTitle className="flex items-center gap-2 text-left">
-                <span className="text-lg font-semibold tracking-tight">МирСвечи</span>
+                <span className="text-lg font-semibold tracking-tight">CANDWAX</span>
                 <span className="rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">admin</span>
               </SheetTitle>
             </SheetHeader>
@@ -313,7 +340,8 @@ const AdminShell = ({
               {NAV.map((n) => {
                 const Icon = n.icon;
                 const active = tab === n.key;
-                const badge = n.badgeKey === "newOrders" && newOrdersBadge > 0 ? newOrdersBadge : null;
+                const badgeVal = n.badgeKey === "newOrders" ? newOrdersBadge : n.badgeKey === "newMessages" ? newMessagesBadge : 0;
+                const badge = badgeVal > 0 ? badgeVal : null;
                 return (
                   <button
                     key={n.key}
@@ -384,6 +412,46 @@ const KpiCard = ({
   </div>
 );
 
+/* ─── Drag-and-drop строка категории ─── */
+type SortableCatRowProps = {
+  cat: AdminCategory;
+  allCats: AdminCategory[];
+  productCount: number;
+  onEdit: (c: AdminCategory) => void;
+  onDelete: (id: string) => void;
+};
+const SortableCatRow = ({ cat, allCats, productCount, onEdit, onDelete }: SortableCatRowProps) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      className="grid grid-cols-[28px_1fr_140px_100px_60px_80px] items-center gap-2 border-t border-border px-3 py-2.5 text-sm"
+    >
+      <button
+        type="button"
+        {...listeners}
+        {...attributes}
+        className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
+        aria-label="Перетащить"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <div className="font-medium">
+        {cat.parent_id && <span className="text-muted-foreground">↳ </span>}
+        {cat.name_ru}
+      </div>
+      <div className="num text-xs text-muted-foreground">{cat.slug}</div>
+      <div className="text-xs text-muted-foreground">{allCats.find((p) => p.id === cat.parent_id)?.name_ru ?? "—"}</div>
+      <div className="text-right num text-muted-foreground">{productCount}</div>
+      <div className="flex justify-end gap-1">
+        <Button size="sm" variant="ghost" onClick={() => onEdit(cat)}><Pencil className="h-3.5 w-3.5" /></Button>
+        <Button size="sm" variant="ghost" onClick={() => onDelete(cat.id)} className="text-destructive hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
+      </div>
+    </div>
+  );
+};
+
 const Admin = () => {
   const { user, loading } = useAuth();
   const queryClient = useQueryClient();
@@ -399,6 +467,7 @@ const Admin = () => {
     companyQ,
     discountTiersQ,
     usersQ,
+    contactMsgsQ,
   ] = useQueries({
     queries: [
       { queryKey: ["admin", "orders"], queryFn: () => ordersApi.adminList(), enabled: isAdmin },
@@ -410,6 +479,7 @@ const Admin = () => {
       { queryKey: ["company-settings"], queryFn: () => companyApi.get(), enabled: isAdmin },
       { queryKey: ["discount-tiers"], queryFn: () => stockApi.listDiscountTiers(), enabled: isAdmin },
       { queryKey: ["admin", "users"], queryFn: () => usersApi.adminList(), enabled: isAdmin },
+      { queryKey: ["admin", "contact-messages"], queryFn: () => contactApi.list(), enabled: isAdmin },
     ],
   });
 
@@ -419,11 +489,37 @@ const Admin = () => {
   const materials: Lookup[] = materialsQ.data ?? [];
   const scents: Lookup[] = scentsQ.data ?? [];
   const shapes: Lookup[] = shapesQ.data ?? [];
+  const contactMessages: ContactMessageOut[] = contactMsgsQ.data ?? [];
 
   const [company, setCompany] = useState<CompanySettingsOut | null>(null);
   useEffect(() => {
     if (companyQ.data) setCompany(companyQ.data);
   }, [companyQ.data]);
+
+  // Локальный порядок категорий для drag-and-drop
+  const [catOrder, setCatOrder] = useState<AdminCategory[]>([]);
+  useEffect(() => {
+    setCatOrder([...categories].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)));
+  }, [categories]);
+
+  const catSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+
+  const handleCatDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = catOrder.findIndex((c) => c.id === active.id);
+    const newIdx = catOrder.findIndex((c) => c.id === over.id);
+    const reordered = arrayMove(catOrder, oldIdx, newIdx);
+    setCatOrder(reordered);
+    await Promise.all(
+      reordered.map((c, i) => {
+        if ((c.sort_order ?? 0) !== i) return catalogApi.updateCategory(c.id, { sort_order: i });
+      }),
+    );
+    queryClient.invalidateQueries({ queryKey: ["categories"] });
+  };
 
   const [tab, setTab] = useState<Tab>("dashboard");
 
@@ -531,6 +627,7 @@ const Admin = () => {
   const reloadOrders = () => queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
   const reloadCompany = () => queryClient.invalidateQueries({ queryKey: ["company-settings"] });
   const reloadDiscounts = () => queryClient.invalidateQueries({ queryKey: ["discount-tiers"] });
+  const reloadContactMessages = () => queryClient.invalidateQueries({ queryKey: ["admin", "contact-messages"] });
 
   if (loading) {
     return (
@@ -703,6 +800,16 @@ const Admin = () => {
       pieces_per_box: Number(editingVariant.pieces_per_box) || 1,
       price_per_piece_rub: Number(editingVariant.price_per_piece_rub) || 0,
       price_per_piece_usd: Number(editingVariant.price_per_piece_usd) || 0,
+      length_mm: editingVariant.length_mm ? Number(editingVariant.length_mm) : null,
+      width_mm: editingVariant.width_mm ? Number(editingVariant.width_mm) : null,
+      height_mm: editingVariant.height_mm ? Number(editingVariant.height_mm) : null,
+      weight_gr: editingVariant.weight_gr ? Number(editingVariant.weight_gr) : null,
+      burn_time_hours: editingVariant.burn_time_hours ? Number(editingVariant.burn_time_hours) : null,
+      packages_per_box: editingVariant.packages_per_box ? Number(editingVariant.packages_per_box) : null,
+      box_length_mm: editingVariant.box_length_mm ? Number(editingVariant.box_length_mm) : null,
+      box_width_mm: editingVariant.box_width_mm ? Number(editingVariant.box_width_mm) : null,
+      box_height_mm: editingVariant.box_height_mm ? Number(editingVariant.box_height_mm) : null,
+      box_weight_gr: editingVariant.box_weight_gr ? Number(editingVariant.box_weight_gr) : null,
       stock_boxes: Number(editingVariant.stock_boxes) || 0,
       image_url: editingVariant.image_url || null,
       external_id: editingVariant.external_id || null,
@@ -798,6 +905,7 @@ const Admin = () => {
       slug: editingCategory.slug || "",
       name_ru: editingCategory.name_ru || "",
       name_en: editingCategory.name_en || editingCategory.name_ru || "",
+      icon: editingCategory.icon || null,
       sort_order: Number(editingCategory.sort_order) || 0,
       parent_id: editingCategory.parent_id || null,
     };
@@ -931,6 +1039,7 @@ const Admin = () => {
   };
 
   const newCount = orders.filter((o) => o.status === "new").length;
+  const unreadMessagesCount = contactMessages.filter((m) => !m.is_read).length;
   const processingCount = orders.filter((o) => o.status === "processing" || o.status === "invoiced").length;
   const lowStock = products.filter((p) => p.variants?.some((v) => v.stock_boxes > 0 && v.stock_boxes <= 5)).length;
   const outOfStock = products.filter((p) => p.variants?.length > 0 && p.variants.every((v) => v.stock_boxes <= 0)).length;
@@ -1452,6 +1561,7 @@ const Admin = () => {
       setTab={setTab}
       user={user}
       newOrdersBadge={newCount}
+      newMessagesBadge={unreadMessagesCount}
       onSignOut={handleSignOut}
       actions={
         tab === "orders" ? (
@@ -2392,40 +2502,116 @@ const Admin = () => {
 
         {tab === "categories" && (
           <div className="space-y-4">
-            <div className="flex justify-end">
-              <Button onClick={() => setEditingCategory({ sort_order: categories.length })}><Plus className="h-4 w-4" /> Новая категория</Button>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Перетащите строку за иконку <GripVertical className="inline h-3.5 w-3.5" /> чтобы изменить порядок</p>
+              <Button onClick={() => setEditingCategory({ sort_order: catOrder.length })}><Plus className="h-4 w-4" /> Новая категория</Button>
             </div>
-            <div className="overflow-x-auto rounded-lg border border-border bg-surface">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-3">Название (RU)</th>
-                    <th className="px-3 py-3">Родитель</th>
-                    <th className="px-3 py-3">Slug</th>
-                    <th className="px-3 py-3 text-right">Сорт.</th>
-                    <th className="px-3 py-3 text-right">Товаров</th>
-                    <th className="px-3 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {categories.map((c) => (
-                    <tr key={c.id} className="border-t border-border">
-                      <td className="px-3 py-2.5 font-medium">{c.parent_id && <span className="text-muted-foreground">↳ </span>}{c.name_ru}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{categories.find((p) => p.id === c.parent_id)?.name_ru ?? "—"}</td>
-                      <td className="px-3 py-2.5 num text-muted-foreground">{c.slug}</td>
-                      <td className="px-3 py-2.5 text-right num">{c.sort_order}</td>
-                      <td className="px-3 py-2.5 text-right num">{products.filter((p) => p.category_id === c.id).length}</td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="inline-flex gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => setEditingCategory(c)}><Pencil className="h-3.5 w-3.5" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => deleteCategory(c.id)} className="text-destructive hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
-                        </div>
-                      </td>
-                    </tr>
+            <div className="rounded-lg border border-border bg-surface overflow-hidden">
+              <div className="grid grid-cols-[28px_1fr_140px_100px_60px_80px] items-center gap-2 border-b border-border bg-muted/60 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <div />
+                <div>Название</div>
+                <div>Slug</div>
+                <div>Родитель</div>
+                <div className="text-right">Товары</div>
+                <div />
+              </div>
+              <DndContext sensors={catSensors} collisionDetection={closestCenter} onDragEnd={handleCatDragEnd}>
+                <SortableContext items={catOrder.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                  {catOrder.map((c) => (
+                    <SortableCatRow
+                      key={c.id}
+                      cat={c}
+                      allCats={catOrder}
+                      productCount={products.filter((p) => p.category_id === c.id).length}
+                      onEdit={setEditingCategory}
+                      onDelete={deleteCategory}
+                    />
                   ))}
-                </tbody>
-              </table>
+                </SortableContext>
+              </DndContext>
+              {catOrder.length === 0 && (
+                <div className="p-8 text-center text-sm text-muted-foreground">Нет категорий</div>
+              )}
             </div>
+          </div>
+        )}
+
+        {tab === "messages" && (
+          <div className="space-y-4">
+            {contactMessages.length === 0 ? (
+              <div className="rounded-lg border border-border bg-surface p-12 text-center text-sm text-muted-foreground">
+                Обращений пока нет
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {contactMessages.map((m) => (
+                  <div
+                    key={m.id}
+                    className={cn(
+                      "rounded-lg border bg-surface p-4 shadow-sm transition-colors",
+                      m.is_read ? "border-border" : "border-primary/40 bg-primary/[0.02]",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{m.name}</span>
+                          {!m.is_read && (
+                            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                              Новое
+                            </span>
+                          )}
+                        </div>
+                        {m.phone && (
+                          <div className="mt-0.5 text-xs text-muted-foreground">{m.phone}</div>
+                        )}
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{m.message}</p>
+                        <div className="mt-2 text-[11px] text-muted-foreground">
+                          {new Date(m.created_at).toLocaleString("ru-RU")}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        {!m.is_read && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            title="Отметить прочитанным"
+                            onClick={async () => {
+                              try {
+                                await contactApi.markRead(m.id);
+                                reloadContactMessages();
+                              } catch (err) {
+                                toast.error(apiErrorMessage(err, "Ошибка"));
+                              }
+                            }}
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          title="Удалить"
+                          onClick={async () => {
+                            if (!confirm("Удалить обращение?")) return;
+                            try {
+                              await contactApi.delete(m.id);
+                              toast.success("Удалено");
+                              reloadContactMessages();
+                            } catch (err) {
+                              toast.error(apiErrorMessage(err, "Ошибка"));
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -2650,6 +2836,16 @@ const Admin = () => {
               <Field label="Шт. в коробке" type="number" min={1} value={editingVariant.pieces_per_box ?? 1} onChange={(e) => setEditingVariant({ ...editingVariant, pieces_per_box: Number(e.target.value) })} />
               <Field label="Остаток (коробок)" type="number" min={0} value={editingVariant.stock_boxes ?? 0} onChange={(e) => setEditingVariant({ ...editingVariant, stock_boxes: Number(e.target.value) })} />
               <Field label="Цена за шт. (RUB)" type="number" min={0} step={0.01} value={editingVariant.price_per_piece_rub ?? 0} onChange={(e) => setEditingVariant({ ...editingVariant, price_per_piece_rub: Number(e.target.value) })} />
+              <Field label="Длина (мм)" type="number" min={0} value={editingVariant.length_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, length_mm: e.target.value ? Number(e.target.value) : null })} />
+              <Field label="Ширина (мм)" type="number" min={0} value={editingVariant.width_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, width_mm: e.target.value ? Number(e.target.value) : null })} />
+              <Field label="Высота (мм)" type="number" min={0} value={editingVariant.height_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, height_mm: e.target.value ? Number(e.target.value) : null })} />
+              <Field label="Вес (г)" type="number" min={0} value={editingVariant.weight_gr ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, weight_gr: e.target.value ? Number(e.target.value) : null })} />
+              <Field label="Время горения (ч)" type="number" min={0} value={editingVariant.burn_time_hours ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, burn_time_hours: e.target.value ? Number(e.target.value) : null })} />
+              <Field label="Упаковок в ТК" type="number" min={1} value={editingVariant.packages_per_box ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, packages_per_box: e.target.value ? Number(e.target.value) : null })} />
+              <Field label="Длина ТК (мм)" type="number" min={0} value={editingVariant.box_length_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, box_length_mm: e.target.value ? Number(e.target.value) : null })} />
+              <Field label="Ширина ТК (мм)" type="number" min={0} value={editingVariant.box_width_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, box_width_mm: e.target.value ? Number(e.target.value) : null })} />
+              <Field label="Высота ТК (мм)" type="number" min={0} value={editingVariant.box_height_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, box_height_mm: e.target.value ? Number(e.target.value) : null })} />
+              <Field label="Вес ТК (г)" type="number" min={0} value={editingVariant.box_weight_gr ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, box_weight_gr: e.target.value ? Number(e.target.value) : null })} />
               <div className="md:col-span-2">
                 {editingVariant.id ? (
                   <div className="space-y-2">
@@ -2877,7 +3073,7 @@ const Admin = () => {
                   ))}
                 </select>
               </label>
-              <Field label="Сортировка" type="number" value={editingCategory.sort_order ?? 0} onChange={(e) => setEditingCategory({ ...editingCategory, sort_order: Number(e.target.value) })} />
+
             </div>
           )}
           <DialogFooter>
@@ -3097,7 +3293,8 @@ const Admin = () => {
             </div>
           )}
           <DialogFooter>
-            {openOrderQ.data && (
+            {/* FROZEN: Invoice download temporarily hidden */}
+            {false && openOrderQ.data && (
               <Button
                 variant="outline"
                 onClick={() => downloadInvoice(openOrderQ.data as AdminOrder)}

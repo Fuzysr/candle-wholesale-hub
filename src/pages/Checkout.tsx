@@ -95,17 +95,9 @@ const Checkout = () => {
     );
   }
 
-  if (!authLoading && !user) {
-    return (
-      <PublicLayout>
-        <div className="container py-16 text-center">
-          <h1 className="text-2xl font-semibold">Войдите, чтобы оформить заявку</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Это нужно, чтобы видеть статус и реквизиты в личном кабинете.</p>
-          <Button asChild className="mt-6"><Link to={`/auth?next=/checkout`}>Войти / Зарегистрироваться</Link></Button>
-        </div>
-      </PublicLayout>
-    );
-  }
+  // Авторизация НЕ требуется — гость может оформить заявку (как на rucandle.ru):
+  // бэкенд автоматически создаёт/находит user по email. Позже клиент может
+  // восстановить доступ через «Забыли пароль?» и увидеть все свои заявки в ЛК.
 
   if (items.length === 0) {
     return (
@@ -120,7 +112,7 @@ const Checkout = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    // Гость допустим — бэкенд авто-создаёт user по email. Никакого гейта.
     if (hasStockIssues) {
       toast.error("Часть позиций недоступна на складе — поправьте корзину");
       return;
@@ -164,7 +156,9 @@ const Checkout = () => {
       }
 
       clear();
-      navigate(`/order/success/${order.id}`);
+      // Для гостя GET /orders/{id} вернёт 401 — прокидываем заказ через
+      // router state, OrderSuccess предпочтёт state перед сетевым запросом.
+      navigate(`/order/success/${order.id}`, { state: { order, guest: !user } });
     } catch (err) {
       toast.error(apiErrorMessage(err, "Не удалось создать заявку"));
     } finally {

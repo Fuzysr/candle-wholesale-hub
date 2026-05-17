@@ -42,6 +42,7 @@ class CategoryOut(_ORM):
     slug: str
     name_ru: str
     name_en: str
+    icon: str | None = None
     parent_id: UUID | None
     sort_order: int
     created_at: datetime
@@ -52,6 +53,7 @@ class CategoryCreate(BaseModel):
     slug: str = Field(min_length=1, max_length=128)
     name_ru: str = Field(min_length=1)
     name_en: str = Field(min_length=1)
+    icon: str | None = Field(default=None, max_length=64)
     parent_id: UUID | None = None
     sort_order: int = 0
 
@@ -60,6 +62,7 @@ class CategoryUpdate(BaseModel):
     slug: str | None = None
     name_ru: str | None = None
     name_en: str | None = None
+    icon: str | None = Field(default=None, max_length=64)
     parent_id: UUID | None = None
     sort_order: int | None = None
 
@@ -104,6 +107,19 @@ class ProductVariantOut(_ORM):
     pieces_per_box: int
     price_per_piece_rub: float
     price_per_piece_usd: float
+    # Габариты товара (мм)
+    length_mm: int | None = None
+    width_mm: int | None = None
+    height_mm: int | None = None
+    # Физические характеристики
+    weight_gr: int | None = None
+    burn_time_hours: int | None = None
+    # Упаковка / транспортная коробка (ТК)
+    packages_per_box: int | None = None
+    box_length_mm: int | None = None
+    box_width_mm: int | None = None
+    box_height_mm: int | None = None
+    box_weight_gr: int | None = None
     stock_boxes: int
     reserved_boxes: int
     image_url: str | None
@@ -123,6 +139,16 @@ class ProductVariantCreate(BaseModel):
     pieces_per_box: int = Field(ge=1, default=1)
     price_per_piece_rub: float = Field(ge=0)
     price_per_piece_usd: float = Field(ge=0)
+    length_mm: int | None = Field(default=None, ge=0)
+    width_mm: int | None = Field(default=None, ge=0)
+    height_mm: int | None = Field(default=None, ge=0)
+    weight_gr: int | None = Field(default=None, ge=0)
+    burn_time_hours: int | None = Field(default=None, ge=0)
+    packages_per_box: int | None = Field(default=None, ge=1)
+    box_length_mm: int | None = Field(default=None, ge=0)
+    box_width_mm: int | None = Field(default=None, ge=0)
+    box_height_mm: int | None = Field(default=None, ge=0)
+    box_weight_gr: int | None = Field(default=None, ge=0)
     stock_boxes: int = Field(ge=0, default=0)
     image_url: str | None = None
     external_id: str | None = None
@@ -136,6 +162,16 @@ class ProductVariantUpdate(BaseModel):
     pieces_per_box: int | None = Field(default=None, ge=1)
     price_per_piece_rub: float | None = Field(default=None, ge=0)
     price_per_piece_usd: float | None = Field(default=None, ge=0)
+    length_mm: int | None = Field(default=None, ge=0)
+    width_mm: int | None = Field(default=None, ge=0)
+    height_mm: int | None = Field(default=None, ge=0)
+    weight_gr: int | None = Field(default=None, ge=0)
+    burn_time_hours: int | None = Field(default=None, ge=0)
+    packages_per_box: int | None = Field(default=None, ge=1)
+    box_length_mm: int | None = Field(default=None, ge=0)
+    box_width_mm: int | None = Field(default=None, ge=0)
+    box_height_mm: int | None = Field(default=None, ge=0)
+    box_weight_gr: int | None = Field(default=None, ge=0)
     stock_boxes: int | None = Field(default=None, ge=0)
     image_url: str | None = None
     external_id: str | None = None

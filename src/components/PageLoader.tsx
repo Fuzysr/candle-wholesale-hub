@@ -7,12 +7,10 @@ const PageLoader = () => (
     {/* Logo + brand name */}
     <div className="flex items-center gap-3">
       <span className="grid h-10 w-10 place-items-center rounded-lg bg-foreground text-lg font-bold text-background shadow-sm">
-        WC
+        CW
       </span>
       <span className="text-lg font-semibold tracking-tight text-foreground">
-        Wholesale
-        <span className="text-primary">.</span>
-        <span className="text-foreground">Candles</span>
+        CANDWAX
       </span>
     </div>
 

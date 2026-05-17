@@ -72,7 +72,7 @@ async def test_create_order_computes_totals_and_assigns_number(
     assert resp.status_code == 201, resp.text
     data = resp.json()
 
-    assert data["order_number"].startswith("WC-")
+    assert data["order_number"].startswith("CW-")
     assert data["total_boxes"] == 25
     # 100 * 25 * 14.5 = 36250
     assert data["subtotal"] == pytest.approx(36250.0)

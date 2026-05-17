@@ -54,7 +54,7 @@ class EmailSender:
     в подвале просто не отрисуется.
     """
 
-    company_name: str = "Candle Wholesale"
+    company_name: str = "CANDWAX"
     phone: str = ""
     email: str = ""
 
@@ -74,7 +74,7 @@ def render_order_contact_email(
     где HTML поддерживается, и читаемо — там, где нет (и у антиспам-
     фильтров тоже меньше претензий).
     """
-    company = sender.company_name or "Candle Wholesale"
+    company = sender.company_name or "CANDWAX"
     greeting_suffix = f", {customer_name.strip()}" if customer_name and customer_name.strip() else ""
 
     plain = _render_plain(
@@ -278,7 +278,7 @@ def render_awaiting_payment_email(
 
     Возвращает `(plain_text, html)`.
     """
-    company = sender.company_name or "Candle Wholesale"
+    company = sender.company_name or "CANDWAX"
     greeting_suffix = f", {customer_name.strip()}" if customer_name and customer_name.strip() else ""
 
     plain = (
@@ -508,6 +508,98 @@ def render_receipt_uploaded_email(
     return plain, html_body
 
 
+def render_new_order_admin_email(
+    *,
+    order_number: str,
+    total: str,
+    currency: str,
+    total_boxes: int,
+    company_name: str | None,
+    contact_name: str | None,
+    phone: str | None,
+    email: str | None,
+) -> tuple[str, str]:
+    """Письмо админу: «Поступила новая заявка №X».
+
+    Отправляется всем активным администраторам сразу после создания
+    заявки. Содержит основные данные: номер, сумму, кол-во коробок и
+    контактные данные клиента — достаточно, чтобы решить, открывать ли
+    админ-панель прямо сейчас.
+
+    Возвращает `(plain_text, html)`.
+    """
+    safe_company = html.escape(company_name or "—")
+    safe_contact = html.escape(contact_name or "—")
+    safe_phone = html.escape(phone or "—")
+    safe_email = html.escape(email or "—")
+    safe_order = html.escape(order_number)
+    safe_total = html.escape(total)
+    safe_currency = html.escape(currency)
+
+    plain = (
+        f"Поступила новая заявка №{order_number}.\n"
+        f"\n"
+        f"Сумма: {total} {currency}\n"
+        f"Коробок: {total_boxes}\n"
+        f"Компания: {company_name or '—'}\n"
+        f"Контакт: {contact_name or '—'}\n"
+        f"Телефон: {phone or '—'}\n"
+        f"Email: {email or '—'}\n"
+        f"\n"
+        f"Откройте админ-панель, чтобы рассмотреть и подтвердить заявку.\n"
+    )
+
+    subject = f"Новая заявка №{order_number}"
+    safe_subject = html.escape(subject)
+
+    html_body = f"""\
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{safe_subject}</title>
+</head>
+<body style="margin:0;padding:0;background:{_COLOR_BG};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:{_COLOR_TEXT};-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{_COLOR_BG};padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:{_COLOR_CARD};border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(45,37,24,0.08);">
+          <tr>
+            <td style="background:{_COLOR_HEADER};padding:24px 32px;">
+              <div style="color:{_COLOR_HEADER_TEXT};font-size:17px;font-weight:600;letter-spacing:0.3px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                Новая заявка №{safe_order}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 16px 0;font-size:15px;line-height:1.65;color:{_COLOR_TEXT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                Поступила новая заявка. Основные данные:
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size:14px;line-height:1.6;color:{_COLOR_TEXT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                <tr><td style="padding:3px 0;color:{_COLOR_MUTED};width:110px;">Сумма</td><td style="padding:3px 0;font-weight:600;">{safe_total} {safe_currency}</td></tr>
+                <tr><td style="padding:3px 0;color:{_COLOR_MUTED};">Коробок</td><td style="padding:3px 0;">{total_boxes}</td></tr>
+                <tr><td style="padding:3px 0;color:{_COLOR_MUTED};">Компания</td><td style="padding:3px 0;">{safe_company}</td></tr>
+                <tr><td style="padding:3px 0;color:{_COLOR_MUTED};">Контакт</td><td style="padding:3px 0;">{safe_contact}</td></tr>
+                <tr><td style="padding:3px 0;color:{_COLOR_MUTED};">Телефон</td><td style="padding:3px 0;">{safe_phone}</td></tr>
+                <tr><td style="padding:3px 0;color:{_COLOR_MUTED};">Email</td><td style="padding:3px 0;">{safe_email}</td></tr>
+              </table>
+              <p style="margin:16px 0 0 0;font-size:14px;color:{_COLOR_MUTED};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                Откройте админ-панель, чтобы рассмотреть и подтвердить заявку.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+    return plain, html_body
+
+
 def render_order_ready_email(
     *,
     order_number: str,
@@ -518,7 +610,7 @@ def render_order_ready_email(
 
     Возвращает `(plain_text, html)`.
     """
-    company = sender.company_name or "Candle Wholesale"
+    company = sender.company_name or "CANDWAX"
     greeting_suffix = f", {customer_name.strip()}" if customer_name and customer_name.strip() else ""
 
     plain = (
@@ -767,6 +859,330 @@ def _render_contacts_html(sender: EmailSender) -> str:
 
 
 # =====================================================================
+# Order lifecycle: created + generic status change
+# =====================================================================
+
+
+# Человеко-читаемые подписи для статусов заявки. Хранятся здесь, а не
+# рядом с `OrderStatus`, чтобы не тащить `enum` в шаблоны и оставить
+# enum строго техническим.
+_ORDER_STATUS_LABELS: dict[str, str] = {
+    "new": "Новая",
+    "processing": "В обработке",
+    "awaiting_payment": "Ожидает оплаты",
+    "payment_review": "Проверка оплаты",
+    "invoiced": "Выставлен счёт",
+    "paid": "Оплачена",
+    "shipped": "Собрана и готова к выдаче",
+    "completed": "Завершена",
+    "cancelled": "Отменена",
+}
+
+
+def order_status_label(status: str) -> str:
+    """Возвращает человеко-читаемую подпись статуса (рус.)."""
+    return _ORDER_STATUS_LABELS.get(status, status)
+
+
+def render_order_created_email(
+    *,
+    order_number: str,
+    total: str,
+    currency: str,
+    sender: EmailSender = EmailSender(),
+    customer_name: str | None = None,
+) -> tuple[str, str]:
+    """Письмо клиенту: «Заявка создана, ожидает подтверждения менеджером».
+
+    Отправляется сразу после успешного создания заявки. Содержит номер
+    заявки, итоговую сумму и пояснение, что дальше — менеджер свяжется
+    и одобрит/отклонит заявку.
+    """
+    company = sender.company_name or "CANDWAX"
+    greeting_suffix = f", {customer_name.strip()}" if customer_name and customer_name.strip() else ""
+
+    plain = (
+        f"Здравствуйте{greeting_suffix}!\n"
+        f"\n"
+        f"Спасибо за заявку №{order_number} — мы её получили.\n"
+        f"Сумма заявки: {total} {currency}.\n"
+        f"\n"
+        f"Менеджер проверит наличие на складе и подтвердит заявку. "
+        f"После этого вы получите письмо с реквизитами для оплаты.\n"
+        f"\n"
+        f"Текущий статус: «Новая» — ожидает подтверждения.\n"
+        f"\n"
+        f"---\n"
+        f"С уважением, команда {company}\n"
+    )
+
+    safe_order = html.escape(order_number)
+    safe_company = html.escape(company)
+    safe_greeting = html.escape(greeting_suffix)
+    safe_total = html.escape(total)
+    safe_currency = html.escape(currency)
+    subject = f"Заявка №{order_number} принята"
+    safe_subject = html.escape(subject)
+    preheader = html.escape(
+        f"Заявка №{order_number} ожидает подтверждения менеджером"
+    )
+    contacts_html = _render_contacts_html(sender)
+
+    html_body = f"""\
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{safe_subject}</title>
+</head>
+<body style="margin:0;padding:0;background:{_COLOR_BG};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:{_COLOR_TEXT};-webkit-font-smoothing:antialiased;">
+  <div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:{_COLOR_BG};mso-hide:all;">
+    {preheader}
+  </div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{_COLOR_BG};padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:{_COLOR_CARD};border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(45,37,24,0.08);">
+          <tr>
+            <td style="background:{_COLOR_HEADER};padding:24px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="color:{_COLOR_HEADER_TEXT};font-size:17px;font-weight:600;letter-spacing:0.3px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                    {safe_company}
+                  </td>
+                  <td align="right" style="color:{_COLOR_HEADER_MUTED};font-size:13px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                    Заявка №{safe_order}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 32px 12px 32px;">
+              <p style="margin:0;font-size:18px;font-weight:600;color:{_COLOR_TEXT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                Здравствуйте{safe_greeting}!
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 24px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#edf4fb;border-radius:8px;border:1px solid #b9d4ed;">
+                <tr>
+                  <td style="padding:20px 24px;">
+                    <div style="font-size:18px;font-weight:700;color:#1f5a8e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                      &#10003; Заявка №{safe_order} принята
+                    </div>
+                    <div style="margin-top:6px;font-size:14px;font-weight:500;color:{_COLOR_MUTED};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                      Ожидает подтверждения менеджером
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 32px 24px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#faf7f2;border-radius:8px;border:1px solid {_COLOR_DIVIDER};">
+                <tr>
+                  <td style="padding:18px 22px;">
+                    <div style="font-size:13px;color:{_COLOR_MUTED};text-transform:uppercase;letter-spacing:0.5px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                      Сумма заявки
+                    </div>
+                    <div style="margin-top:4px;font-size:24px;font-weight:700;color:{_COLOR_TEXT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                      {safe_total} {safe_currency}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 32px 24px 32px;">
+              <p style="margin:0;font-size:16px;font-weight:500;line-height:1.7;color:{_COLOR_TEXT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                Менеджер проверит наличие на складе и подтвердит заявку.
+                После этого вы получите письмо с реквизитами для оплаты.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 32px;">
+              <div style="height:1px;background:{_COLOR_DIVIDER};line-height:1px;font-size:0;">&nbsp;</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 32px 32px 32px;">
+              <p style="margin:0;font-size:15px;font-weight:500;color:{_COLOR_TEXT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                С уважением,<br />
+                <strong>команда {safe_company}</strong>
+              </p>
+              {contacts_html}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+    return plain, html_body
+
+
+def render_order_status_changed_email(
+    *,
+    order_number: str,
+    new_status: str,
+    comment: str | None = None,
+    sender: EmailSender = EmailSender(),
+    customer_name: str | None = None,
+) -> tuple[str, str]:
+    """Универсальное письмо клиенту об изменении статуса заявки.
+
+    Используется для статусов, у которых нет специализированного письма
+    (paid, payment_review, processing, completed и пр.). Approve/reject/
+    mark-ready отправляют свои собственные шаблоны и НЕ должны звать
+    эту функцию — иначе клиент получит два письма на одно событие.
+    """
+    company = sender.company_name or "CANDWAX"
+    greeting_suffix = f", {customer_name.strip()}" if customer_name and customer_name.strip() else ""
+    status_label = order_status_label(new_status)
+
+    plain_lines = [
+        f"Здравствуйте{greeting_suffix}!",
+        "",
+        f"Статус заявки №{order_number} изменён.",
+        f"Новый статус: «{status_label}».",
+    ]
+    if comment and comment.strip():
+        plain_lines.extend(["", f"Комментарий: {comment.strip()}"])
+    plain_lines.extend([
+        "",
+        "Подробности доступны в личном кабинете.",
+        "",
+        "---",
+        f"С уважением, команда {company}",
+        "",
+    ])
+    plain = "\n".join(plain_lines)
+
+    safe_order = html.escape(order_number)
+    safe_company = html.escape(company)
+    safe_greeting = html.escape(greeting_suffix)
+    safe_status = html.escape(status_label)
+    subject = f"Заявка №{order_number}: {status_label}"
+    safe_subject = html.escape(subject)
+    preheader = html.escape(f"Новый статус заявки: {status_label}")
+    contacts_html = _render_contacts_html(sender)
+
+    comment_block = ""
+    if comment and comment.strip():
+        safe_comment = html.escape(comment.strip())
+        comment_block = f"""\
+          <tr>
+            <td style="padding:0 32px 24px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#fafaf9;border-radius:8px;border:1px solid {_COLOR_DIVIDER};">
+                <tr>
+                  <td style="padding:16px 20px;">
+                    <div style="font-size:13px;font-weight:600;color:{_COLOR_MUTED};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                      Комментарий
+                    </div>
+                    <div style="font-size:15px;font-weight:500;line-height:1.6;color:{_COLOR_TEXT};white-space:pre-wrap;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">{safe_comment}</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+"""
+
+    html_body = f"""\
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{safe_subject}</title>
+</head>
+<body style="margin:0;padding:0;background:{_COLOR_BG};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:{_COLOR_TEXT};-webkit-font-smoothing:antialiased;">
+  <div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:{_COLOR_BG};mso-hide:all;">
+    {preheader}
+  </div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{_COLOR_BG};padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:{_COLOR_CARD};border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(45,37,24,0.08);">
+          <tr>
+            <td style="background:{_COLOR_HEADER};padding:24px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="color:{_COLOR_HEADER_TEXT};font-size:17px;font-weight:600;letter-spacing:0.3px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                    {safe_company}
+                  </td>
+                  <td align="right" style="color:{_COLOR_HEADER_MUTED};font-size:13px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                    Заявка №{safe_order}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 32px 12px 32px;">
+              <p style="margin:0;font-size:18px;font-weight:600;color:{_COLOR_TEXT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                Здравствуйте{safe_greeting}!
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 24px 32px;">
+              <p style="margin:0 0 12px 0;font-size:16px;font-weight:500;line-height:1.7;color:{_COLOR_TEXT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                Статус заявки <strong>№{safe_order}</strong> изменён.
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#faf7f2;border-radius:8px;border:1px solid {_COLOR_DIVIDER};">
+                <tr>
+                  <td style="padding:18px 22px;">
+                    <div style="font-size:13px;color:{_COLOR_MUTED};text-transform:uppercase;letter-spacing:0.5px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                      Новый статус
+                    </div>
+                    <div style="margin-top:4px;font-size:22px;font-weight:700;color:{_COLOR_TEXT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                      {safe_status}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+{comment_block}          <tr>
+            <td style="padding:0 32px 24px 32px;">
+              <p style="margin:0;font-size:15px;font-weight:500;line-height:1.65;color:{_COLOR_MUTED};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                Подробности доступны в личном кабинете.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 32px;">
+              <div style="height:1px;background:{_COLOR_DIVIDER};line-height:1px;font-size:0;">&nbsp;</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 32px 32px 32px;">
+              <p style="margin:0;font-size:15px;font-weight:500;color:{_COLOR_TEXT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                С уважением,<br />
+                <strong>команда {safe_company}</strong>
+              </p>
+              {contacts_html}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+    return plain, html_body
+
+
+# =====================================================================
 # Password reset template
 # =====================================================================
 
@@ -786,7 +1202,7 @@ def render_password_reset_email(
 
     Возвращает `(plain_text, html)` для `multipart/alternative`.
     """
-    company = sender.company_name or "Candle Wholesale"
+    company = sender.company_name or "CANDWAX"
     safe_company = html.escape(company)
     safe_url = html.escape(reset_url, quote=True)
     safe_ttl = html.escape(str(ttl_minutes))

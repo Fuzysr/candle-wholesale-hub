@@ -331,7 +331,7 @@ const QuickOrder = () => {
       dynamically instead of assuming row 1.
     */
     const aoa: (string | number)[][] = [
-      ["Бланк быстрого заказа — Candles Wholesale", "", ""],
+      ["Бланк быстрого заказа — CANDWAX", "", ""],
       [
         "Заполните «Артикул» и «Коробок», сохраните файл и загрузите его обратно на странице «Быстрый заказ».",
         "",
@@ -400,7 +400,7 @@ const QuickOrder = () => {
     const dateStr = now.toLocaleDateString("ru-RU");
 
     const aoa: (string | number)[][] = [
-      [`Заказ — Candles Wholesale · ${dateStr}`, "", "", "", "", "", "", ""],
+      [`Заказ — CANDWAX · ${dateStr}`, "", "", "", "", "", "", ""],
       [
         `Позиций: ${validRows.length} · Коробок: ${totalBoxes}${
           discount > 0 ? ` · Скидка: ${discount}%` : ""

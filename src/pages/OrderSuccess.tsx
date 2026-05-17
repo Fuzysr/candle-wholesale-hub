@@ -1,20 +1,34 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, useLocation, Link } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { ordersApi } from "@/lib/api";
+import type { OrderOut } from "@/lib/api/types";
 import { formatMoney } from "@/lib/format";
+import { useAuth } from "@/hooks/useAuth";
+
+type LocState = { order?: OrderOut; guest?: boolean } | null;
 
 const OrderSuccess = () => {
   const { id } = useParams();
+  const location = useLocation();
+  const state = (location.state as LocState) ?? null;
+  const { user } = useAuth();
 
-  const { data: order } = useQuery({
+  // Гость: бэкенд авто-создал ему юзера, но в браузере токена нет —
+  // GET /orders/{id} вернёт 401. Используем заказ, переданный из Checkout
+  // через router state, и не делаем сетевой запрос.
+  const isGuest = !!state?.guest || !user;
+
+  const { data: fetchedOrder } = useQuery({
     queryKey: ["order", id],
     queryFn: () => ordersApi.getById(id!),
-    enabled: !!id,
+    enabled: !!id && !isGuest && !state?.order,
     retry: false,
   });
+
+  const order: OrderOut | undefined = state?.order ?? fetchedOrder;
 
   return (
     <PublicLayout>
@@ -35,9 +49,20 @@ const OrderSuccess = () => {
         <p className="mt-6 text-sm text-muted-foreground">
           Менеджер подтвердит наличие и пришлёт счёт с реквизитами в течение 2 часов в рабочее время.
         </p>
+        {isGuest && (
+          <div className="mt-4 rounded-md border border-amber/30 bg-amber/5 p-4 text-left text-xs text-foreground/80">
+            <p className="font-semibold">Хотите видеть статус заказа и историю заявок?</p>
+            <p className="mt-1">
+              Для этого e-mail{order?.email ? <> <span className="font-medium">{order.email}</span></> : null} мы создали аккаунт.
+              Чтобы войти в личный кабинет, нажмите{" "}
+              <Link to="/auth?forgot=1" className="underline">«Забыли пароль?»</Link>{" "}
+              на странице входа и задайте свой пароль.
+            </p>
+          </div>
+        )}
         <div className="mt-8 flex justify-center gap-3">
-          <Button asChild><Link to="/account/orders">Мои заявки</Link></Button>
-          <Button asChild variant="outline"><Link to="/catalog">В каталог</Link></Button>
+          {!isGuest && <Button asChild><Link to="/account/orders">Мои заявки</Link></Button>}
+          <Button asChild variant={isGuest ? "default" : "outline"}><Link to="/catalog">В каталог</Link></Button>
         </div>
       </div>
     </PublicLayout>

@@ -32,6 +32,13 @@ type CartState = {
   syncDiscounts: (map: Record<string, CartVolumeDiscount[]>) => void;
   /** Sync stock + discounts from API. Variants missing from API get stockBoxes=0. */
   syncFromApi: (available: Record<string, { stockBoxes: number; discounts: CartVolumeDiscount[] }>) => void;
+  /**
+   * Восстановить позицию к указанному количеству коробок (для undo после
+   * случайного добавления). Если `prevBoxes <= 0` — позиция удаляется
+   * полностью. В отличие от setBoxes, разрешает значения вне диапазона
+   * [1, stockBoxes] (нужно для отката новой позиции в "не существует").
+   */
+  restoreItem: (variantId: string, prevBoxes: number) => void;
 };
 
 export const useCartStore = create<CartState>()(
@@ -90,6 +97,17 @@ export const useCartStore = create<CartState>()(
             };
           }),
         }),
+      restoreItem: (variantId, prevBoxes) => {
+        if (prevBoxes <= 0) {
+          set({ items: get().items.filter((i) => i.variantId !== variantId) });
+        } else {
+          set({
+            items: get().items.map((i) =>
+              i.variantId === variantId ? { ...i, boxes: prevBoxes } : i,
+            ),
+          });
+        }
+      },
     }),
     { name: "wc-cart" },
   ),

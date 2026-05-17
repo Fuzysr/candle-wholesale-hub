@@ -27,6 +27,13 @@ export type CatalogFilterState = {
   shapeIds: string[];
   priceMin: string;
   priceMax: string;
+  // Габариты товара (мм)
+  lengthMin: string;
+  lengthMax: string;
+  widthMin: string;
+  widthMax: string;
+  heightMin: string;
+  heightMax: string;
   sort: SortKey;
   view: ViewMode;
 };
@@ -80,6 +87,12 @@ export const DEFAULT_FILTER_STATE: CatalogFilterState = {
   shapeIds: [],
   priceMin: "",
   priceMax: "",
+  lengthMin: "",
+  lengthMax: "",
+  widthMin: "",
+  widthMax: "",
+  heightMin: "",
+  heightMax: "",
   sort: "newest",
   view: "grid",
 };

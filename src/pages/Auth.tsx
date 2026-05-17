@@ -24,7 +24,12 @@ const Auth = () => {
   const queryClient = useQueryClient();
   const [params] = useSearchParams();
   const next = params.get("next") || "/account";
-  const [mode, setMode] = useState<Mode>("register");
+  const initialMode: Mode = params.get("forgot")
+    ? "forgot"
+    : params.get("login")
+      ? "login"
+      : "register";
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
