@@ -1,12 +1,22 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func, text
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import (
+    Boolean,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+from app.models.types import GUID, TZDateTime
 
 if TYPE_CHECKING:
     from app.models.stock import StockMovement
@@ -15,20 +25,20 @@ if TYPE_CHECKING:
 class Category(Base):
     __tablename__ = "categories"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    name_ru: Mapped[str] = mapped_column(String, nullable=False)
-    name_en: Mapped[str] = mapped_column(String, nullable=False)
+    id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
+    slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name_ru: Mapped[str] = mapped_column(String(255), nullable=False)
+    name_en: Mapped[str] = mapped_column(String(255), nullable=False)
     icon: Mapped[str | None] = mapped_column(String(64), nullable=True)
     parent_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("categories.id", ondelete="SET NULL"),
         nullable=True,
     )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+        TZDateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     parent: Mapped["Category | None"] = relationship(remote_side="Category.id", back_populates="children")
@@ -39,62 +49,62 @@ class Category(Base):
 class Material(Base):
     __tablename__ = "materials"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    name_ru: Mapped[str] = mapped_column(String, nullable=False)
-    name_en: Mapped[str] = mapped_column(String, nullable=False)
+    id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
+    slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name_ru: Mapped[str] = mapped_column(String(255), nullable=False)
+    name_en: Mapped[str] = mapped_column(String(255), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, server_default=func.now(), nullable=False)
 
 
 class Scent(Base):
     __tablename__ = "scents"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    name_ru: Mapped[str] = mapped_column(String, nullable=False)
-    name_en: Mapped[str] = mapped_column(String, nullable=False)
+    id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
+    slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name_ru: Mapped[str] = mapped_column(String(255), nullable=False)
+    name_en: Mapped[str] = mapped_column(String(255), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, server_default=func.now(), nullable=False)
 
 
 class Shape(Base):
     __tablename__ = "shapes"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    name_ru: Mapped[str] = mapped_column(String, nullable=False)
-    name_en: Mapped[str] = mapped_column(String, nullable=False)
+    id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
+    slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name_ru: Mapped[str] = mapped_column(String(255), nullable=False)
+    name_en: Mapped[str] = mapped_column(String(255), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, server_default=func.now(), nullable=False)
 
 
 class Product(Base):
     __tablename__ = "products"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
+    slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     category_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+        GUID(), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
     )
     material_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("materials.id", ondelete="SET NULL"), nullable=True
+        GUID(), ForeignKey("materials.id", ondelete="SET NULL"), nullable=True
     )
     scent_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("scents.id", ondelete="SET NULL"), nullable=True
+        GUID(), ForeignKey("scents.id", ondelete="SET NULL"), nullable=True
     )
     shape_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("shapes.id", ondelete="SET NULL"), nullable=True
+        GUID(), ForeignKey("shapes.id", ondelete="SET NULL"), nullable=True
     )
-    name_ru: Mapped[str] = mapped_column(String, nullable=False)
-    name_en: Mapped[str] = mapped_column(String, nullable=False)
+    name_ru: Mapped[str] = mapped_column(String(255), nullable=False)
+    name_en: Mapped[str] = mapped_column(String(255), nullable=False)
     description_ru: Mapped[str | None] = mapped_column(Text, nullable=True)
     description_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+        TZDateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     category: Mapped["Category | None"] = relationship(back_populates="products")
@@ -115,16 +125,16 @@ class Product(Base):
 class ProductVariant(Base):
     __tablename__ = "product_variants"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
     product_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("products.id", ondelete="CASCADE"),
         nullable=False,
     )
-    sku: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    size: Mapped[str | None] = mapped_column(String, nullable=True)
-    color: Mapped[str | None] = mapped_column(String, nullable=True)
-    shape: Mapped[str | None] = mapped_column(String, nullable=True)
+    sku: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    size: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    color: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    shape: Mapped[str | None] = mapped_column(String(100), nullable=True)
     pieces_per_box: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     price_per_piece_rub: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     price_per_piece_usd: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
@@ -144,11 +154,11 @@ class ProductVariant(Base):
     stock_boxes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     reserved_boxes: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    external_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+        TZDateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     product: Mapped["Product"] = relationship(back_populates="variants")
@@ -171,16 +181,16 @@ class VolumeDiscount(Base):
         UniqueConstraint("variant_id", "min_boxes", name="uq_volume_discount_variant_min"),
     )
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
     variant_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("product_variants.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     min_boxes: Mapped[int] = mapped_column(Integer, nullable=False)
     discount_percent: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, server_default=func.now(), nullable=False)
 
     variant: Mapped["ProductVariant"] = relationship(back_populates="volume_discounts")
 
@@ -188,16 +198,16 @@ class VolumeDiscount(Base):
 class ProductImage(Base):
     __tablename__ = "product_images"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
     product_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("products.id", ondelete="CASCADE"),
         nullable=False,
     )
     url: Mapped[str] = mapped_column(Text, nullable=False)
     alt: Mapped[str | None] = mapped_column(Text, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, server_default=func.now(), nullable=False)
 
     product: Mapped["Product"] = relationship(back_populates="images")
 
@@ -205,15 +215,15 @@ class ProductImage(Base):
 class VariantImage(Base):
     __tablename__ = "variant_images"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
     variant_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("product_variants.id", ondelete="CASCADE"),
         nullable=False,
     )
     url: Mapped[str] = mapped_column(Text, nullable=False)
     alt: Mapped[str | None] = mapped_column(Text, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, server_default=func.now(), nullable=False)
 
     variant: Mapped["ProductVariant"] = relationship(back_populates="images")

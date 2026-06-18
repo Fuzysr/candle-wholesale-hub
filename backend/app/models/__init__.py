@@ -18,7 +18,7 @@ from app.models.catalog import (
 from app.models.company import CompanySettings
 from app.models.contact import ContactMessage
 from app.models.enums import AppRole, OrderStatus, StockMovementType
-from app.models.order import Order, OrderItem, OrderStatusHistory
+from app.models.order import Order, OrderItem, OrderNumberCounter, OrderStatusHistory
 from app.models.password_reset import PasswordReset
 from app.models.refresh_token import RefreshToken
 from app.models.stock import DiscountTier, StockMovement
@@ -40,6 +40,7 @@ __all__ = [
     "Order",
     "OrderItem",
     "OrderStatusHistory",
+    "OrderNumberCounter",
     "DiscountTier",
     "StockMovement",
     "VolumeDiscount",

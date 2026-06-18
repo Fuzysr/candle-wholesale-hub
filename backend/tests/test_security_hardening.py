@@ -12,7 +12,6 @@ Covers:
 from __future__ import annotations
 
 import hashlib
-import logging
 
 import pytest
 
@@ -225,8 +224,8 @@ async def test_password_reset_request_does_not_log_raw_token(
     """
     # Force the «SMTP not configured» branch so we exercise the WARNING
     # logger we want to inspect.
-    from app.core.config import settings as app_settings
     from app.api.routers import auth as auth_module
+    from app.core.config import settings as app_settings
 
     monkeypatch.setattr(app_settings, "smtp_host", "")
 
@@ -539,8 +538,8 @@ async def test_upload_rejects_html_disguised_as_png(client, admin_token):
     """End-to-end: POST a `<html>...` body with `Content-Type: image/png`
     and confirm the endpoint refuses it. This is the actual attack we're
     defending against — without magic-byte validation this would land
-    a `*.png` object in a public-read bucket and execute as HTML when
-    served with a sniffing browser.
+    a `*.png` file in the publicly-served uploads dir and execute as HTML
+    when served to a sniffing browser.
     """
     files = {
         "file": (
@@ -595,13 +594,10 @@ async def test_upload_rejects_disallowed_format_even_with_correct_content_type(
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_upload_accepts_real_png(client, admin_token, minio_reachable):
-    """Happy path: a real PNG body with the correct Content-Type lands
-    in the bucket and the endpoint returns its public URL.
+async def test_upload_accepts_real_png(client, admin_token):
+    """Happy path: a real PNG body with the correct Content-Type is saved
+    to local storage and the endpoint returns its public URL.
     """
-    if not minio_reachable:
-        pytest.skip("MinIO not reachable — upload happy-path needs real S3")
-
     files = {"file": ("ok.png", _MINIMAL_PNG, "image/png")}
     resp = await client.post(
         "/admin/uploads/product-images",
@@ -609,7 +605,17 @@ async def test_upload_accepts_real_png(client, admin_token, minio_reachable):
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["url"].endswith(".png") or "png" in resp.json()["url"]
+    url = resp.json()["url"]
+    assert url.endswith(".png")
+    assert "/uploads/product-images/" in url
+
+    # The file must actually exist on disk and round-trip byte-for-byte.
+    from app.core import storage
+    from app.core.config import settings as app_settings
+
+    key = url.rsplit("/", 1)[-1]
+    saved = storage.local_path(app_settings.storage_category_products, key)
+    assert saved.read_bytes() == _MINIMAL_PNG
 
 
 # ---------------------------------------------------------------------------

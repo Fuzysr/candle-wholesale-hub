@@ -16,25 +16,25 @@
   недостижимым.
 """
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, func, text
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
+from app.models.types import GUID, TZDateTime
 
 
 class PasswordReset(Base):
     __tablename__ = "password_resets"
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=text("gen_random_uuid()"),
+        default=uuid4,
     )
     user_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -43,7 +43,7 @@ class PasswordReset(Base):
     # 1) не делать лишний JOIN в хот-пути `reset-confirm`;
     # 2) в аудит-логах было видно, на какой адрес уходила ссылка —
     #    даже если пользователь потом сменит email.
-    email: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Хранится SHA-256(raw_token).hex(). Длина всегда 64 символа.
     # Уникальный индекс: одного токена в базе быть не может,
@@ -53,5 +53,5 @@ class PasswordReset(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        TZDateTime, server_default=func.now(), nullable=False
     )

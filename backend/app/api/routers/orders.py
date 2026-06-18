@@ -4,7 +4,8 @@ Business rules mirror what the old Supabase flow did on the client:
 
 * server-side recomputation of `total_boxes`, `subtotal`, `discount_percent`,
   `discount_amount`, `total` from the incoming items + discount tiers
-* `order_number` is auto-assigned by the DB trigger (`generate_order_number`)
+* `order_number` is reserved application-side from a singleton counter row
+  under a `SELECT … FOR UPDATE` lock (see `_next_order_number`)
 * status changes by admins are logged into `order_status_history`
 
 Payment flow (MVP):
@@ -30,7 +31,7 @@ import logging
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,7 +63,7 @@ from app.core.order_state_machine import assert_transition_allowed
 from app.models.catalog import ProductVariant, VolumeDiscount
 from app.models.company import CompanySettings
 from app.models.enums import AppRole, OrderStatus, StockMovementType
-from app.models.order import Order, OrderItem, OrderStatusHistory
+from app.models.order import Order, OrderItem, OrderNumberCounter, OrderStatusHistory
 from app.models.stock import DiscountTier, StockMovement
 from app.models.user import User
 from app.schemas.order import (
@@ -76,6 +77,39 @@ from app.schemas.order import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["orders"])
+
+# Singleton row id + first number for the order-number counter. Mirrors the old
+# PostgreSQL sequence (`CREATE SEQUENCE order_number_seq START 10000`).
+_ORDER_COUNTER_ID = 1
+_ORDER_NUMBER_START = 10000
+
+
+async def _next_order_number(session: AsyncSession) -> str:
+    """Reserve the next sequential order number inside the current transaction.
+
+    Replaces the old PostgreSQL trigger + sequence. The singleton counter row
+    is locked with ``SELECT … FOR UPDATE`` so two concurrent checkouts can't be
+    handed the same number; this serialises order creation, which is fine at our
+    volume. Must be called inside an open transaction that later commits — the
+    lock (and the reserved value) are released/persisted with that commit.
+    """
+    counter = (
+        await session.execute(
+            select(OrderNumberCounter)
+            .where(OrderNumberCounter.id == _ORDER_COUNTER_ID)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if counter is None:
+        # Safety net for a DB that wasn't seeded (the migration/bootstrap seed
+        # the row). First-ever order creates it; the PK makes a concurrent
+        # double-insert fail loudly rather than duplicate a number.
+        counter = OrderNumberCounter(id=_ORDER_COUNTER_ID, next_value=_ORDER_NUMBER_START)
+        session.add(counter)
+        await session.flush()
+    value = counter.next_value
+    counter.next_value = value + 1
+    return f"CW-{value}"
 
 
 def _q(value: Decimal | float | int | str) -> Decimal:
@@ -233,36 +267,37 @@ async def _load_order(session: AsyncSession, order_id: UUID) -> Order | None:
 
 
 # ---------------------------------------------------------------------------
-# Receipt URL helpers (#receipt-private-bucket)
+# Receipt URL helpers (#receipt-private-storage)
 # ---------------------------------------------------------------------------
 #
-# Receipts now live in a **private** S3 bucket. The Order ORM model carries
-# the canonical `payment_receipt_key`; a presigned GET URL is minted on every
-# response with a short TTL so leaks via referrer / proxy logs are quickly
-# invalidated. `payment_receipt_url` is kept on the model only for legacy
-# rows created before the bucket was made private.
+# Receipts live in a **private** local-storage category (never served by
+# StaticFiles). The Order ORM model carries the canonical
+# `payment_receipt_key`; on every response we mint a short-lived **signed**
+# URL pointing at the authenticated `/orders/{id}/receipt-file` endpoint, so
+# the frontend can drop it straight into an `<img src>` / `<a href>` (which
+# carry no auth header) yet leaked links expire quickly. `payment_receipt_url`
+# is kept on the model only for legacy rows that stored a public URL directly.
 
 
 def _receipt_key_for(order: Order) -> str | None:
-    """Return the S3 object key for ``order``'s receipt, if any.
+    """Return the storage key for ``order``'s receipt, if any.
 
     Falls back to parsing the legacy ``payment_receipt_url`` so receipts
-    uploaded before the migration are still serveable through a presigned
-    URL after the bucket policy has been stripped.
+    uploaded before the migration are still serveable.
     """
     if order.payment_receipt_key:
         return order.payment_receipt_key
     legacy = order.payment_receipt_url
     if not legacy:
         return None
-    parsed = storage.parse_s3_url(
-        legacy, buckets=[app_settings.s3_bucket_receipts]
+    parsed = storage.parse_public_url(
+        legacy, categories=[app_settings.storage_category_receipts]
     )
     return parsed[1] if parsed else None
 
 
 async def _attach_presigned_receipt(order: Order) -> None:
-    """Replace ``order.payment_receipt_url`` in place with a presigned URL.
+    """Replace ``order.payment_receipt_url`` in place with a signed URL.
 
     The mutation is intentionally on the ORM instance: FastAPI's response
     serializer reads the attribute via `from_attributes=True`. Because we
@@ -273,12 +308,10 @@ async def _attach_presigned_receipt(order: Order) -> None:
     if not key:
         # Either no receipt at all, or a legacy URL we can no longer
         # match — clear the field so the frontend doesn't render a
-        # broken/anonymous link.
+        # broken link.
         order.payment_receipt_url = None
         return
-    order.payment_receipt_url = await storage.presigned_get_url(
-        app_settings.s3_bucket_receipts, key
-    )
+    order.payment_receipt_url = storage.signed_receipt_url(str(order.id))
 
 
 async def _attach_presigned_receipts(orders: list[Order]) -> None:
@@ -453,6 +486,7 @@ async def create_order(
         total = _q(max(Decimal("0"), total - global_discount))
 
     order = Order(
+        order_number=await _next_order_number(session),
         user_id=user.id,
         currency=payload.currency,
         subtotal=subtotal,
@@ -1106,8 +1140,9 @@ async def upload_payment_receipt(
 ) -> ReceiptUploadOut:
     """Клиент загружает скриншот/фото чека оплаты.
 
-    Статус заявки меняется на `payment_review`. Файл сохраняется в S3
-    (bucket `payment-receipts`). Админам отправляется email-уведомление.
+    Статус заявки меняется на `payment_review`. Файл сохраняется в приватную
+    категорию локального хранилища `payment-receipts` (не отдаётся статикой).
+    Админам отправляется email-уведомление.
 
     Ограничения безопасности:
     * Только владелец заявки может загружать чек
@@ -1171,10 +1206,11 @@ async def upload_payment_receipt(
     previous_key = _receipt_key_for(order)
 
     key = storage.generate_key(file.filename or "receipt")
-    # **Private** upload: NO public-read policy, browsers must use the
-    # presigned URL we mint on the response and on every subsequent GET.
+    # **Private** upload: stored under the receipts category, which is NOT
+    # served by StaticFiles. Browsers must use the signed receipt URL we mint
+    # on the response and on every subsequent GET.
     await storage.upload_bytes(
-        app_settings.s3_bucket_receipts,
+        app_settings.storage_category_receipts,
         key,
         body,
         content_type,
@@ -1201,7 +1237,7 @@ async def upload_payment_receipt(
         # accumulate orphaned receipts on re-uploads.
         try:
             await storage.delete_object(
-                app_settings.s3_bucket_receipts, previous_key
+                app_settings.storage_category_receipts, previous_key
             )
         except Exception:
             logger.exception(
@@ -1248,12 +1284,65 @@ async def upload_payment_receipt(
                 customer_name=order.contact_name,
             )
 
-    presigned = await storage.presigned_get_url(
-        app_settings.s3_bucket_receipts, key
-    )
     return ReceiptUploadOut(
-        receipt_url=presigned,
+        receipt_url=storage.signed_receipt_url(str(order.id)),
         new_status=OrderStatus.payment_review.value,
+    )
+
+
+# ========================================================================
+# Serve a payment receipt file (signed, capability-based)
+# ========================================================================
+
+# Map the stored file extension back to a content type for the response. Only
+# the formats the upload endpoint accepts can ever appear here.
+_RECEIPT_CONTENT_TYPES = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+    "avif": "image/avif",
+    "pdf": "application/pdf",
+}
+
+
+@router.get("/orders/{order_id}/receipt-file")
+async def get_receipt_file(
+    order_id: UUID,
+    exp: int,
+    sig: str,
+    session: AsyncSession = Depends(db_session),
+) -> Response:
+    """Serve a payment receipt to anyone holding a valid signed URL.
+
+    Authentication is the signed capability token in the query string (see
+    ``storage.signed_receipt_url``), mirroring the old S3 presigned URL: the
+    browser loads this as a plain ``<img src>`` / ``<a href>`` and sends no
+    Authorization header, so the token *is* the access control. The token is
+    bound to this order id and a short expiry; an expired or tampered token is
+    rejected with 403.
+    """
+    if not storage.verify_receipt_token(str(order_id), exp, sig):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="invalid or expired link")
+
+    order = await session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="order not found")
+
+    key = _receipt_key_for(order)
+    if not key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no receipt on file")
+
+    data = await storage.read_object(app_settings.storage_category_receipts, key)
+    if data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="receipt file missing")
+
+    ext = key.rsplit(".", 1)[-1].lower() if "." in key else ""
+    content_type = _RECEIPT_CONTENT_TYPES.get(ext, "application/octet-stream")
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={"Cache-Control": "private, max-age=0, no-store"},
     )
 
 

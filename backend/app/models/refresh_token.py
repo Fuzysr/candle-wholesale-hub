@@ -35,11 +35,11 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, String, func, text
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
+from app.models.types import GUID, TZDateTime
 
 
 class RefreshToken(Base):
@@ -50,7 +50,7 @@ class RefreshToken(Base):
     jti: Mapped[str] = mapped_column(String(32), primary_key=True)
 
     user_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -60,7 +60,7 @@ class RefreshToken(Base):
     # rotation-обмены), делят один family_id. При обнаружении reuse
     # отзывается вся family — это и есть смысл этой колонки.
     family_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=False, index=True
+        GUID(), nullable=False, index=True
     )
 
     # Цепочка ротаций. На login parent_jti=NULL; на каждом /refresh
@@ -71,13 +71,13 @@ class RefreshToken(Base):
     replaced_by_jti: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     issued_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        TZDateTime, server_default=func.now(), nullable=False
     )
     expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
+        TZDateTime, nullable=False
     )
     revoked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        TZDateTime, nullable=True
     )
 
     # Best-effort аудит. NOT used for any auth decision.

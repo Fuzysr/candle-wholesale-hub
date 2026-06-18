@@ -17,3 +17,6 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
+
+# Local file storage (uploaded images / receipts)
+/storage/

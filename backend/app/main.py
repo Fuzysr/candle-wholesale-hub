@@ -94,6 +94,26 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded)
     app.add_middleware(SlowAPIMiddleware)
 
+    # Serve PUBLIC uploads (product images, company assets) as static files.
+    # Receipts are deliberately NOT mounted here — they live in a sibling
+    # category dir under the same root and are only reachable through the
+    # authenticated `/orders/{id}/receipt-file` endpoint. We mount each public
+    # category individually (rather than the whole storage root) so a future
+    # private category can never accidentally leak via StaticFiles.
+    import os
+
+    from fastapi.staticfiles import StaticFiles
+
+    storage_root = settings.local_storage_root
+    for category in (settings.storage_category_products, settings.storage_category_company):
+        category_dir = os.path.join(storage_root, category)
+        os.makedirs(category_dir, exist_ok=True)
+        app.mount(
+            f"/uploads/{category}",
+            StaticFiles(directory=category_dir),
+            name=f"uploads-{category}",
+        )
+
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:
         return {"status": "ok", "env": settings.app_env}

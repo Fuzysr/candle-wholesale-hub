@@ -3,8 +3,22 @@ import asyncio
 from uuid import UUID
 
 import pytest
+from sqlalchemy.engine import make_url
+
+from app.core.config import settings
 
 pytestmark = pytest.mark.asyncio
+
+# Row-level locking (`SELECT ... FOR UPDATE`) is what makes concurrent
+# checkouts safe. SQLite has no row locks (it serialises writes with a
+# database-level lock and raises "database is locked" instead), so the
+# concurrency stress test can only be validated on a real locking backend
+# such as MySQL/InnoDB.
+_DIALECT = make_url(settings.database_url).get_backend_name()
+_requires_row_locks = pytest.mark.skipif(
+    _DIALECT == "sqlite",
+    reason="SELECT ... FOR UPDATE row locking unsupported on SQLite; run on MySQL",
+)
 
 
 async def _seed_product_and_variant(client, admin_token, auth_headers):
@@ -197,6 +211,7 @@ async def test_admin_can_update_order_status_and_writes_history(
 
     # history row should have been added
     from sqlalchemy import select
+
     from app.models.order import OrderStatusHistory
 
     rows = (
@@ -370,6 +385,7 @@ async def test_mark_ready_decrements_stock_and_writes_movement(
     client, admin_token, client_token, auth_headers, session
 ):
     from sqlalchemy import select
+
     from app.models.stock import StockMovement
 
     variant_id = await _seed_product_and_variant(client, admin_token, auth_headers)
@@ -419,6 +435,7 @@ async def test_mark_ready_decrements_stock_and_writes_movement(
     assert out_rows[0].qty_boxes == -6
 
 
+@_requires_row_locks
 async def test_concurrent_orders_do_not_oversell(
     client, admin_token, client_token, auth_headers, session
 ):

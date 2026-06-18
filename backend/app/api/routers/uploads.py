@@ -7,9 +7,8 @@ endpoints which enforce:
 * type allowlist (JPEG / PNG / WebP / AVIF)
 * magic-byte sniffing — the declared `Content-Type` is **client-controlled**
   and an attacker can ship a polyglot HTML/JS file with `Content-Type:
-  image/png`. Combined with the public-read bucket policy on
-  `s3_bucket_products` / `s3_bucket_company`, that would land a stored XSS
-  one click away.
+  image/png`. Because product images / company assets are served publicly via
+  StaticFiles, that would land a stored XSS one click away.
 * `UPLOAD_MAX_BYTES` size cap (5 MB by default)
 """
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -51,7 +50,7 @@ class DeleteIn(BaseModel):
     url: str
 
 
-async def _store_image(file: UploadFile, bucket: str) -> UploadOut:
+async def _store_image(file: UploadFile, category: str) -> UploadOut:
     content_type = (file.content_type or "").lower()
     if content_type not in _ALLOWED_IMAGE_TYPES:
         raise HTTPException(
@@ -93,30 +92,30 @@ async def _store_image(file: UploadFile, bucket: str) -> UploadOut:
         )
 
     key = storage.generate_key(file.filename or "upload")
-    url = await storage.upload_bytes(bucket, key, body, detected)
+    url = await storage.upload_bytes(category, key, body, detected)
     return UploadOut(url=url)
 
 
 @router.post("/product-images", response_model=UploadOut)
 async def upload_product_image(file: UploadFile = File(...)) -> UploadOut:
-    return await _store_image(file, settings.s3_bucket_products)
+    return await _store_image(file, settings.storage_category_products)
 
 
 @router.post("/company-assets", response_model=UploadOut)
 async def upload_company_asset(file: UploadFile = File(...)) -> UploadOut:
-    return await _store_image(file, settings.s3_bucket_company)
+    return await _store_image(file, settings.storage_category_company)
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_upload(payload: DeleteIn) -> None:
-    parsed = storage.parse_s3_url(
+    parsed = storage.parse_public_url(
         payload.url,
-        buckets=[settings.s3_bucket_products, settings.s3_bucket_company],
+        categories=[settings.storage_category_products, settings.storage_category_company],
     )
     if parsed is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="url does not point at a managed bucket",
+            detail="url does not point at a managed storage category",
         )
-    bucket, key = parsed
-    await storage.delete_object(bucket, key)
+    category, key = parsed
+    await storage.delete_object(category, key)

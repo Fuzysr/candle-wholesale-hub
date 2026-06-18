@@ -6,8 +6,9 @@ Each product gets:
   * 2-3 volume-discount tiers (so the new mini-table on catalog cards shows up)
   * Material / scent / shape references resolved by slug
 
-Idempotent — uses ON CONFLICT DO UPDATE on (slug) for products and on (sku) for
-variants. Re-running is safe; existing rows are refreshed in place.
+Idempotent — upserts by (slug) for products and (sku) for variants via
+``scripts._seed_utils.upsert``. Re-running is safe; existing rows are
+refreshed in place.
 
 Run:
     docker compose exec backend python -m scripts.seed_demo_products
@@ -18,7 +19,6 @@ import asyncio
 from uuid import UUID
 
 from sqlalchemy import delete, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.database import AsyncSessionLocal
 from app.models.catalog import (
@@ -31,7 +31,7 @@ from app.models.catalog import (
     Shape,
     VolumeDiscount,
 )
-
+from scripts._seed_utils import upsert
 
 # ---------------------------------------------------------------------------
 # Reference categories (ensured if missing)
@@ -298,13 +298,13 @@ PRODUCTS: list[dict] = [
 async def ensure_categories(session) -> dict[str, UUID]:
     out: dict[str, UUID] = {}
     for c in CATEGORIES:
-        stmt = pg_insert(Category).values(**c)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["slug"],
-            set_={k: stmt.excluded[k] for k in c if k != "slug"},
-        ).returning(Category.id)
-        cid = (await session.execute(stmt)).scalar_one()
-        out[c["slug"]] = cid
+        category = await upsert(
+            session,
+            Category,
+            key={"slug": c["slug"]},
+            values={k: v for k, v in c.items() if k != "slug"},
+        )
+        out[c["slug"]] = category.id
     return out
 
 
@@ -343,12 +343,13 @@ async def seed() -> None:
                 "image_url": p["image_url"],
                 "is_published": True,
             }
-            stmt = pg_insert(Product).values(**prod_values)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["slug"],
-                set_={k: stmt.excluded[k] for k in prod_values if k != "slug"},
-            ).returning(Product.id)
-            product_id = (await session.execute(stmt)).scalar_one()
+            product = await upsert(
+                session,
+                Product,
+                key={"slug": prod_values["slug"]},
+                values={k: v for k, v in prod_values.items() if k != "slug"},
+            )
+            product_id = product.id
 
             # Refresh gallery: drop existing and re-insert in declared order.
             await session.execute(
@@ -366,13 +367,13 @@ async def seed() -> None:
 
             for v in p["variants"]:
                 discounts = v.pop("discounts", [])
-                v_values = {**v, "product_id": product_id}
-                v_stmt = pg_insert(ProductVariant).values(**v_values)
-                v_stmt = v_stmt.on_conflict_do_update(
-                    index_elements=["sku"],
-                    set_={k: v_stmt.excluded[k] for k in v_values if k not in ("sku", "product_id")},
-                ).returning(ProductVariant.id)
-                variant_id = (await session.execute(v_stmt)).scalar_one()
+                variant = await upsert(
+                    session,
+                    ProductVariant,
+                    key={"sku": v["sku"]},
+                    values={k: val for k, val in v.items() if k != "sku"} | {"product_id": product_id},
+                )
+                variant_id = variant.id
 
                 # Replace volume discounts entirely so re-runs stay clean.
                 await session.execute(

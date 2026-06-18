@@ -14,7 +14,6 @@ import secrets
 import sys
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
@@ -23,6 +22,7 @@ from app.models.catalog import Category, Product, ProductVariant
 from app.models.enums import AppRole
 from app.models.stock import DiscountTier
 from app.models.user import User
+from scripts._seed_utils import upsert
 
 CATEGORIES = [
     {"slug": "tea-lights", "name_ru": "Чайные свечи", "name_en": "Tea lights", "sort_order": 10},
@@ -138,16 +138,13 @@ async def ensure_admin() -> tuple[str, str, str]:
 
 async def seed_categories() -> None:
     async with AsyncSessionLocal() as session:
-        stmt = pg_insert(Category).values(CATEGORIES)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["slug"],
-            set_={
-                "name_ru": stmt.excluded.name_ru,
-                "name_en": stmt.excluded.name_en,
-                "sort_order": stmt.excluded.sort_order,
-            },
-        )
-        await session.execute(stmt)
+        for c in CATEGORIES:
+            await upsert(
+                session,
+                Category,
+                key={"slug": c["slug"]},
+                values={"name_ru": c["name_ru"], "name_en": c["name_en"], "sort_order": c["sort_order"]},
+            )
         await session.commit()
     print(f"[ok] {len(CATEGORIES)} categories")
 
@@ -158,43 +155,41 @@ async def seed_products() -> None:
         cat_by_slug = {slug: cid for cid, slug in result.all()}
 
         for p in PRODUCTS:
-            values = {
-                "slug": p["slug"],
-                "category_id": cat_by_slug.get(p["category_slug"]),
-                "name_ru": p["name_ru"],
-                "name_en": p["name_en"],
-                "description_ru": p.get("description_ru"),
-                "description_en": p.get("description_en"),
-                "image_url": p.get("image_url"),
-                "is_published": True,
-            }
-            stmt = pg_insert(Product).values(values)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["slug"],
-                set_={k: stmt.excluded[k] for k in values if k != "slug"},
-            ).returning(Product.id)
-            product_id = (await session.execute(stmt)).scalar_one()
+            product = await upsert(
+                session,
+                Product,
+                key={"slug": p["slug"]},
+                values={
+                    "category_id": cat_by_slug.get(p["category_slug"]),
+                    "name_ru": p["name_ru"],
+                    "name_en": p["name_en"],
+                    "description_ru": p.get("description_ru"),
+                    "description_en": p.get("description_en"),
+                    "image_url": p.get("image_url"),
+                    "is_published": True,
+                },
+            )
 
             for v in p["variants"]:
-                v_values = {**v, "product_id": product_id}
-                v_stmt = pg_insert(ProductVariant).values(v_values)
-                v_stmt = v_stmt.on_conflict_do_update(
-                    index_elements=["sku"],
-                    set_={k: v_stmt.excluded[k] for k in v_values if k not in ("sku", "product_id")},
+                await upsert(
+                    session,
+                    ProductVariant,
+                    key={"sku": v["sku"]},
+                    values={k: val for k, val in v.items() if k != "sku"} | {"product_id": product.id},
                 )
-                await session.execute(v_stmt)
         await session.commit()
     print(f"[ok] {len(PRODUCTS)} products + variants")
 
 
 async def seed_discount_tiers() -> None:
     async with AsyncSessionLocal() as session:
-        stmt = pg_insert(DiscountTier).values(DISCOUNT_TIERS)
-        stmt = stmt.on_conflict_do_update(
-            constraint="uq_discount_tiers_min_boxes",
-            set_={"discount_percent": stmt.excluded.discount_percent},
-        )
-        await session.execute(stmt)
+        for tier in DISCOUNT_TIERS:
+            await upsert(
+                session,
+                DiscountTier,
+                key={"min_boxes": tier["min_boxes"]},
+                values={"discount_percent": tier["discount_percent"]},
+            )
         await session.commit()
     print(f"[ok] {len(DISCOUNT_TIERS)} discount tiers")
 

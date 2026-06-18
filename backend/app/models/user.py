@@ -1,15 +1,14 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime
+from sqlalchemy import Boolean, String, func, text
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import String, func, text
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 from app.models.enums import AppRole
+from app.models.types import GUID, TZDateTime
 
 if TYPE_CHECKING:
     from app.models.order import Order, OrderStatusHistory
@@ -27,12 +26,12 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=text("gen_random_uuid()"),
+        default=uuid4,
     )
-    email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[AppRole] = mapped_column(
         SAEnum(AppRole, name="app_role", create_type=False, values_callable=lambda e: [m.value for m in e]),
         nullable=False,
@@ -40,20 +39,20 @@ class User(Base):
     )
 
     # Profile fields (previously in `profiles`)
-    company_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    contact_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    phone: Mapped[str | None] = mapped_column(String, nullable=True)
-    inn: Mapped[str | None] = mapped_column(String, nullable=True)
-    address: Mapped[str | None] = mapped_column(String, nullable=True)
+    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    inn: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
-    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"))
+    email_verified_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        TZDateTime, server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        TZDateTime,
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,

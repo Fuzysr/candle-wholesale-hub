@@ -7,8 +7,8 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "sqlalchemy[asyncio]>=2.0.36",
-    "asyncpg>=0.30.0",
-    "psycopg[binary]>=3.2.0",
+    "aiomysql>=0.2.0",
+    "PyMySQL>=1.1.0",
     "alembic>=1.13.3",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
@@ -16,7 +16,6 @@ dependencies = [
     "PyJWT>=2.9.0",
     "python-multipart>=0.0.12",
     "email-validator>=2.2.0",
-    "boto3>=1.35.0",
     # Rate-limiting middleware. Default in-memory storage works for a
     # single-uvicorn-worker deploy; multi-worker / multi-process setups
     # should configure SLOWAPI_STORAGE_URI to point at Redis.
@@ -42,7 +41,7 @@ include = ["app*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 # Use a single event loop for the whole session so the module-level
-# SQLAlchemy engine + asyncpg pool keeps its connections valid across
+# SQLAlchemy engine + aiomysql pool keeps its connections valid across
 # tests. With the default per-function loop, pool pre-ping crashes with
 # «Task got Future attached to a different loop» on the second test.
 asyncio_default_fixture_loop_scope = "session"

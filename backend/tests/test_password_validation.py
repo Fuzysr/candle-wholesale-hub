@@ -64,6 +64,7 @@ async def test_register_accepts_strong_password(client, strong_password):
 async def test_reset_confirm_rejects_weak_password(client, client_user, session):
     """Password reset must enforce the same complexity rules as registration."""
     import hashlib
+
     from app.models.password_reset import PasswordReset
 
     raw_token = "complexity-test-token"

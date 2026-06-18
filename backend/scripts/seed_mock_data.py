@@ -12,7 +12,6 @@ import asyncio
 import sys
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.database import AsyncSessionLocal
 from app.models.catalog import (
@@ -24,6 +23,7 @@ from app.models.catalog import (
     Scent,
     Shape,
 )
+from scripts._seed_utils import insert_if_absent, upsert
 
 # ---------------------------------------------------------------------------
 # Reference data
@@ -330,16 +330,13 @@ async def _seed_simple(model, data: list[dict], label: str) -> None:
     if not data:
         return
     async with AsyncSessionLocal() as session:
-        stmt = pg_insert(model).values(data)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["slug"],
-            set_={
-                "name_ru": stmt.excluded.name_ru,
-                "name_en": stmt.excluded.name_en,
-                "sort_order": stmt.excluded.sort_order,
-            },
-        )
-        await session.execute(stmt)
+        for row in data:
+            await upsert(
+                session,
+                model,
+                key={"slug": row["slug"]},
+                values={"name_ru": row["name_ru"], "name_en": row["name_en"], "sort_order": row["sort_order"]},
+            )
         await session.commit()
     print(f"[ok] {len(data)} {label}")
 
@@ -354,16 +351,13 @@ async def seed_extra_categories() -> None:
     if not EXTRA_CATEGORIES:
         return
     async with AsyncSessionLocal() as session:
-        stmt = pg_insert(Category).values(EXTRA_CATEGORIES)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["slug"],
-            set_={
-                "name_ru": stmt.excluded.name_ru,
-                "name_en": stmt.excluded.name_en,
-                "sort_order": stmt.excluded.sort_order,
-            },
-        )
-        await session.execute(stmt)
+        for c in EXTRA_CATEGORIES:
+            await upsert(
+                session,
+                Category,
+                key={"slug": c["slug"]},
+                values={"name_ru": c["name_ru"], "name_en": c["name_en"], "sort_order": c["sort_order"]},
+            )
         await session.commit()
     print(f"[ok] {len(EXTRA_CATEGORIES)} extra categories")
 
@@ -398,27 +392,31 @@ async def seed_extra_products() -> None:
                 "image_url": p.get("image_url"),
                 "is_published": True,
             }
-            stmt = pg_insert(Product).values(values)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["slug"],
-                set_={k: stmt.excluded[k] for k in values if k != "slug"},
-            ).returning(Product.id)
-            product_id = (await session.execute(stmt)).scalar_one()
+            product = await upsert(
+                session,
+                Product,
+                key={"slug": values["slug"]},
+                values={k: v for k, v in values.items() if k != "slug"},
+            )
+            product_id = product.id
 
             for v in p.get("variants", []):
-                v_values = {**v, "product_id": product_id}
-                v_stmt = pg_insert(ProductVariant).values(v_values)
-                v_stmt = v_stmt.on_conflict_do_update(
-                    index_elements=["sku"],
-                    set_={k: v_stmt.excluded[k] for k in v_values if k not in ("sku", "product_id")},
+                await upsert(
+                    session,
+                    ProductVariant,
+                    key={"sku": v["sku"]},
+                    values={k: val for k, val in v.items() if k != "sku"} | {"product_id": product_id},
                 )
-                await session.execute(v_stmt)
 
             for img in p.get("images", []):
-                img_values = {**img, "product_id": product_id}
-                i_stmt = pg_insert(ProductImage).values(img_values)
-                i_stmt = i_stmt.on_conflict_do_nothing()
-                await session.execute(i_stmt)
+                # No natural unique key on product_images; key on the (product, url)
+                # pair so re-runs don't pile up duplicate gallery rows.
+                await insert_if_absent(
+                    session,
+                    ProductImage,
+                    key={"product_id": product_id, "url": img["url"]},
+                    values={k: val for k, val in img.items() if k != "url"},
+                )
                 img_count += 1
 
         await session.commit()

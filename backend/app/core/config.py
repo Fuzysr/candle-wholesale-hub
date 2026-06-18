@@ -36,11 +36,11 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = Field(
-        default="postgresql+asyncpg://candles:candles@localhost:5432/candles",
+        default="mysql+aiomysql://candles:candles@localhost:3306/candles",
         description="Async SQLAlchemy URL used by the app",
     )
     database_url_sync: str = Field(
-        default="postgresql+psycopg://candles:candles@localhost:5432/candles",
+        default="mysql+pymysql://candles:candles@localhost:3306/candles",
         description="Sync SQLAlchemy URL used by Alembic",
     )
 
@@ -61,15 +61,34 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:5173", "http://localhost:8080"]
     )
 
-    # Storage (MinIO / S3)
-    s3_endpoint_url: str = "http://localhost:9000"
-    s3_access_key: str = "minioadmin"
-    s3_secret_key: str = "minioadmin"
-    s3_region: str = "us-east-1"
-    s3_bucket_products: str = "product-images"
-    s3_bucket_company: str = "company-assets"
-    s3_bucket_receipts: str = "payment-receipts"
-    s3_public_url_base: str = "http://localhost:9000"
+    # Storage (local filesystem)
+    #
+    # Files live under `LOCAL_STORAGE_ROOT/<category>/<key>`. The three
+    # categories below map to the former S3 buckets one-to-one. Public
+    # categories (product images, company assets) are served as static files
+    # under `PUBLIC_UPLOAD_URL_BASE`; payment receipts are **private** and only
+    # reachable through the authenticated `/orders/{id}/receipt-file` endpoint.
+    local_storage_root: str = "./storage"
+    storage_category_products: str = "product-images"
+    storage_category_company: str = "company-assets"
+    storage_category_receipts: str = "payment-receipts"
+
+    # Absolute base URL the backend serves public uploads from. Must be
+    # absolute (not just `/uploads`) because the frontend renders image URLs
+    # directly in the browser and the Vite dev server does not proxy
+    # `/uploads` to the API. In production point this at the API origin
+    # (e.g. `https://api.example.com/uploads`).
+    public_upload_url_base: str = "http://localhost:8000/uploads"
+
+    # Backend's own public origin — used to build absolute, signed URLs for
+    # private payment receipts (the `/orders/{id}/receipt-file` endpoint).
+    backend_base_url: str = "http://localhost:8000"
+
+    # How long a signed receipt URL stays valid (seconds). Mirrors the old
+    # S3 presigned-URL TTL: long enough to open the file, short enough that a
+    # leaked link via referrer/proxy logs is quickly useless.
+    receipt_url_ttl_sec: int = 300
+
     # Максимальный размер одного загружаемого файла (в байтах). По умолчанию
     # 5 МБ — это же ограничение зашито в <ImageUpload>/<MultiImageUpload>
     # на фронте, так что UI и сервер совпадают.
