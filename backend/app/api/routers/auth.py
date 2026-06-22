@@ -1,4 +1,5 @@
 """Authentication endpoints: register, login, refresh, logout, password reset, me."""
+
 import hashlib
 import logging
 import secrets
@@ -7,13 +8,28 @@ from urllib.parse import urlencode, urljoin
 from uuid import UUID, uuid4
 
 import jwt
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import db_session, get_current_user
+from app.core.auth_cookies import (
+    REFRESH_COOKIE,
+    clear_auth_cookies,
+    set_auth_cookies,
+)
 from app.core.config import settings
+from app.core.email import send_email
+from app.core.email_templates import EmailSender, render_password_reset_email
 from app.core.rate_limit import (
     LOGIN_LIMIT,
     PASSWORD_RESET_REQUEST_LIMIT,
@@ -21,8 +37,6 @@ from app.core.rate_limit import (
     REGISTER_LIMIT,
     limiter,
 )
-from app.core.email import send_email
-from app.core.email_templates import EmailSender, render_password_reset_email
 from app.core.security import (
     IssuedRefreshToken,
     create_access_token,
@@ -56,6 +70,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Синглтон с реквизитами компании — используем id=1, как в orders.py.
 _COMPANY_SETTINGS_ID = 1
+
+# Параллельные вкладки/ретраи могут почти одновременно предъявить один refresh.
+# Первый запрос ротирует токен, остальные после row-lock увидят его отозванным.
+# В течение этого окна считаем повтор техническим дублем и не отзываем уже
+# выпущенного потомка. Более поздний replay остаётся сигналом компрометации.
+_REFRESH_ROTATION_GRACE = timedelta(seconds=5)
 
 
 def _hash_reset_token(raw: str) -> str:
@@ -122,7 +142,9 @@ async def _send_reset_email_safe(
     tag = _email_tag(to_email)
     logger.info(
         "Password-reset: sending email user_tag=%s via %s:%s",
-        tag, settings.smtp_host, settings.smtp_port,
+        tag,
+        settings.smtp_host,
+        settings.smtp_port,
     )
     try:
         await send_email(
@@ -192,9 +214,9 @@ async def _revoke_family(session: AsyncSession, family_id: UUID) -> None:
 
     Используется в двух сценариях:
 
-    * **reuse-detection:** клиент принёс уже-ротированный refresh —
-      это или гонка, или утечка. Безопаснее всех родственников
-      выкинуть и заставить перелогиниться.
+    * **reuse-detection:** клиент принёс уже-ротированный refresh за
+      пределами короткого окна параллельных ретраев. Безопаснее всех
+      родственников выкинуть и заставить перелогиниться.
     * **logout-all** (на будущее, не реализовано в текущей итерации).
     """
     now = datetime.now(UTC)
@@ -209,7 +231,10 @@ async def _revoke_family(session: AsyncSession, family_id: UUID) -> None:
 
 
 async def _issue_login(
-    session: AsyncSession, user: User, request: Request
+    session: AsyncSession,
+    user: User,
+    request: Request,
+    response: Response,
 ) -> LoginOut:
     """Выпустить пару access+refresh для свежего login/register.
 
@@ -229,17 +254,15 @@ async def _issue_login(
         parent_jti=None,
         request=request,
     )
-    return LoginOut(
-        access=access,
-        refresh=issued.token,
-        user=UserOut.model_validate(user),
-    )
+    set_auth_cookies(response, access=access, refresh=issued.token)
+    return LoginOut(user=UserOut.model_validate(user))
 
 
 @router.post("/register", response_model=LoginOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit(REGISTER_LIMIT)
 async def register(
     request: Request,  # required by slowapi key_func; do not remove
+    response: Response,
     payload: RegisterIn,
     session: AsyncSession = Depends(db_session),
 ) -> LoginOut:
@@ -260,7 +283,7 @@ async def register(
             status_code=status.HTTP_409_CONFLICT,
             detail="email already registered",
         ) from exc
-    out = await _issue_login(session, user, request)
+    out = await _issue_login(session, user, request, response)
     await session.commit()
     return out
 
@@ -269,6 +292,7 @@ async def register(
 @limiter.limit(LOGIN_LIMIT)
 async def login(
     request: Request,  # required by slowapi key_func; do not remove
+    response: Response,
     payload: LoginIn,
     session: AsyncSession = Depends(db_session),
 ) -> LoginOut:
@@ -285,7 +309,7 @@ async def login(
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(payload.password)
 
-    out = await _issue_login(session, user, request)
+    out = await _issue_login(session, user, request, response)
     await session.commit()
     return out
 
@@ -294,6 +318,7 @@ async def login(
 @limiter.limit(REFRESH_LIMIT)
 async def refresh(
     request: Request,  # required by slowapi key_func; do not remove
+    response: Response,
     payload: RefreshIn,
     session: AsyncSession = Depends(db_session),
 ) -> RefreshOut:
@@ -303,12 +328,15 @@ async def refresh(
 
     1. Декодируем JWT — проверка подписи и ``exp``. Любая ошибка
        криптовалидации = 401 ``invalid refresh``.
-    2. По ``jti`` ищем запись в реестре. Нет записи — токен либо
+    2. По ``jti`` ищем запись в реестре и блокируем её ``FOR UPDATE``
+       до конца транзакции. Нет записи — токен либо
        поддельный (с валидной подписью, но не нашим сервером),
        либо мы потеряли БД-состояние; и то, и другое — 401.
     3. Если запись revoked, разбираем подкейсы:
-       * ``replaced_by_jti IS NOT NULL`` — это **reuse**: кто-то
-         предъявляет уже-ротированный токен. Отзываем всю семью,
+       * ``replaced_by_jti IS NOT NULL`` и rotation произошёл только
+         что — это параллельный retry: возвращаем 401, но не отзываем
+         уже выпущенного потомка;
+       * более поздний повтор — это **reuse**: отзываем всю семью и
          возвращаем 401 reuse.
        * ``replaced_by_jti IS NULL`` — explicit logout / админ
          отозвал. 401 без отзыва семьи (она и так уже отозвана при
@@ -322,17 +350,16 @@ async def refresh(
        а старая помечается ``revoked_at = now()``,
        ``replaced_by_jti = new.jti``. ``commit()`` единый.
 
-    Из-за единого commit'а гонка «два параллельных refresh с одним и
-    тем же токеном» закончится тем, что оба запросa напишут новую
-    запись и пометят старую revoked, но второй запрос НЕ обнаружит
-    reuse: он успел зайти до пометки старого. Это не критично — обе
-    новые refresh-записи легитимны (один и тот же клиент). Если
-    клиент действительно ОДИН, он отбросит «лишний» рефреш. Если
-    клиентов двое — вторая попытка предъявить **старый** refresh уже
-    после ротации сработает как reuse и отзовёт family.
+    Row-lock делает проверку и rotation последовательными: из группы
+    параллельных запросов только один создаст потомка, остальные после
+    освобождения блокировки получат 401. Grace-окно не разрешает повторно
+    использовать старый токен — оно лишь сохраняет валидность потомка.
     """
+    raw_refresh = payload.refresh or request.cookies.get(REFRESH_COOKIE)
+    if not raw_refresh:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing refresh")
     try:
-        claims = decode_token(payload.refresh, expected_type="refresh")
+        claims = decode_token(raw_refresh, expected_type="refresh")
     except jwt.ExpiredSignatureError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh expired"
@@ -351,36 +378,46 @@ async def refresh(
 
     jti = claims.get("jti")
     if not isinstance(jti, str) or not jti:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh")
 
-    record = await session.get(RefreshToken, jti)
+    record = await session.scalar(
+        select(RefreshToken).where(RefreshToken.jti == jti).with_for_update()
+    )
     if record is None:
         # JWT валиден по подписи, но мы такой не выпускали (или БД
         # очищена). Любая попытка использовать неизвестный refresh —
         # это либо подделка, либо приходит из старой эры до этой
         # миграции; в обоих случаях 401.
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh")
 
     if record.user_id != user_id:
         # Подменили sub в JWT (или повредили БД). Не доверяем — 401.
         # Семью НЕ отзываем: жертва атаки тут — не семья этого jti.
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh")
 
+    now = datetime.now(UTC)
     if record.revoked_at is not None:
         if record.replaced_by_jti is not None:
+            if now - record.revoked_at <= _REFRESH_ROTATION_GRACE:
+                logger.info(
+                    "Concurrent refresh retry rejected: jti=%s family=%s user_id=%s",
+                    jti,
+                    record.family_id,
+                    record.user_id,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="refresh already used",
+                )
             # REUSE: предъявлен токен, который мы уже когда-то
             # ротировали. Это сильный сигнал утечки: легитимный
             # клиент не имеет причин предъявлять «второй раз», у него
             # уже новый. Отзываем всю семью.
             logger.warning(
                 "Refresh REUSE detected: jti=%s family=%s user_id=%s — revoking family",
-                jti, record.family_id, record.user_id,
+                jti,
+                record.family_id,
+                record.user_id,
             )
             await _revoke_family(session, record.family_id)
             await session.commit()
@@ -389,17 +426,12 @@ async def refresh(
                 detail="refresh reuse detected",
             )
         # Просто отозван (logout / админ-action). Без шумного warning.
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh revoked"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh revoked")
 
     # Защита от time-skew: если БД считает, что токен уже истёк, но
     # ``jwt.decode`` пропустил — всё равно отказываем.
-    now = datetime.now(UTC)
     if record.expires_at <= now:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh expired"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh expired")
 
     user = await session.scalar(select(User).where(User.id == user_id))
     if user is None or not user.is_active:
@@ -422,11 +454,14 @@ async def refresh(
 
     access = create_access_token(str(user.id), is_admin=user.is_admin)
     await session.commit()
-    return RefreshOut(access=access, refresh=issued.token)
+    set_auth_cookies(response, access=access, refresh=issued.token)
+    return RefreshOut()
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
+    request: Request,
+    response: Response,
     payload: LogoutIn,
     session: AsyncSession = Depends(db_session),
 ) -> None:
@@ -445,8 +480,12 @@ async def logout(
     access — пользователь всё равно может корректно завершить
     сессию.
     """
+    raw_refresh = payload.refresh or request.cookies.get(REFRESH_COOKIE)
+    clear_auth_cookies(response)
+    if not raw_refresh:
+        return
     try:
-        claims = decode_token(payload.refresh, expected_type="refresh")
+        claims = decode_token(raw_refresh, expected_type="refresh")
     except jwt.PyJWTError:
         return
 
@@ -502,9 +541,7 @@ async def password_reset_request(
 
     # Чистим предыдущие токены этого пользователя. Если человек кликнул
     # «Забыли пароль?» дважды — рабочей остаётся только последняя ссылка.
-    await session.execute(
-        delete(PasswordReset).where(PasswordReset.user_id == user.id)
-    )
+    await session.execute(delete(PasswordReset).where(PasswordReset.user_id == user.id))
 
     raw_token = secrets.token_urlsafe(32)
     reset = PasswordReset(
@@ -569,9 +606,7 @@ async def password_reset_confirm(
         select(PasswordReset).where(PasswordReset.token_hash == token_hash)
     )
     if reset is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="invalid reset token"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid reset token")
 
     # TTL проверяем в Python — у нас уже есть `created_at` из записи,
     # и нам не нужен round-trip в БД за `NOW()`. Работаем в UTC, чтобы
@@ -581,26 +616,20 @@ async def password_reset_confirm(
         # Протух — сразу чистим запись, чтобы не оставалась в базе.
         await session.delete(reset)
         await session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="invalid reset token"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid reset token")
 
     user = await session.scalar(select(User).where(User.id == reset.user_id))
     if user is None or not user.is_active:
         # Пользователь удалён/заблокирован — токен инвалидируем.
         await session.delete(reset)
         await session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="invalid reset token"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid reset token")
 
     user.password_hash = hash_password(payload.password)
     # Одноразовость: удаляем именно эту запись. Все остальные записи
     # этого пользователя уже были выпилены на этапе reset-request, но
     # на всякий случай подчистим и их — если где-то логика расширится.
-    await session.execute(
-        delete(PasswordReset).where(PasswordReset.user_id == user.id)
-    )
+    await session.execute(delete(PasswordReset).where(PasswordReset.user_id == user.id))
     # Смена пароля = считаем все ранее выданные refresh-токены
     # скомпрометированными. Кто-то либо угнал пароль (и знает refresh
     # тоже), либо сам пользователь нажал «забыли пароль» из-за

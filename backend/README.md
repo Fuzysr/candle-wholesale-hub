@@ -24,6 +24,7 @@ backend/
   app/
     main.py            # FastAPI app, CORS, /health, StaticFiles, router wiring
     core/              # config, db engine, security, local storage helpers
+    services/orders/   # pricing, inventory, receipts, notifications, repository
     models/            # SQLAlchemy models (one per domain)
     schemas/           # Pydantic schemas (request/response)
     api/
@@ -54,9 +55,9 @@ ruff check app tests
 ### Auth (`/auth`)
 
 - `POST /auth/register` — `{ email, password, company_name, contact_name, phone }`
-- `POST /auth/login` — `{ email, password }` → `{ access, refresh }`
-- `POST /auth/refresh` — `{ refresh }` → new access token
-- `POST /auth/logout` — client drops tokens (server stateless)
+- `POST /auth/login` — `{ email, password }` → user + HttpOnly auth cookies
+- `POST /auth/refresh` — `{}` → rotates HttpOnly access/refresh cookies
+- `POST /auth/logout` — revokes refresh and expires auth cookies
 - `POST /auth/password/reset-request` — `{ email }`
 - `POST /auth/password/reset-confirm` — `{ token, password }`
 - `GET  /auth/me` — current user + role + profile
@@ -70,7 +71,10 @@ ruff check app tests
 
 - `GET /categories`
 - `GET /attributes/{materials|scents|shapes}`
-- `GET /products?published=true&category=&material=&scent=&shape=&q=`
+- `GET /products` — backwards-compatible offset list
+- `GET /products/search` — filtered page envelope (`items`, `total`, `pages`);
+  supports categories, attributes, colors, price/dimensions, stock, search and sorting
+- `GET /products/colors` — stable color facet values for catalog filters
 - `GET /products/{slug}` — includes variants, images, material, scent, shape, category
 - `GET /discount-tiers`
 
@@ -124,7 +128,8 @@ See `.env.example`. Highlights:
 | `DATABASE_URL` / `DATABASE_URL_SYNC` | async (app) / sync (alembic) MySQL URLs |
 | `JWT_SECRET` | HS256 signing key — **must be a strong random value in prod** |
 | `ACCESS_TOKEN_TTL_MIN` / `REFRESH_TOKEN_TTL_DAYS` | JWT lifetimes |
-| `CORS_ORIGINS` | comma-separated frontend origins |
+| `AUTH_COOKIE_SAMESITE` / `AUTH_COOKIE_DOMAIN` | browser cookie policy/domain |
+| `CORS_ORIGINS` | exact comma-separated frontend origins; wildcard is unsupported with cookies |
 | `LOCAL_STORAGE_ROOT` | dir on disk where uploaded files are saved |
 | `PUBLIC_UPLOAD_URL_BASE` | absolute URL prefix for public uploads (served via StaticFiles) |
 | `BACKEND_BASE_URL` / `RECEIPT_URL_TTL_SEC` | base + TTL for signed private-receipt URLs |

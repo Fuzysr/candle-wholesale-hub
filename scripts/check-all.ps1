@@ -1,24 +1,11 @@
-# Pre-commit verification suite for candle-wholesale-hub.
-#
-# Runs four checks in sequence (fail-fast):
-#   1. Alembic migrations (docker compose backend) up to head
-#   2. TypeScript type check (tsc --noEmit)
-#   3. Backend pytest (tests/test_orders.py)
-#   4. Playwright e2e (Checkout describe by default)
-#
-# Usage:
-#   npm run check              -- full run
-#   npm run check:fast         -- skip e2e (fastest)
-#   .\scripts\check-all.ps1 -SkipMigration -SkipBackend  -- TS + e2e only
-#
-# Note: ASCII-only. Windows PowerShell 5 reads BOM-less scripts in the
-# system codepage; any non-ASCII character (em-dash, emoji, Russian
-# comments) breaks the parser.
+# Local quality gate. Runs only tools that are present in this repository.
+# Backend tests apply Alembic migrations themselves. They use a temporary
+# SQLite database unless DATABASE_URL / DATABASE_URL_SYNC are provided.
+# Playwright expects the API to be running at VITE_API_URL (localhost:8000 by
+# default); the Vite frontend is started automatically by Playwright.
 
 [CmdletBinding()]
 param(
-    [switch]$SkipMigration,
-    [switch]$SkipTs,
     [switch]$SkipBackend,
     [switch]$SkipE2E,
     [switch]$E2EAll
@@ -37,6 +24,7 @@ function Invoke-Step {
         [scriptblock]$Command,
         [switch]$Skip
     )
+
     Write-Host ""
     Write-Host ("=" * 70) -ForegroundColor DarkGray
     if ($Skip) {
@@ -44,12 +32,12 @@ function Invoke-Step {
         [void]$script:results.Add([pscustomobject]@{ Step = $Name; Status = "skipped"; Seconds = 0 })
         return
     }
+
     Write-Host "RUN   $Name" -ForegroundColor Cyan
-    Write-Host ("=" * 70) -ForegroundColor DarkGray
     $stepStart = Get-Date
     try {
         & $Command
-        if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+        if ($LASTEXITCODE -ne 0) {
             throw "exit code $LASTEXITCODE"
         }
         $elapsed = [math]::Round(((Get-Date) - $stepStart).TotalSeconds, 1)
@@ -58,44 +46,78 @@ function Invoke-Step {
     }
     catch {
         $elapsed = [math]::Round(((Get-Date) - $stepStart).TotalSeconds, 1)
-        $msg = $_.Exception.Message
-        Write-Host "FAIL  $Name ($elapsed s) - $msg" -ForegroundColor Red
+        Write-Host "FAIL  $Name ($elapsed s) - $($_.Exception.Message)" -ForegroundColor Red
         [void]$script:results.Add([pscustomobject]@{ Step = $Name; Status = "failed"; Seconds = $elapsed })
         throw
     }
 }
 
+function Get-BackendPython {
+    $venvPython = Join-Path $repoRoot "backend\.venv\Scripts\python.exe"
+    if (Test-Path $venvPython) {
+        return $venvPython
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if ($python) {
+        return $python.Source
+    }
+
+    throw "Python not found. Create backend/.venv and install backend with: pip install -e '.[dev]'"
+}
+
+$backendPython = $null
+if (-not $SkipBackend) {
+    $backendPython = Get-BackendPython
+}
+
 try {
-    Invoke-Step -Name "1/4  Alembic upgrade head" -Skip:$SkipMigration -Command {
-        docker compose exec -T backend alembic upgrade head
+    Invoke-Step -Name "Frontend lint" -Command { npm.cmd run lint }
+    Invoke-Step -Name "Frontend typecheck" -Command { npx.cmd tsc --noEmit }
+    Invoke-Step -Name "Frontend unit tests" -Command { npm.cmd test }
+    Invoke-Step -Name "Frontend production build" -Command { npm.cmd run build }
+    Invoke-Step -Name "Backend Ruff" -Skip:$SkipBackend -Command {
+        Push-Location backend
+        try { & $backendPython -m ruff check app tests }
+        finally { Pop-Location }
     }
+    Invoke-Step -Name "Backend pytest" -Skip:$SkipBackend -Command {
+        $temporaryDatabase = $null
+        if (-not $env:DATABASE_URL -and -not $env:DATABASE_URL_SYNC) {
+            $temporaryDatabase = Join-Path $repoRoot "backend\.check.sqlite3"
+            $sqlitePath = $temporaryDatabase.Replace("\", "/")
+            $env:DATABASE_URL = "sqlite+aiosqlite:///$sqlitePath"
+            $env:DATABASE_URL_SYNC = "sqlite:///$sqlitePath"
+        }
 
-    Invoke-Step -Name "2/4  TypeScript --noEmit" -Skip:$SkipTs -Command {
-        npx --yes tsc --noEmit
+        Push-Location backend
+        try {
+            & $backendPython -m pytest -q
+        }
+        finally {
+            Pop-Location
+            if ($temporaryDatabase) {
+                Remove-Item -LiteralPath $temporaryDatabase -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
-
-    Invoke-Step -Name "3/4  Backend pytest (orders)" -Skip:$SkipBackend -Command {
-        docker compose exec -T backend pytest tests/test_orders.py -q
-    }
-
-    Invoke-Step -Name "4/4  Playwright e2e" -Skip:$SkipE2E -Command {
+    Invoke-Step -Name "Playwright e2e" -Skip:$SkipE2E -Command {
         if ($E2EAll) {
-            npx --yes playwright test --reporter=list
+            npx.cmd playwright test --reporter=list
         }
         else {
-            npx --yes playwright test catalog-cart.spec.ts -g "Checkout" --reporter=list
+            npx.cmd playwright test catalog-cart.spec.ts -g "Checkout" --reporter=list
         }
     }
 }
 catch {
-    # Step failure already logged in Invoke-Step.
+    # Invoke-Step already recorded and printed the failure.
 }
 
 $totalElapsed = [math]::Round(((Get-Date) - $totalStart).TotalSeconds, 1)
 Write-Host ""
 Write-Host ("=" * 70) -ForegroundColor DarkGray
 Write-Host "SUMMARY (total $totalElapsed s)" -ForegroundColor White
-Write-Host ("=" * 70) -ForegroundColor DarkGray
 $results | Format-Table -AutoSize | Out-Host
 
 $failed = @($results | Where-Object { $_.Status -eq "failed" })
@@ -103,5 +125,6 @@ if ($failed.Count -gt 0) {
     Write-Host "FAILED: $($failed.Count) step(s)" -ForegroundColor Red
     exit 1
 }
+
 Write-Host "OK: All checks passed" -ForegroundColor Green
 exit 0

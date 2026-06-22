@@ -31,7 +31,6 @@ from __future__ import annotations
 import html
 from dataclasses import dataclass
 
-
 # Тёплая «свечная» палитра — тёмный амбра для шапки, кремовый фон
 # конверта, акцент — янтарный. Выбрана так, чтобы хорошо смотреться
 # и в светлой, и в тёмной теме Gmail/Yandex (они просто инвертируют).

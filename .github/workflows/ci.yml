@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: candles_test
+          MYSQL_USER: candles
+          MYSQL_PASSWORD: candles
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ucandles -pcandles"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m ruff check app tests
+      - run: python -m pytest -q
+        env:
+          # The test fixture creates the schema when needed, so CI uses the
+          # service root account rather than relying on database-scoped grants.
+          DATABASE_URL: mysql+aiomysql://root:root@127.0.0.1:3306/candles_test
+          DATABASE_URL_SYNC: mysql+pymysql://root:root@127.0.0.1:3306/candles_test

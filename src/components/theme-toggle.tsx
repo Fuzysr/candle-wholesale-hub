@@ -3,6 +3,10 @@ import { useTheme } from "next-themes";
 import { Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (update: () => void) => unknown;
+};
+
 /**
  * Simple icon button that toggles between light and dark themes.
  * Renders a Sun (in dark mode) or Moon (in light mode) with a smooth
@@ -30,8 +34,9 @@ const ThemeToggle = ({ className }: { className?: string }) => {
     const next = isDark ? "light" : "dark";
     // Use the View Transitions API for a smooth 60 fps cross-fade.
     // Falls back to an instant switch on unsupported browsers.
-    if ("startViewTransition" in document) {
-      (document as any).startViewTransition(() => setTheme(next));
+    const startViewTransition = (document as ViewTransitionDocument).startViewTransition;
+    if (startViewTransition) {
+      startViewTransition.call(document, () => setTheme(next));
     } else {
       setTheme(next);
     }

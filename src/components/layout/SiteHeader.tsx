@@ -2,17 +2,7 @@ import { useState } from "react";
 
 import { Link, NavLink as RouterNavLink, useNavigate } from "react-router-dom";
 
-import {
-
-  Search,
-
-  ShoppingCart,
-
-  Menu,
-
-  Zap,
-
-} from "lucide-react";
+import { Search, ShoppingCart, Menu } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -27,14 +17,6 @@ import { cn } from "@/lib/utils";
 import UserMenu from "@/components/layout/UserMenu";
 
 import ThemeToggle from "@/components/theme-toggle";
-
-import { LightningBorder } from "@/components/ui/lightning-border";
-
-
-
-// Top-level navigation. "Быстрый заказ" intentionally lives outside this list —
-
-// it is rendered as a standalone highlighted CTA in the action zone.
 
 const nav = [
 
@@ -191,62 +173,6 @@ const SiteHeader = () => {
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
 
-          {/* FROZEN: Quick Order feature temporarily hidden */}
-
-          {false && (
-
-            <>
-
-            <Button
-
-              asChild
-
-              variant="outline"
-
-              size="icon"
-
-              className="h-9 w-9 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary md:hidden"
-
-            >
-
-              <Link to="/quick-order" aria-label="Быстрый заказ">
-
-                <Zap className="h-4 w-4" />
-
-              </Link>
-
-            </Button>
-
-
-
-            <LightningBorder className="hidden hover:-translate-y-0.5 transition-transform duration-300 md:inline-flex">
-
-              <Button
-
-                asChild
-
-                className="group relative gap-2 shadow-md shadow-primary/25 ring-1 ring-primary/40 hover:shadow-lg hover:shadow-primary/40 transition-shadow duration-300"
-
-              >
-
-                <Link to="/quick-order">
-
-                  <Zap className="h-4 w-4 transition-transform group-hover:scale-110" />
-
-                  Быстрый заказ
-
-                </Link>
-
-              </Button>
-
-            </LightningBorder>
-
-            </>
-
-          )}
-
-
-
           {/* Cart */}
 
           <Button asChild variant="outline" className="relative hidden gap-2 md:inline-flex">
@@ -395,34 +321,6 @@ const SiteHeader = () => {
                 </label>
 
               </form>
-
-
-
-              {/* FROZEN: Quick Order feature temporarily hidden */}
-
-              {false && (
-
-                <Button
-
-                  asChild
-
-                  className="mt-4 w-full justify-center gap-2 shadow-md shadow-primary/25 ring-1 ring-primary/40"
-
-                  onClick={() => setMobileOpen(false)}
-
-                >
-
-                  <Link to="/quick-order">
-
-                    <Zap className="h-4 w-4" />
-
-                    Быстрый заказ
-
-                  </Link>
-
-                </Button>
-
-              )}
 
 
 

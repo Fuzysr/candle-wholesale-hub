@@ -33,7 +33,7 @@
            └──────────────┘        └──────┬───────┘   │
                                           │           └──► local FS (storage/)
                                           │
-                                    JWT (access + refresh) в localStorage
+                              HttpOnly JWT cookies + CSRF token
 ```
 
 - **Frontend** — SPA, собирается в статические файлы (`dist/`). Раздаётся
@@ -43,8 +43,10 @@
   **локальном диске** под `backend/storage/`. Публичные файлы отдаются через
   FastAPI StaticFiles (`/uploads/...`), приватные чеки — только по
   короткоживущей подписанной ссылке `/orders/{id}/receipt-file`.
-- **Сессии** — JWT-пара access/refresh в `localStorage` фронта. Сервер
-  stateless; перезапуск процесса не выкидывает пользователей из сессий.
+- **Сессии** — JWT-пара access/refresh в `HttpOnly` cookies: JavaScript не
+  может прочитать или выгрузить их при XSS. Refresh-токены ротируются и
+  хранятся в реестре БД для logout/reuse detection; unsafe cookie-запросы
+  защищены double-submit CSRF-токеном.
 
 Ключевые директории:
 
@@ -52,6 +54,7 @@
 |---|---|
 | `src/` | Исходники фронта (Vite + React + TypeScript) |
 | `backend/app/` | FastAPI (роутеры в `api/routers`, модели в `models/`) |
+| `backend/app/services/orders/` | Бизнес-логика цен, резервов, чеков и уведомлений заказов |
 | `backend/alembic/` | Миграции БД (`0001_mysql_baseline` — полная схема MySQL) |
 | `backend/scripts/bootstrap_admin.py` | Скрипт заведения админа + демо-каталога |
 | `backend/storage/` | Загруженные файлы (gitignored, бэкапить в prod) |
@@ -105,7 +108,7 @@ FLUSH PRIVILEGES;
 
 Открывай:
 
-- Фронт: http://localhost:5173
+- Фронт: http://localhost:8080
 - API + Swagger: http://localhost:8000/docs
 
 Учётка админа распечатается в выводе шага 4 (`python -m scripts.bootstrap_admin`).
@@ -180,12 +183,12 @@ uvicorn app.main:app --reload
 
 ```bash
 npm install            # только при первом запуске или после смены package.json
-npm run dev            # http://localhost:5173
+npm run dev            # http://localhost:8080
 ```
 
 Фронт ходит на `VITE_API_URL` из `.env` (по умолчанию
-`http://localhost:8000`). CORS разрешён для `http://localhost:5173` и
-`http://localhost:8080` — если меняешь порт, добавь его в `CORS_ORIGINS` в
+`http://localhost:8000`). CORS разрешён для `http://localhost:8080`; если
+меняешь порт, добавь новый origin в `CORS_ORIGINS` в
 `backend/.env` и перезапусти backend.
 
 ---
@@ -242,6 +245,21 @@ npx tsc --noEmit   # типы
 npm run lint       # eslint
 npm run build      # прод-сборка в dist/
 ```
+
+### Единая проверка и CI
+
+```powershell
+npm run check:fast  # lint + types + Vitest + build + Ruff + pytest; без E2E
+npm run check       # тот же набор + Playwright smoke E2E
+```
+
+Если `DATABASE_URL` не задан в окружении, локальный скрипт использует
+временную SQLite-базу и удаляет её после pytest. Для проверки MySQL задай обе
+DSN явно. GitHub Actions всегда запускает полный backend-набор на MySQL 8.4;
+workflow лежит в `.github/workflows/ci.yml`.
+
+Для `npm run check` заранее запусти backend на URL из `VITE_API_URL`:
+Playwright сам поднимет Vite, но использует настоящее API для auth-сценариев.
 
 ---
 
@@ -350,6 +368,8 @@ cp backend/.env.example backend/.env
 | `PUBLIC_UPLOAD_URL_BASE` | публичный URL до загрузок, напр. `https://shop.example.com/uploads` |
 | `BACKEND_BASE_URL` | публичный origin бэкенда, напр. `https://shop.example.com` |
 | `CORS_ORIGINS` | `https://shop.example.com` (без dev-хостов) |
+| `AUTH_COOKIE_SAMESITE` | `lax`; `none` только если frontend действительно cross-site |
+| `AUTH_COOKIE_DOMAIN` | пусто для host-only cookie либо общий parent domain для sibling subdomains |
 | `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` | реальные, один раз |
 
 ### 3. Backend (venv + миграции)
@@ -551,7 +571,9 @@ mysql -u candles -p -h 127.0.0.1 candles -e "SELECT 1;"
 1. DevTools → Network → должен быть `200` от `/auth/me`. Если `CORS error` —
    добавь origin фронта в `CORS_ORIGINS` в `backend/.env` и рестартуй backend.
 2. `VITE_API_URL` в `.env` = на какой URL реально отвечает бэкенд.
-3. Часы на сервере и клиенте не разъехались > TTL access-токена (30 мин).
+3. У запросов должен быть `withCredentials`, а в ответе login — `Set-Cookie`.
+4. Для POST/PATCH/DELETE проверь совпадение cookie `cwh_csrf` и заголовка
+   `X-CSRF-Token`; mismatch возвращает `403 CSRF validation failed`.
 
 ### Изображения не отображаются (404 на `/uploads/...`)
 
@@ -572,6 +594,8 @@ backend; старые URL в БД остаются старыми — перез
 
 Сверь `JWT_SECRET` между запусками — если после рестарта секрет изменился, все
 старые токены инвалидны. В prod ставь его один раз и не ротируй без нужды.
+Также проверь `Set-Cookie`: в production cookies имеют `Secure` и браузер не
+примет их при обращении к API по обычному HTTP.
 
 ### `alembic` ругается на `Table already exists`
 

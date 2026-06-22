@@ -1,73 +1,34 @@
-import { Fragment, useEffect, useMemo, useState, type ComponentType } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Plus,
-  Pencil,
-  Trash2,
   FileDown,
-  Package,
-  Settings as SettingsIcon,
-  Tag,
-  LayoutDashboard,
-  ClipboardList,
-  Users,
-  Warehouse,
-  Percent,
-  LogOut,
-  Search,
   Download,
-  MoreVertical,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Menu,
-  X,
-  GripVertical,
-  MessageSquare,
-  Check,
 } from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import UserMenu from "@/components/layout/UserMenu";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Package01Icon,
-  BubbleChatIcon,
-} from "@hugeicons/core-free-icons";
-import ImageUpload from "@/components/admin/ImageUpload";
-import MultiImageUpload, { type GalleryImage } from "@/components/admin/MultiImageUpload";
+import type { GalleryImage } from "@/components/admin/MultiImageUpload";
 import StockOpDialog, { type StockOpVariant } from "@/components/admin/StockOpDialog";
+import { AdminShell, type AdminTab } from "@/components/admin/AdminShell";
+import { AdminEntityDialogs } from "@/components/admin/AdminEntityDialogs";
+import { ProductDialogs } from "@/components/admin/ProductDialogs";
+import {
+  ORDER_STATUSES as STATUSES,
+  STATUS_LABEL,
+} from "@/components/admin/AdminPrimitives";
+import { CategoriesTab } from "@/components/admin/tabs/CategoriesTab";
+import { ClientsTab } from "@/components/admin/tabs/ClientsTab";
+import { DashboardTab } from "@/components/admin/tabs/DashboardTab";
+import { DiscountsTab } from "@/components/admin/tabs/DiscountsTab";
+import { MessagesTab } from "@/components/admin/tabs/MessagesTab";
+import { OrdersTab, type OrdersFilter } from "@/components/admin/tabs/OrdersTab";
+import { ProductsTab } from "@/components/admin/tabs/ProductsTab";
+import { StockTab } from "@/components/admin/tabs/StockTab";
+import { SettingsTab } from "@/components/admin/tabs/SettingsTab";
+import { useAdminData } from "@/components/admin/useAdminData";
 import NotFound from "@/pages/NotFound";
-import { signOut, useAuth, type AppUser } from "@/hooks/useAuth";
+import { signOut, useAuth } from "@/hooks/useAuth";
 import {
   apiErrorMessage,
   catalogApi,
@@ -87,12 +48,10 @@ import {
   type ProductVariantOut,
   type UserOut,
   type VariantImageOut,
-  uploadsApi,
 } from "@/lib/api";
-import { contactApi, type ContactMessageOut } from "@/lib/api/contact";
+import { contactApi } from "@/lib/api/contact";
 import { formatMoney } from "@/lib/format";
 import { downloadInvoicePdf } from "@/lib/invoicePdf";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 type AdminOrder = OrderListOut;
@@ -101,427 +60,37 @@ type AdminProduct = ProductOut;
 type AdminCategory = CategoryOut;
 type Lookup = AttributeOut;
 
-const STATUSES = ["new", "processing", "awaiting_payment", "payment_review", "invoiced", "paid", "shipped", "completed", "cancelled"] as const;
-type LookupKind = AttributeKind;
-const LOOKUP_LABEL: Record<LookupKind, string> = { materials: "Материалы", scents: "Ароматы", shapes: "Формы" };
-
-/**
- * Human-friendly labels + pill palette for every order status the backend can
- * return. Used by `StatusPill` in the dashboard / orders / clients views so
- * admins see Russian copy with colour that encodes urgency (blue = fresh,
- * amber = in-progress, green = done, muted = cancelled).
- */
-const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
-  new: { label: "Новая", cls: "bg-info/10 text-info" },
-  processing: { label: "В работе", cls: "bg-warning/15 text-warning" },
-  awaiting_payment: { label: "Ждёт оплаты", cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
-  payment_review: { label: "Проверка чека", cls: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
-  invoiced: { label: "Счёт", cls: "bg-primary/15 text-primary" },
-  paid: { label: "Оплачен", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
-  shipped: { label: "Готов", cls: "bg-success/15 text-success" },
-  completed: { label: "Завершён", cls: "bg-muted text-muted-foreground" },
-  cancelled: { label: "Отменён", cls: "bg-muted text-muted-foreground" },
-};
-
-const StatusPill = ({ status }: { status: string }) => {
-  const s = STATUS_LABEL[status] ?? { label: status, cls: "bg-muted text-muted-foreground" };
-  return (
-    <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium", s.cls)}>
-      {s.label}
-    </span>
-  );
-};
-
-const Field = ({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
-  <label className="block">
-    <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-    <input {...props} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-  </label>
-);
-
-const TextArea = ({ label, ...props }: { label: string } & React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
-  <label className="block">
-    <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-    <textarea {...props} className="w-full rounded-md border border-input bg-background p-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-  </label>
-);
-
-type Tab =
-  | "dashboard"
-  | "orders"
-  | "products"
-  | "categories"
-  | "clients"
-  | "messages"
-  | "stock"
-  | "discounts"
-  | "settings";
-
-/**
- * Sidebar navigation definition. `badgeKey` references a numeric field on the
- * dashboard-stat bag below, so Заявки can surface the «new-orders» count as a
- * red pill without each call-site rebuilding the label.
- */
-const NAV: { key: Tab; label: string; icon: ComponentType<{ className?: string }>; badgeKey?: "newOrders" | "newMessages" }[] = [
-  { key: "dashboard", label: "Дашборд", icon: LayoutDashboard },
-  { key: "orders", label: "Заявки", icon: ClipboardList, badgeKey: "newOrders" },
-  { key: "products", label: "Товары", icon: Package },
-  { key: "categories", label: "Категории", icon: Tag },
-  { key: "clients", label: "Клиенты", icon: Users },
-  { key: "messages", label: "Обращения", icon: MessageSquare, badgeKey: "newMessages" },
-  { key: "stock", label: "Склад", icon: Warehouse },
-  { key: "discounts", label: "Скидки", icon: Percent },
-  { key: "settings", label: "Настройки", icon: SettingsIcon },
-];
-
-/** Page title shown in the topbar for every sidebar destination. */
-const TAB_TITLE: Record<Tab, string> = {
-  dashboard: "Дашборд",
-  orders: "Заявки",
-  products: "Товары",
-  categories: "Категории",
-  clients: "Клиенты",
-  messages: "Обращения",
-  stock: "Склад",
-  discounts: "Скидки",
-  settings: "Настройки",
-};
-
-/* ────────────────────────── Shell ────────────────────────── */
-
-const AdminSidebar = ({
-  tab,
-  setTab,
-  newOrdersBadge,
-  newMessagesBadge,
-  onSignOut,
-}: {
-  tab: Tab;
-  setTab: (t: Tab) => void;
-  newOrdersBadge: number;
-  newMessagesBadge: number;
-  onSignOut: () => void;
-}) => {
-  return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar-background lg:flex">
-      {/* Brand block */}
-      <Link to="/" className="flex items-center gap-2 border-b border-sidebar-border px-5 py-5">
-        <span className="text-lg font-semibold tracking-tight text-foreground">CANDWAX</span>
-        <span className="rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-          admin
-        </span>
-      </Link>
-
-      <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
-        {NAV.map((n) => {
-          const Icon = n.icon;
-          const active = tab === n.key;
-          const badgeVal = n.badgeKey === "newOrders" ? newOrdersBadge : n.badgeKey === "newMessages" ? newMessagesBadge : 0;
-          const badge = badgeVal > 0 ? badgeVal : null;
-          return (
-            <button
-              key={n.key}
-              type="button"
-              onClick={() => setTab(n.key)}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                  : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span className="flex-1 text-left">{n.label}</span>
-              {badge !== null && (
-                <span className="rounded-full bg-primary px-1.5 text-[10px] font-semibold leading-5 text-primary-foreground">
-                  {badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* Sign-out lives at the bottom of the rail so it doesn't fight with
-          the real nav for user attention but is always reachable. */}
-      <div className="border-t border-sidebar-border p-3">
-        <button
-          type="button"
-          onClick={onSignOut}
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-        >
-          <LogOut className="h-4 w-4" />
-          Выйти
-        </button>
-      </div>
-    </aside>
-  );
-};
-
-const AdminTopbar = ({
-  title,
-  actions,
-  onMenuToggle,
-}: {
-  title: string;
-  actions?: React.ReactNode;
-  onMenuToggle?: () => void;
-}) => {
-  const dateStr = new Date().toLocaleDateString("ru-RU", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-
-  return (
-    <header className="flex items-center justify-between border-b border-border bg-background px-4 py-3 sm:px-6 lg:px-8 lg:py-4">
-      <div className="flex items-center gap-3">
-        {onMenuToggle && (
-          <button
-            type="button"
-            onClick={onMenuToggle}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden"
-            aria-label="Меню"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-        )}
-        <h1 className="text-lg font-semibold tracking-tight sm:text-2xl">{title}</h1>
-      </div>
-      <div className="flex items-center gap-2 sm:gap-4">
-        {actions}
-        <span className="hidden text-sm text-muted-foreground sm:inline">{dateStr}</span>
-        {/*
-          Единый с публичным хедером компонент профиля. В админке
-          нет мобильного drawer'а, поэтому кнопка видна на всех ширинах
-          (alwaysVisible).
-        */}
-        <UserMenu alwaysVisible />
-      </div>
-    </header>
-  );
-};
-
-const AdminShell = ({
-  tab,
-  setTab,
-  user,
-  newOrdersBadge,
-  newMessagesBadge,
-  onSignOut,
-  actions,
-  children,
-}: {
-  tab: Tab;
-  setTab: (t: Tab) => void;
-  user: AppUser;
-  newOrdersBadge: number;
-  newMessagesBadge: number;
-  onSignOut: () => void;
-  actions?: React.ReactNode;
-  children: React.ReactNode;
-}) => {
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  return (
-    <div className="flex min-h-screen bg-muted/30">
-      <AdminSidebar tab={tab} setTab={setTab} newOrdersBadge={newOrdersBadge} newMessagesBadge={newMessagesBadge} onSignOut={onSignOut} />
-
-      {/* Mobile admin nav Sheet */}
-      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-        <SheetContent side="left" className="w-[260px] p-0 lg:hidden">
-          <div className="flex h-full flex-col bg-sidebar-background">
-            <SheetHeader className="border-b border-sidebar-border px-5 py-4">
-              <SheetTitle className="flex items-center gap-2 text-left">
-                <span className="text-lg font-semibold tracking-tight">CANDWAX</span>
-                <span className="rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">admin</span>
-              </SheetTitle>
-            </SheetHeader>
-            <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
-              {NAV.map((n) => {
-                const Icon = n.icon;
-                const active = tab === n.key;
-                const badgeVal = n.badgeKey === "newOrders" ? newOrdersBadge : n.badgeKey === "newMessages" ? newMessagesBadge : 0;
-                const badge = badgeVal > 0 ? badgeVal : null;
-                return (
-                  <button
-                    key={n.key}
-                    type="button"
-                    onClick={() => { setTab(n.key); setMobileNavOpen(false); }}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
-                      active
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                        : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 text-left">{n.label}</span>
-                    {badge !== null && (
-                      <span className="rounded-full bg-primary px-1.5 text-[10px] font-semibold leading-5 text-primary-foreground">{badge}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
-            <div className="border-t border-sidebar-border p-3">
-              <button
-                type="button"
-                onClick={() => { onSignOut(); setMobileNavOpen(false); }}
-                className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              >
-                <LogOut className="h-4 w-4" /> Выйти
-              </button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      <main className="flex min-w-0 flex-1 flex-col">
-        <AdminTopbar title={TAB_TITLE[tab]} actions={actions} onMenuToggle={() => setMobileNavOpen(true)} />
-        <div className="flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-8">{children}</div>
-      </main>
-    </div>
-  );
-};
-
-/* ────────────────────────── KPI card ────────────────────────── */
-
-type KpiTone = "muted" | "warn" | "ok" | "primary";
-const KPI_TONE: Record<KpiTone, string> = {
-  muted: "text-muted-foreground",
-  warn: "text-warning",
-  ok: "text-success",
-  primary: "text-primary",
-};
-
-const KpiCard = ({
-  label,
-  value,
-  delta,
-  deltaTone = "muted",
-}: {
-  label: string;
-  value: string | number;
-  delta?: string;
-  deltaTone?: KpiTone;
-}) => (
-  <div className="rounded-lg border border-border bg-surface p-5 shadow-sm">
-    <div className="text-xs text-muted-foreground">{label}</div>
-    <div className="mt-2 text-3xl font-semibold tracking-tight">{value}</div>
-    {delta && <div className={cn("mt-2 text-xs", KPI_TONE[deltaTone])}>{delta}</div>}
-  </div>
-);
-
-/* ─── Drag-and-drop строка категории ─── */
-type SortableCatRowProps = {
-  cat: AdminCategory;
-  allCats: AdminCategory[];
-  productCount: number;
-  onEdit: (c: AdminCategory) => void;
-  onDelete: (id: string) => void;
-};
-const SortableCatRow = ({ cat, allCats, productCount, onEdit, onDelete }: SortableCatRowProps) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.id });
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
-      className="grid grid-cols-[28px_1fr_140px_100px_60px_80px] items-center gap-2 border-t border-border px-3 py-2.5 text-sm"
-    >
-      <button
-        type="button"
-        {...listeners}
-        {...attributes}
-        className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
-        aria-label="Перетащить"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <div className="font-medium">
-        {cat.parent_id && <span className="text-muted-foreground">↳ </span>}
-        {cat.name_ru}
-      </div>
-      <div className="num text-xs text-muted-foreground">{cat.slug}</div>
-      <div className="text-xs text-muted-foreground">{allCats.find((p) => p.id === cat.parent_id)?.name_ru ?? "—"}</div>
-      <div className="text-right num text-muted-foreground">{productCount}</div>
-      <div className="flex justify-end gap-1">
-        <Button size="sm" variant="ghost" onClick={() => onEdit(cat)}><Pencil className="h-3.5 w-3.5" /></Button>
-        <Button size="sm" variant="ghost" onClick={() => onDelete(cat.id)} className="text-destructive hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
-      </div>
-    </div>
-  );
-};
+const INVOICE_DOWNLOAD_ENABLED = false;
 
 const Admin = () => {
   const { user, loading } = useAuth();
-  const queryClient = useQueryClient();
   const isAdmin = !!user?.isAdmin;
-
-  const [
-    ordersQ,
-    productsQ,
-    categoriesQ,
-    materialsQ,
-    scentsQ,
-    shapesQ,
-    companyQ,
-    discountTiersQ,
-    usersQ,
-    contactMsgsQ,
-  ] = useQueries({
-    queries: [
-      { queryKey: ["admin", "orders"], queryFn: () => ordersApi.adminList(), enabled: isAdmin },
-      { queryKey: ["admin", "products"], queryFn: () => catalogApi.adminListProducts(), enabled: isAdmin },
-      { queryKey: ["categories"], queryFn: () => catalogApi.listCategories(), enabled: isAdmin },
-      { queryKey: ["attributes", "materials"], queryFn: () => catalogApi.listAttributes("materials"), enabled: isAdmin },
-      { queryKey: ["attributes", "scents"], queryFn: () => catalogApi.listAttributes("scents"), enabled: isAdmin },
-      { queryKey: ["attributes", "shapes"], queryFn: () => catalogApi.listAttributes("shapes"), enabled: isAdmin },
-      { queryKey: ["company-settings"], queryFn: () => companyApi.get(), enabled: isAdmin },
-      { queryKey: ["discount-tiers"], queryFn: () => stockApi.listDiscountTiers(), enabled: isAdmin },
-      { queryKey: ["admin", "users"], queryFn: () => usersApi.adminList(), enabled: isAdmin },
-      { queryKey: ["admin", "contact-messages"], queryFn: () => contactApi.list(), enabled: isAdmin },
-    ],
-  });
-
-  const orders: AdminOrder[] = ordersQ.data ?? [];
-  const products: AdminProduct[] = productsQ.data ?? [];
-  const categories: AdminCategory[] = categoriesQ.data ?? [];
-  const materials: Lookup[] = materialsQ.data ?? [];
-  const scents: Lookup[] = scentsQ.data ?? [];
-  const shapes: Lookup[] = shapesQ.data ?? [];
-  const contactMessages: ContactMessageOut[] = contactMsgsQ.data ?? [];
+  const {
+    orders,
+    products,
+    categories,
+    materials,
+    scents,
+    shapes,
+    companyData,
+    discountTiers,
+    users,
+    contactMessages,
+    reloadProducts,
+    reloadCategories,
+    reloadAttributes,
+    reloadOrders,
+    reloadCompany,
+    reloadDiscounts,
+    reloadContactMessages,
+  } = useAdminData(isAdmin);
 
   const [company, setCompany] = useState<CompanySettingsOut | null>(null);
   useEffect(() => {
-    if (companyQ.data) setCompany(companyQ.data);
-  }, [companyQ.data]);
+    if (companyData) setCompany(companyData);
+  }, [companyData]);
 
-  // Локальный порядок категорий для drag-and-drop
-  const [catOrder, setCatOrder] = useState<AdminCategory[]>([]);
-  useEffect(() => {
-    setCatOrder([...categories].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)));
-  }, [categories]);
-
-  const catSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-  );
-
-  const handleCatDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIdx = catOrder.findIndex((c) => c.id === active.id);
-    const newIdx = catOrder.findIndex((c) => c.id === over.id);
-    const reordered = arrayMove(catOrder, oldIdx, newIdx);
-    setCatOrder(reordered);
-    await Promise.all(
-      reordered.map((c, i) => {
-        if ((c.sort_order ?? 0) !== i) return catalogApi.updateCategory(c.id, { sort_order: i });
-      }),
-    );
-    queryClient.invalidateQueries({ queryKey: ["categories"] });
-  };
-
-  const [tab, setTab] = useState<Tab>("dashboard");
+  const [tab, setTab] = useState<AdminTab>("dashboard");
 
   /*
     Fire the toast BEFORE tearing down the session so Sonner has the message
@@ -616,42 +185,6 @@ const Admin = () => {
       return next;
     });
   };
-
-  const reloadProducts = () => {
-    queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
-    queryClient.invalidateQueries({ queryKey: ["products"] });
-  };
-  const reloadCategories = () => queryClient.invalidateQueries({ queryKey: ["categories"] });
-  const reloadAttributes = (kind: AttributeKind) =>
-    queryClient.invalidateQueries({ queryKey: ["attributes", kind] });
-  const reloadOrders = () => queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
-  const reloadCompany = () => queryClient.invalidateQueries({ queryKey: ["company-settings"] });
-  const reloadDiscounts = () => queryClient.invalidateQueries({ queryKey: ["discount-tiers"] });
-  const reloadContactMessages = () => queryClient.invalidateQueries({ queryKey: ["admin", "contact-messages"] });
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen flex-col bg-muted/30">
-        <div className="border-b border-border bg-surface px-6 py-3">
-          <Skeleton className="h-8 w-32" />
-        </div>
-        <div className="container flex-1 py-10">
-          <div className="space-y-6">
-            <Skeleton className="h-8 w-48" />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28" />)}
-            </div>
-            <Skeleton className="h-64" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-  // Non-admin visitors (anonymous or logged-in clients) get a 404 instead
-  // of a redirect to /auth or an "access denied" screen. This avoids
-  // leaking the existence of the admin route to outsiders and matches the
-  // behaviour of any other unknown URL on the site.
-  if (!user || !user.isAdmin) return <NotFound />;
 
   const updateStatus = async (id: string, status: string) => {
     try {
@@ -1044,7 +577,7 @@ const Admin = () => {
   const lowStock = products.filter((p) => p.variants?.some((v) => v.stock_boxes > 0 && v.stock_boxes <= 5)).length;
   const outOfStock = products.filter((p) => p.variants?.length > 0 && p.variants.every((v) => v.stock_boxes <= 0)).length;
   const allVariants = products.flatMap((p) => (p.variants ?? []).map((v) => ({ ...v, product_name: p.name_ru, product_slug: p.slug })));
-  const tiers: DiscountTierOut[] = discountTiersQ.data ?? [];
+  const tiers: DiscountTierOut[] = discountTiers;
 
   /*
     Dashboard-only derivations. Kept in one place so the KPI strip and the
@@ -1076,7 +609,7 @@ const Admin = () => {
     [orders, monthStart],
   );
 
-  const allUsers: UserOut[] = usersQ.data ?? [];
+  const allUsers: UserOut[] = users;
   const clientUsers = useMemo(
     () => allUsers.filter((u) => u.role === "client"),
     [allUsers],
@@ -1555,11 +1088,38 @@ const Admin = () => {
     });
   };
 
+  // Render guards deliberately live after every hook. Returning earlier made
+  // the loading render call fewer hooks than the loaded render, which violates
+  // React's hook ordering contract and can crash during authentication.
+  if (loading) {
+    return (
+      <div className="flex min-h-screen flex-col bg-muted/30">
+        <div className="border-b border-border bg-surface px-6 py-3">
+          <Skeleton className="h-8 w-32" />
+        </div>
+        <div className="container flex-1 py-10">
+          <div className="space-y-6">
+            <Skeleton className="h-8 w-48" />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28" />)}
+            </div>
+            <Skeleton className="h-64" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Non-admin visitors (anonymous or logged-in clients) get a 404 instead
+  // of a redirect to /auth or an "access denied" screen. This avoids
+  // leaking the existence of the admin route to outsiders and matches the
+  // behaviour of any other unknown URL on the site.
+  if (!user || !user.isAdmin) return <NotFound />;
+
   return (
     <AdminShell
       tab={tab}
       setTab={setTab}
-      user={user}
       newOrdersBadge={newCount}
       newMessagesBadge={unreadMessagesCount}
       onSignOut={handleSignOut}
@@ -1573,1580 +1133,218 @@ const Admin = () => {
     >
       {/* ───── Dashboard ───── */}
       {tab === "dashboard" && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <KpiCard
-              label="Новые заявки"
-              value={newCount}
-              delta={newTodayCount > 0 ? `+${newTodayCount} за сегодня` : "сегодня пусто"}
-              deltaTone={newTodayCount > 0 ? "ok" : "muted"}
-            />
-            <KpiCard
-              label="В обработке"
-              value={processingCount}
-              delta={processingCount > 0 ? `${processingCount} в работе` : "нет в работе"}
-              deltaTone={processingCount > 0 ? "warn" : "muted"}
-            />
-            <KpiCard
-              label="Выручка (мес.)"
-              value={formatCompactMoney(monthRevenue)}
-              delta={monthRevenue > 0 ? "за текущий месяц" : "пока нет продаж"}
-              deltaTone={monthRevenue > 0 ? "ok" : "muted"}
-            />
-            <KpiCard
-              label="Активных клиентов"
-              value={activeClients}
-              delta={activeClients > 0 ? `${activeClients} с заказами` : "пока нет клиентов"}
-              deltaTone={activeClients > 0 ? "ok" : "muted"}
-            />
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-            {/* Recent orders.
-                Structured as a single <table> so the «Статус» and «Все заявки →»
-                header labels sit directly above their columns (status pill /
-                amount) — the previous flex header floated them freely and broke
-                the visual alignment called out in the design. */}
-            <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    {/* Title spans the number + company columns on the left. */}
-                    <th
-                      colSpan={2}
-                      className="px-5 pb-3 pt-5 text-left text-sm font-semibold"
-                    >
-                      Последние заявки
-                    </th>
-                    <th className="px-10 pb-3 pt-5 text-sm font-medium text-primary/80">
-                      <div className="flex justify-end">Статус</div>
-                    </th>
-                    <th className="px-5 pb-3 pt-5 text-right text-sm">
-                      <button
-                        type="button"
-                        onClick={() => setTab("orders")}
-                        className="font-medium text-primary transition-colors hover:underline"
-                      >
-                        Все заявки →
-                      </button>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentOrders.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={4}
-                        className="p-8 text-center text-sm text-muted-foreground"
-                      >
-                        Заявок пока нет
-                      </td>
-                    </tr>
-                  ) : (
-                    recentOrders.map((o) => (
-                      <tr key={o.id} className="border-t border-border">
-                        <td className="num whitespace-nowrap px-5 py-3 font-semibold">
-                          #{o.order_number}
-                        </td>
-                        <td className="py-3 pl-10 pr-5 text-muted-foreground">
-                          {o.company_name}
-                        </td>
-                        <td className="px-8 py-3">
-                          <div className="flex justify-end">
-                            <StatusPill status={o.status} />
-                          </div>
-                        </td>
-                        <td className="price px-5 py-3 text-right">
-                          {formatMoney(Number(o.total), o.currency as Currency)}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Popular products */}
-            <div className="rounded-lg border border-border bg-surface p-5 shadow-sm">
-              <h3 className="font-semibold">Популярные товары</h3>
-              <ul className="mt-4 space-y-3">
-                {popularProducts.length === 0 ? (
-                  <li className="text-sm text-muted-foreground">Нет товаров</li>
-                ) : (
-                  popularProducts.map((p) => (
-                    <li key={p.id} className="flex items-center gap-3">
-                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-muted">
-                        {p.image_url && (
-                          <img
-                            src={p.image_url}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">{p.name_ru}</div>
-                        <div className="num text-xs text-muted-foreground">
-                          {p.totalStock} коробок
-                        </div>
-                      </div>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </div>
-          </div>
-        </div>
+        <DashboardTab
+          newCount={newCount}
+          newTodayCount={newTodayCount}
+          processingCount={processingCount}
+          monthRevenue={monthRevenue}
+          activeClients={activeClients}
+          recentOrders={recentOrders}
+          popularProducts={popularProducts}
+          onViewOrders={() => setTab("orders")}
+        />
       )}
 
       {/* ───── Clients (real users from DB) ───── */}
       {tab === "clients" && (
-        <div className="overflow-x-auto rounded-lg border border-border bg-surface shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3">Компания</th>
-                <th className="px-4 py-3">Контакт</th>
-                <th className="px-4 py-3">Email / телефон</th>
-                <th className="px-4 py-3">Роль</th>
-                <th className="px-4 py-3 text-right">Заявок</th>
-                <th className="px-4 py-3 text-right">Оборот</th>
-                <th className="px-4 py-3">Регистрация</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allUsers.map((u) => {
-                const stats = clientOrderStats.get(u.id);
-                return (
-                  <tr key={u.id} className="border-t border-border align-top">
-                    <td className="px-4 py-3 font-medium">{u.company_name || "—"}</td>
-                    <td className="px-4 py-3">{u.contact_name || "—"}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      <div>{u.email}</div>
-                      <div>{u.phone || ""}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={cn(
-                        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-                        u.role === "admin" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
-                      )}>
-                        {u.role === "admin" ? "Админ" : "Клиент"}
-                      </span>
-                    </td>
-                    <td className="num px-4 py-3 text-right">{stats?.orders ?? 0}</td>
-                    <td className="price px-4 py-3 text-right">
-                      {formatMoney(stats?.total ?? 0, "RUB")}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {new Date(u.created_at).toLocaleDateString("ru-RU")}
-                    </td>
-                  </tr>
-                );
-              })}
-              {allUsers.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                    Пользователей пока нет
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <ClientsTab users={allUsers} orderStats={clientOrderStats} />
       )}
 
       {/* ───── Discount tiers ───── */}
       {tab === "discounts" && (
-        <div className="space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              Оптовые пороги: скидка применяется автоматически, когда количество
-              коробок в заявке достигает указанного значения.
-            </p>
-            <Button onClick={() => setEditingDiscount({ min_boxes: 10, discount_percent: 5 })}>
-              <Plus className="h-4 w-4" /> Новая скидка
-            </Button>
-          </div>
-          <div className="overflow-x-auto rounded-lg border border-border bg-surface shadow-sm">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">От (коробок)</th>
-                  <th className="px-4 py-3 text-right">Скидка, %</th>
-                  <th className="px-4 py-3 text-right"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {tiers.map((t) => (
-                  <tr key={t.id} className="border-t border-border">
-                    <td className="num px-4 py-3">{t.min_boxes}</td>
-                    <td className="num px-4 py-3 text-right text-primary">
-                      {t.discount_percent}%
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="inline-flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => setEditingDiscount(t)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteDiscount(t.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {tiers.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="p-8 text-center text-muted-foreground">
-                      Скидок пока нет
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DiscountsTab
+          tiers={tiers}
+          onCreate={() => setEditingDiscount({ min_boxes: 10, discount_percent: 5 })}
+          onEdit={setEditingDiscount}
+          onDelete={deleteDiscount}
+        />
       )}
 
+
       {tab === "orders" && (
-        <div className="space-y-5">
-          {/* Filter tabs — mirrors the counts shown in the sidebar badge,
-              with the active tab highlighted by an underline bar. */}
-          <div className="flex items-center gap-6 border-b border-border">
-            {([
-              { key: "all", label: "Все" },
-              { key: "new", label: "Новые" },
-              { key: "processing", label: "В работе" },
-              { key: "ready", label: "Готовы" },
-              { key: "completed", label: "Завершенные" },
-              { key: "cancelled", label: "Отменённые" },
-            ] as { key: OrdersFilter; label: string }[]).map((t) => {
-              const active = ordersFilter === t.key;
-              const count = ordersCountByFilter[t.key];
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => setOrdersFilter(t.key)}
-                  className={cn(
-                    "relative flex items-center gap-2 pb-3 pt-1 text-sm transition-colors",
-                    active
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <span>{t.label}</span>
-                  <span
-                    className={cn(
-                      "rounded-full px-2 text-xs font-medium",
-                      active
-                        ? "bg-primary/15 text-primary"
-                        : "bg-muted text-muted-foreground",
-                    )}
-                  >
-                    {count}
-                  </span>
-                  {active && (
-                    <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-primary" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Search */}
-          <div className="relative max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Поиск по номеру, клиенту..."
-              value={ordersSearch}
-              onChange={(e) => setOrdersSearch(e.target.value)}
-              className="h-10 w-full rounded-md border border-input bg-surface pl-9 pr-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </div>
-
-          {/*
-            Bulk-actions bar — появляется, когда выбрана хотя бы одна заявка.
-            Кнопки применяют одно действие сразу ко всем выделенным: статус
-            меняется batch-запросом, «Экспорт» выгружает только выбранные,
-            «Снять выделение» очищает Set. Нерелевантные заявки (например,
-            уже cancelled) автоматически пропускаются в bulkUpdateOrderStatus.
-          */}
-          {selectedOrderIds.size > 0 && (
-            <div className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-w-5xl flex-wrap items-center gap-3 rounded-t-lg border border-primary/30 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur-sm">
-              <span className="font-medium text-foreground">
-                Выбрано: <span className="num text-primary">{selectedOrderIds.size}</span>
-              </span>
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 border-success/30 bg-success/10 text-success hover:border-success/60 hover:bg-success/15 hover:text-success"
-                  onClick={() => bulkConfirmOrders(Array.from(selectedOrderIds))}
-                >
-                  Подтвердить
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 border-destructive/30 bg-destructive/10 text-destructive hover:border-destructive/60 hover:bg-destructive/15 hover:text-destructive"
-                  onClick={() => bulkRejectOrders(Array.from(selectedOrderIds))}
-                >
-                  Отклонить
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8"
-                  onClick={() =>
-                    exportOrdersCsv(
-                      filteredOrders.filter((o) => selectedOrderIds.has(o.id)),
-                    )
-                  }
-                >
-                  <Download className="h-4 w-4" /> Экспорт выбранных
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 text-muted-foreground hover:text-foreground"
-                  onClick={clearOrderSelection}
-                >
-                  Снять выделение
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Table */}
-          <div className="overflow-x-auto rounded-lg border border-border bg-surface shadow-sm">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="w-10 px-4 py-3">
-                    {/* Checkbox «выбрать всё на странице».
-                        `indeterminate` устанавливается через ref—
-                        этого свойства нет у React-пропсов. */}
-                    <input
-                      type="checkbox"
-                      checked={allOnPageSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = someOnPageSelected;
-                      }}
-                      onChange={toggleAllOnPage}
-                      disabled={pageOrderIds.length === 0}
-                      aria-label="Выбрать все заявки на странице"
-                      className="h-4 w-4 cursor-pointer rounded border-input accent-primary disabled:cursor-not-allowed disabled:opacity-40"
-                    />
-                  </th>
-                  <th className="px-4 py-3">№</th>
-                  <th className="px-4 py-3">Клиент</th>
-                  <th className="px-4 py-3">Дата</th>
-                  <th className="px-4 py-3 text-right">Сумма</th>
-                  <th className="px-4 py-3">Статус</th>
-                  <th className="px-4 py-3">Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pagedOrders.map((o) => {
-                  const isNew = o.status === "new";
-                  return (
-                    <tr key={o.id} className="border-t border-border hover:bg-muted/30">
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedOrderIds.has(o.id)}
-                          onChange={() => toggleOrderSelected(o.id)}
-                          aria-label={`Выбрать заявку ${o.order_number}`}
-                          className="h-4 w-4 cursor-pointer rounded border-input accent-primary"
-                        />
-                      </td>
-                      <td className="num px-4 py-3 font-semibold">#{o.order_number}</td>
-                      <td className="px-4 py-3">{o.company_name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {new Date(o.created_at).toLocaleDateString("ru-RU", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "2-digit",
-                        })}
-                      </td>
-                      <td className="price px-4 py-3 text-right">
-                        {formatMoney(Number(o.total), o.currency as Currency)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusPill status={o.status} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {isNew && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => approveOrder(o)}
-                                className="h-8 border-success/30 bg-success/10 text-success hover:border-success/60 hover:bg-success/15 hover:text-success"
-                              >
-                                Одобрить
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => rejectOrder(o)}
-                                className="h-8 border-destructive/30 bg-destructive/10 text-destructive hover:border-destructive/60 hover:bg-destructive/15 hover:text-destructive"
-                              >
-                                Отклонить
-                              </Button>
-                            </>
-                          )}
-                          {o.status === "processing" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => approveOrder(o)}
-                              className="h-8 border-success/30 bg-success/10 text-success hover:border-success/60 hover:bg-success/15 hover:text-success"
-                            >
-                              Одобрить
-                            </Button>
-                          )}
-                          {o.status === "payment_review" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => confirmPayment(o)}
-                              className="h-8 border-success/30 bg-success/10 text-success hover:border-success/60 hover:bg-success/15 hover:text-success"
-                            >
-                              Оплата ✓
-                            </Button>
-                          )}
-                          {o.status === "paid" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => markReady(o)}
-                              className="h-8 border-success/30 bg-success/10 text-success hover:border-success/60 hover:bg-success/15 hover:text-success"
-                            >
-                              Готово
-                            </Button>
-                          )}
-                          {o.status === "shipped" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => markCompleted(o)}
-                              className="h-8 border-muted-foreground/30 bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-                            >
-                              Выдан
-                            </Button>
-                          )}
-                          {/* ⋮-кнопка — outline-вариант с рамкой (как на скрине). Кнопка
-                              счёта-договора перенесена в диалог заявки чтобы меню стало лаконичным. */}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 w-8 p-0"
-                                aria-label="Действия"
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-44">
-                              {/* Иконки из hugeicons (free сет), по просьбе пользователя.
-                                  `gap-3` — ~12px между иконкой и текстом,
-                                  `strokeWidth={2}` делает контур потолще — ближе
-                                  к solid-стилю из макета. */}
-                              <DropdownMenuItem className="gap-3" onClick={() => setOpenOrderId(o.id)}>
-                                <HugeiconsIcon icon={Package01Icon} size={16} strokeWidth={2} />
-                                Открыть
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="gap-3"
-                                onClick={() => {
-                                  setContactOrder(o);
-                                  setContactSubject(`По заявке #${o.order_number}`);
-                                  setContactBody("");
-                                }}
-                              >
-                                <HugeiconsIcon icon={BubbleChatIcon} size={16} strokeWidth={2} />
-                                Связаться
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuSub>
-                                <DropdownMenuSubTrigger className="gap-3 text-xs">
-                                  Изменить статус
-                                </DropdownMenuSubTrigger>
-                                <DropdownMenuSubContent className="w-40">
-                                  {STATUSES.filter((s) => s !== o.status).map((s) => (
-                                    <DropdownMenuItem
-                                      key={s}
-                                      onClick={() => updateStatus(o.id, s)}
-                                      className="text-xs"
-                                    >
-                                      {STATUS_LABEL[s]?.label ?? s}
-                                    </DropdownMenuItem>
-                                  ))}
-                                </DropdownMenuSubContent>
-                              </DropdownMenuSub>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {pagedOrders.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="p-10 text-center text-muted-foreground">
-                      Заявок не найдено
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination footer — rendered only when there's something to page */}
-          {filteredOrders.length > 0 && (
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>
-                Показано {(safeOrderPage - 1) * ORDERS_PER_PAGE + 1}–
-                {Math.min(safeOrderPage * ORDERS_PER_PAGE, filteredOrders.length)} из{" "}
-                {filteredOrders.length}
-              </span>
-              <div className="flex items-center gap-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 w-8 p-0"
-                  onClick={() => setOrdersPage((p) => Math.max(1, p - 1))}
-                  disabled={safeOrderPage === 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                {Array.from({ length: totalOrderPages }, (_, i) => i + 1).map((n) => (
-                  <Button
-                    key={n}
-                    size="sm"
-                    variant={n === safeOrderPage ? "default" : "outline"}
-                    className="h-8 w-8 p-0"
-                    onClick={() => setOrdersPage(n)}
-                  >
-                    {n}
-                  </Button>
-                ))}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 w-8 p-0"
-                  onClick={() => setOrdersPage((p) => Math.min(totalOrderPages, p + 1))}
-                  disabled={safeOrderPage === totalOrderPages}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+        <OrdersTab
+          ordersFilter={ordersFilter}
+          ordersCountByFilter={ordersCountByFilter}
+          ordersSearch={ordersSearch}
+          selectedOrderIds={selectedOrderIds}
+          filteredOrders={filteredOrders}
+          pagedOrders={pagedOrders}
+          allOnPageSelected={allOnPageSelected}
+          someOnPageSelected={someOnPageSelected}
+          pageOrderIds={pageOrderIds}
+          safeOrderPage={safeOrderPage}
+          totalOrderPages={totalOrderPages}
+          ordersPerPage={ORDERS_PER_PAGE}
+          onFilterChange={setOrdersFilter}
+          onSearchChange={setOrdersSearch}
+          onPageChange={setOrdersPage}
+          onToggleAllOnPage={toggleAllOnPage}
+          onToggleSelected={toggleOrderSelected}
+          onClearSelection={clearOrderSelection}
+          onBulkConfirm={bulkConfirmOrders}
+          onBulkReject={bulkRejectOrders}
+          onExport={exportOrdersCsv}
+          onApprove={approveOrder}
+          onReject={rejectOrder}
+          onConfirmPayment={confirmPayment}
+          onMarkReady={markReady}
+          onMarkCompleted={markCompleted}
+          onOpen={setOpenOrderId}
+          onContactOrderChange={setContactOrder}
+          onContactSubjectChange={setContactSubject}
+          onContactBodyChange={setContactBody}
+          onUpdateStatus={updateStatus}
+        />
       )}
 
       {tab === "products" && (
-        <div className="space-y-5">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[220px] max-w-sm flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Поиск товара..."
-                value={productsSearch}
-                onChange={(e) => setProductsSearch(e.target.value)}
-                className="h-10 w-full rounded-md border border-input bg-surface pl-9 pr-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="relative">
-              <select
-                value={productsCategory}
-                onChange={(e) => setProductsCategory(e.target.value)}
-                className="h-10 appearance-none rounded-md border border-input bg-surface pl-3 pr-8 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="">Категория: Все</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.parent_id ? "↳ " : ""}
-                    {c.name_ru}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            </div>
-            <Button size="sm" className="ml-auto h-10" onClick={() => openProductDialog()}>
-              <Plus className="h-4 w-4" /> Добавить товар
-            </Button>
-          </div>
-
-          {/*
-            Bulk-actions bar для товаров — параллельно bar'у заявок.
-            Появляется, когда выделен хотя бы один товар. «Опубликовать» /
-            «Снять с публикации» батчат `is_published`, «Удалить» —
-            необратимое каскадное удаление через confirm().
-          */}
-          {selectedProductIds.size > 0 && (
-            <div className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-w-5xl flex-wrap items-center gap-3 rounded-t-lg border border-primary/30 bg-background/95 px-4 py-3 text-sm shadow-lg backdrop-blur-sm">
-              <span className="font-medium text-foreground">
-                Выбрано: <span className="num text-primary">{selectedProductIds.size}</span>
-              </span>
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 border-success/30 bg-success/10 text-success hover:border-success/60 hover:bg-success/15 hover:text-success"
-                  onClick={() => bulkSetProductsPublished(Array.from(selectedProductIds), true)}
-                >
-                  Опубликовать
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8"
-                  onClick={() => bulkSetProductsPublished(Array.from(selectedProductIds), false)}
-                >
-                  Снять с публикации
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 border-destructive/30 bg-destructive/10 text-destructive hover:border-destructive/60 hover:bg-destructive/15 hover:text-destructive"
-                  onClick={() => bulkDeleteProducts(Array.from(selectedProductIds))}
-                >
-                  <Trash2 className="h-4 w-4" /> Удалить
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 text-muted-foreground hover:text-foreground"
-                  onClick={clearProductSelection}
-                >
-                  Снять выделение
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Flat product table (variants live in the expandable drawer below each row) */}
-          <div className="overflow-x-auto rounded-lg border border-border bg-surface shadow-sm">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="w-10 px-4 py-3">
-                    {/* Checkbox «выбрать все видимые товары».
-                        Таблица товаров не пагинируется — берём весь
-                        отфильтрованный набор. */}
-                    <input
-                      type="checkbox"
-                      checked={allVisibleProductsSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = someVisibleProductsSelected;
-                      }}
-                      onChange={toggleAllVisibleProducts}
-                      disabled={visibleProductIds.length === 0}
-                      aria-label="Выбрать все товары"
-                      className="h-4 w-4 cursor-pointer rounded border-input accent-primary disabled:cursor-not-allowed disabled:opacity-40"
-                    />
-                  </th>
-                  <th className="w-16 px-4 py-3">Фото</th>
-                  <th className="px-4 py-3">Название</th>
-                  <th className="px-4 py-3">Категория</th>
-                  <th className="px-4 py-3 text-right">Цена/кор.</th>
-                  <th className="px-4 py-3 text-right">Остаток</th>
-                  <th className="px-4 py-3">Статус</th>
-                  <th className="w-24 px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProducts.map((p) => {
-                  const img = productImage(p);
-                  const price = productPricePerBox(p);
-                  const stock = productStockTotal(p);
-                  const status = productStatus(p);
-                  const sku = productSku(p);
-                  const expanded = expandedProducts.has(p.id);
-                  return (
-                    <Fragment key={p.id}>
-                      <tr className="border-t border-border hover:bg-muted/30">
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedProductIds.has(p.id)}
-                            onChange={() => toggleProductSelected(p.id)}
-                            aria-label={`Выбрать ${p.name_ru}`}
-                            className="h-4 w-4 cursor-pointer rounded border-input accent-primary"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="h-10 w-10 overflow-hidden rounded-md bg-muted">
-                            {img && (
-                              <img src={img} alt="" className="h-full w-full object-cover" />
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {/*
-                            Clicking the name toggles the variants drawer — the ✏️
-                            button on the right still opens the product dialog so
-                            the row has two clearly-separated affordances.
-                          */}
-                          <button
-                            type="button"
-                            onClick={() => toggleProductExpanded(p.id)}
-                            className="group flex items-center gap-2 text-left"
-                          >
-                            <div>
-                              <div className="font-medium">
-                                {p.name_ru}
-                                {!p.is_published && (
-                                  <span className="ml-2 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                                    черновик
-                                  </span>
-                                )}
-                              </div>
-                              <div className="num text-xs text-muted-foreground">
-                                SKU: {sku}
-                              </div>
-                            </div>
-                            <ChevronDown
-                              className={cn(
-                                "h-3.5 w-3.5 text-muted-foreground transition-transform",
-                                expanded && "rotate-180",
-                              )}
-                            />
-                          </button>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {categories.find((c) => c.id === p.category_id)?.name_ru ?? "—"}
-                        </td>
-                        <td className="price px-4 py-3 text-right">
-                          {price !== null ? formatMoney(price, "RUB") : "—"}
-                        </td>
-                        <td
-                          className={cn(
-                            "num px-4 py-3 text-right",
-                            stock === 0
-                              ? "text-muted-foreground"
-                              : stock <= 5
-                                ? "text-warning"
-                                : "text-success",
-                          )}
-                        >
-                          {stock}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={cn(
-                              "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-                              status.cls,
-                            )}
-                          >
-                            {status.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="inline-flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => openProductDialog(p)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => deleteProduct(p.id)}
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                      {expanded && (
-                        <tr className="border-t border-border bg-muted/30">
-                          <td colSpan={8} className="px-4 py-4">
-                            <div className="mb-2 flex items-center justify-between">
-                              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                Вариации ({p.variants?.length ?? 0})
-                              </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setBulkSkuPrefix(p.slug?.toUpperCase() ?? "");
-                                    setBulkVariant({ product_id: p.id });
-                                  }}
-                                >
-                                  <Plus className="h-3.5 w-3.5" /> Генератор
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setVariantDiscounts([]);
-                                    setEditingVariant({
-                                      product_id: p.id,
-                                      pieces_per_box: 1,
-                                    });
-                                  }}
-                                >
-                                  <Plus className="h-3.5 w-3.5" /> Вариация
-                                </Button>
-                              </div>
-                            </div>
-                            <div className="overflow-x-auto rounded-md border border-border bg-surface">
-                              <table className="w-full text-xs">
-                                <thead className="bg-muted/50 text-left uppercase tracking-wider text-muted-foreground">
-                                  <tr>
-                                    <th className="w-10 px-3 py-2">Фото</th>
-                                    <th className="px-3 py-2">SKU</th>
-                                    <th className="px-3 py-2">Размер</th>
-                                    <th className="px-3 py-2">Цвет</th>
-                                    <th className="px-3 py-2 text-right">Шт/кор</th>
-                                    <th className="px-3 py-2 text-right">RUB/шт</th>
-                                    <th className="px-3 py-2 text-right">Кор.</th>
-                                    <th className="px-3 py-2"></th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {p.variants?.map((v) => (
-                                    <tr key={v.id} className="border-t border-border">
-                                      <td className="px-3 py-2">
-                                        <div className="h-8 w-8 overflow-hidden rounded bg-muted">
-                                          {(v.images?.[0]?.url ?? v.image_url) ? (
-                                            <img src={(v.images?.[0]?.url ?? v.image_url)!} alt="" className="h-full w-full object-cover" />
-                                          ) : (
-                                            <div className="flex h-full w-full items-center justify-center text-[9px] text-muted-foreground">—</div>
-                                          )}
-                                        </div>
-                                      </td>
-                                      <td className="num px-3 py-2">{v.sku}</td>
-                                      <td className="px-3 py-2">{v.size ?? "—"}</td>
-                                      <td className="px-3 py-2">{v.color ?? "—"}</td>
-                                      <td className="num px-3 py-2 text-right">{v.pieces_per_box}</td>
-                                      <td className="num px-3 py-2 text-right">{v.price_per_piece_rub}</td>
-                                      <td className="num px-3 py-2 text-right">{v.stock_boxes}</td>
-                                      <td className="px-3 py-2 text-right">
-                                        <div className="inline-flex gap-1">
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => {
-                                              setVariantDiscounts((v.volume_discounts ?? []).map((vd) => ({ min_boxes: vd.min_boxes, discount_percent: vd.discount_percent })));
-                                              setVariantImages([...(v.images ?? [])].sort((a, b) => a.sort_order - b.sort_order));
-                                              setEditingVariant(v);
-                                            }}
-                                          >
-                                            <Pencil className="h-3 w-3" />
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => deleteVariant(v.id)}
-                                            className="text-destructive hover:text-destructive"
-                                          >
-                                            <Trash2 className="h-3 w-3" />
-                                          </Button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                  {(!p.variants || p.variants.length === 0) && (
-                                    <tr>
-                                      <td
-                                        colSpan={8}
-                                        className="p-3 text-center text-muted-foreground"
-                                      >
-                                        Нет вариаций
-                                      </td>
-                                    </tr>
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-                {filteredProducts.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      className="p-10 text-center text-muted-foreground"
-                    >
-                      Товаров не найдено
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <ProductsTab
+          productsSearch={productsSearch}
+          productsCategory={productsCategory}
+          categories={categories}
+          selectedProductIds={selectedProductIds}
+          allVisibleProductsSelected={allVisibleProductsSelected}
+          someVisibleProductsSelected={someVisibleProductsSelected}
+          visibleProductIds={visibleProductIds}
+          filteredProducts={filteredProducts}
+          expandedProducts={expandedProducts}
+          onSearchChange={setProductsSearch}
+          onCategoryChange={setProductsCategory}
+          onOpenProduct={openProductDialog}
+          onBulkPublish={bulkSetProductsPublished}
+          onBulkDelete={bulkDeleteProducts}
+          onClearSelection={clearProductSelection}
+          onToggleAllVisible={toggleAllVisibleProducts}
+          onToggleSelected={toggleProductSelected}
+          onToggleExpanded={toggleProductExpanded}
+          onDeleteProduct={deleteProduct}
+          onOpenBulkGenerator={(productId, skuPrefix) => {
+            setBulkSkuPrefix(skuPrefix);
+            setBulkVariant({ product_id: productId });
+          }}
+          onCreateVariant={(productId) => {
+            setVariantDiscounts([]);
+            setEditingVariant({ product_id: productId, pieces_per_box: 1 });
+          }}
+          onEditVariant={(variant) => {
+            setVariantDiscounts(
+              (variant.volume_discounts ?? []).map((discount) => ({
+                min_boxes: discount.min_boxes,
+                discount_percent: discount.discount_percent,
+              })),
+            );
+            setVariantImages([...(variant.images ?? [])].sort((a, b) => a.sort_order - b.sort_order));
+            setEditingVariant(variant);
+          }}
+          onDeleteVariant={deleteVariant}
+          getProductImage={productImage}
+          getProductPricePerBox={productPricePerBox}
+          getProductStockTotal={productStockTotal}
+          getProductStatus={productStatus}
+          getProductSku={productSku}
+        />
       )}
 
-        {tab === "categories" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">Перетащите строку за иконку <GripVertical className="inline h-3.5 w-3.5" /> чтобы изменить порядок</p>
-              <Button onClick={() => setEditingCategory({ sort_order: catOrder.length })}><Plus className="h-4 w-4" /> Новая категория</Button>
-            </div>
-            <div className="rounded-lg border border-border bg-surface overflow-hidden">
-              <div className="grid grid-cols-[28px_1fr_140px_100px_60px_80px] items-center gap-2 border-b border-border bg-muted/60 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <div />
-                <div>Название</div>
-                <div>Slug</div>
-                <div>Родитель</div>
-                <div className="text-right">Товары</div>
-                <div />
-              </div>
-              <DndContext sensors={catSensors} collisionDetection={closestCenter} onDragEnd={handleCatDragEnd}>
-                <SortableContext items={catOrder.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-                  {catOrder.map((c) => (
-                    <SortableCatRow
-                      key={c.id}
-                      cat={c}
-                      allCats={catOrder}
-                      productCount={products.filter((p) => p.category_id === c.id).length}
-                      onEdit={setEditingCategory}
-                      onDelete={deleteCategory}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
-              {catOrder.length === 0 && (
-                <div className="p-8 text-center text-sm text-muted-foreground">Нет категорий</div>
-              )}
-            </div>
-          </div>
-        )}
+      {tab === "categories" && (
+        <CategoriesTab
+          categories={categories}
+          products={products}
+          onCreate={() => setEditingCategory({ sort_order: categories.length })}
+          onEdit={setEditingCategory}
+          onDelete={deleteCategory}
+          onChanged={reloadCategories}
+        />
+      )}
 
-        {tab === "messages" && (
-          <div className="space-y-4">
-            {contactMessages.length === 0 ? (
-              <div className="rounded-lg border border-border bg-surface p-12 text-center text-sm text-muted-foreground">
-                Обращений пока нет
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {contactMessages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={cn(
-                      "rounded-lg border bg-surface p-4 shadow-sm transition-colors",
-                      m.is_read ? "border-border" : "border-primary/40 bg-primary/[0.02]",
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{m.name}</span>
-                          {!m.is_read && (
-                            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                              Новое
-                            </span>
-                          )}
-                        </div>
-                        {m.phone && (
-                          <div className="mt-0.5 text-xs text-muted-foreground">{m.phone}</div>
-                        )}
-                        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{m.message}</p>
-                        <div className="mt-2 text-[11px] text-muted-foreground">
-                          {new Date(m.created_at).toLocaleString("ru-RU")}
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 gap-1">
-                        {!m.is_read && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            title="Отметить прочитанным"
-                            onClick={async () => {
-                              try {
-                                await contactApi.markRead(m.id);
-                                reloadContactMessages();
-                              } catch (err) {
-                                toast.error(apiErrorMessage(err, "Ошибка"));
-                              }
-                            }}
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          title="Удалить"
-                          onClick={async () => {
-                            if (!confirm("Удалить обращение?")) return;
-                            try {
-                              await contactApi.delete(m.id);
-                              toast.success("Удалено");
-                              reloadContactMessages();
-                            } catch (err) {
-                              toast.error(apiErrorMessage(err, "Ошибка"));
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
-        {tab === "stock" && (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-border bg-surface p-4 text-xs">
-              <div className="font-semibold">Webhook для внешней системы (1С / МойСклад):</div>
-              <div className="mt-1 break-all rounded-md bg-muted px-2 py-1 num">
-                {`${import.meta.env.VITE_API_URL ?? "http://localhost:8000"}/inventory/webhook`}
-              </div>
-              <div className="mt-2 text-muted-foreground">
-                POST с заголовком <code className="num">x-webhook-secret</code> и телом <code className="num">{`{"updates":[{"sku":"...","stock_boxes":N}]}`}</code>.
-                Установите секрет <code className="num">INVENTORY_WEBHOOK_SECRET</code> в настройках бэкенда.
-              </div>
-            </div>
-            <div className="overflow-x-auto rounded-lg border border-border bg-surface">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-3">SKU</th>
-                    <th className="px-3 py-3">Товар</th>
-                    <th className="px-3 py-3 text-right">Остаток</th>
-                    <th className="px-3 py-3 text-right">Резерв</th>
-                    <th className="px-3 py-3 text-right">Доступно</th>
-                    <th className="px-3 py-3">Внешний ID</th>
-                    <th className="px-3 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allVariants.map((v) => {
-                    const reserved = v.reserved_boxes ?? 0;
-                    const avail = Math.max(0, v.stock_boxes - reserved);
-                    const low = v.stock_boxes <= 5;
-                    return (
-                      <tr key={v.id} className="border-t border-border">
-                        <td className="px-3 py-2 num">{v.sku}</td>
-                        <td className="px-3 py-2">{v.product_name}</td>
-                        <td className={`px-3 py-2 text-right num ${low ? "text-warning" : ""}`}>{v.stock_boxes}</td>
-                        <td className="px-3 py-2 text-right num">{reserved}</td>
-                        <td className="px-3 py-2 text-right num font-semibold">{avail}</td>
-                        <td className="px-3 py-2 num text-xs text-muted-foreground">{v.external_id ?? "—"}</td>
-                        <td className="px-3 py-2 text-right">
-                          <Button size="sm" variant="outline" onClick={() => setStockOpVariant({ id: v.id, sku: v.sku, stock_boxes: v.stock_boxes, reserved_boxes: v.reserved_boxes })}>
-                            <Package className="h-3.5 w-3.5" /> Движение
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+      {tab === "messages" && (
+        <MessagesTab
+          messages={contactMessages}
+          onMarkRead={async (id) => {
+            try {
+              await contactApi.markRead(id);
+              await reloadContactMessages();
+            } catch (err) {
+              toast.error(apiErrorMessage(err, "Ошибка"));
+            }
+          }}
+          onDelete={async (id) => {
+            try {
+              await contactApi.delete(id);
+              toast.success("Удалено");
+              await reloadContactMessages();
+            } catch (err) {
+              toast.error(apiErrorMessage(err, "Ошибка"));
+            }
+          }}
+        />
+      )}
 
-      {/* ───── Settings (company details + folded lookups) ───── */}
+
+      {tab === "stock" && (
+        <StockTab variants={allVariants} onStockOperation={setStockOpVariant} />
+      )}
+
       {tab === "settings" && (
-        <div className="space-y-6">
-          {company && (
-            <div className="rounded-lg border border-border bg-surface p-5 shadow-sm">
-              <div className="mb-3">
-                <h2 className="text-lg font-semibold">Реквизиты компании</h2>
-                <p className="text-xs text-muted-foreground">
-                  Используются в счёте-договоре, который открывается из заявок (печать / сохранение в PDF).
-                </p>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Полное название" value={company.legal_name} onChange={(e) => setCompany({ ...company, legal_name: e.target.value })} />
-                <Field label="Краткое название" value={company.short_name} onChange={(e) => setCompany({ ...company, short_name: e.target.value })} />
-                <Field label="ИНН" value={company.inn} onChange={(e) => setCompany({ ...company, inn: e.target.value })} />
-                <Field label="КПП" value={company.kpp} onChange={(e) => setCompany({ ...company, kpp: e.target.value })} />
-                <Field label="ОГРН" value={company.ogrn} onChange={(e) => setCompany({ ...company, ogrn: e.target.value })} />
-                <Field label="Юридический адрес" value={company.legal_address} onChange={(e) => setCompany({ ...company, legal_address: e.target.value })} />
-                <Field label="Почтовый адрес" value={company.postal_address} onChange={(e) => setCompany({ ...company, postal_address: e.target.value })} />
-                <Field label="Банк" value={company.bank_name} onChange={(e) => setCompany({ ...company, bank_name: e.target.value })} />
-                <Field label="БИК" value={company.bank_bik} onChange={(e) => setCompany({ ...company, bank_bik: e.target.value })} />
-                <Field label="Расчётный счёт" value={company.bank_account} onChange={(e) => setCompany({ ...company, bank_account: e.target.value })} />
-                <Field label="Корр. счёт" value={company.corr_account} onChange={(e) => setCompany({ ...company, corr_account: e.target.value })} />
-                <Field label="Должность подписанта" value={company.director_position} onChange={(e) => setCompany({ ...company, director_position: e.target.value })} />
-                <Field label="ФИО подписанта" value={company.director_name} onChange={(e) => setCompany({ ...company, director_name: e.target.value })} />
-                <Field label="Телефон" value={company.phone} onChange={(e) => setCompany({ ...company, phone: e.target.value })} />
-                <Field label="E-mail" value={company.email} onChange={(e) => setCompany({ ...company, email: e.target.value })} />
-                <div className="md:col-span-2">
-                  <TextArea label="Условия оплаты" rows={2} value={company.payment_terms} onChange={(e) => setCompany({ ...company, payment_terms: e.target.value })} />
-                </div>
-                <div className="md:col-span-2">
-                  <TextArea label="Условия отгрузки / самовывоза" rows={2} value={company.delivery_terms} onChange={(e) => setCompany({ ...company, delivery_terms: e.target.value })} />
-                </div>
-                <div className="md:col-span-2">
-                  <TextArea label="Текст оферты" rows={3} value={company.offer_text} onChange={(e) => setCompany({ ...company, offer_text: e.target.value })} />
-                </div>
-              </div>
-              <div className="mt-4 flex justify-end">
-                <Button onClick={saveCompany}>Сохранить реквизиты</Button>
-              </div>
-            </div>
-          )}
-
-          {/*
-            Справочники are folded inside Настройки because the 8-item
-            sidebar in the redesign has no slot for them — they're
-            admin-internal and editing them is rare, so sharing a page
-            with Реквизиты is the right trade-off.
-          */}
-          <div>
-            <div className="mb-3">
-              <h2 className="text-lg font-semibold">Справочники</h2>
-              <p className="text-xs text-muted-foreground">
-                Материалы, ароматы и формы — используются в карточке товара.
-              </p>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-3">
-              {(["materials", "scents", "shapes"] as LookupKind[]).map((kind) => {
-                const items = lookupListByKind(kind);
-                return (
-                  <div key={kind} className="rounded-lg border border-border bg-surface shadow-sm">
-                    <div className="flex items-center justify-between border-b border-border p-3">
-                      <div className="font-semibold">{LOOKUP_LABEL[kind]}</div>
-                      <Button size="sm" onClick={() => setEditingLookup({ kind, data: { sort_order: items.length } })}><Plus className="h-3.5 w-3.5" /></Button>
-                    </div>
-                    <ul className="divide-y divide-border text-sm">
-                      {items.map((it) => (
-                        <li key={it.id} className="flex items-center justify-between gap-2 p-2.5">
-                          <div className="min-w-0">
-                            <div className="font-medium">{it.name_ru}</div>
-                            <div className="num text-xs text-muted-foreground">{it.slug} · {it.name_en}</div>
-                          </div>
-                          <div className="flex shrink-0 gap-1">
-                            <Button size="sm" variant="ghost" onClick={() => setEditingLookup({ kind, data: it })}><Pencil className="h-3 w-3" /></Button>
-                            <Button size="sm" variant="ghost" onClick={() => deleteLookup(kind, it.id)} className="text-destructive hover:text-destructive"><Trash2 className="h-3 w-3" /></Button>
-                          </div>
-                        </li>
-                      ))}
-                      {items.length === 0 && <li className="p-3 text-center text-xs text-muted-foreground">Пусто</li>}
-                    </ul>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <SettingsTab
+          company={company}
+          materials={materials}
+          scents={scents}
+          shapes={shapes}
+          onCompanyChange={setCompany}
+          onSaveCompany={saveCompany}
+          onEditLookup={setEditingLookup}
+          onDeleteLookup={deleteLookup}
+        />
       )}
 
-      {/* PRODUCT DIALOG */}
-      <Dialog open={!!editingProduct} onOpenChange={(o) => { if (!o) { setEditingProduct(null); setProductGallery([]); } }}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editingProduct?.id ? "Редактировать товар" : "Новый товар"}</DialogTitle></DialogHeader>
-          {editingProduct && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Slug *" value={editingProduct.slug ?? ""} onChange={(e) => setEditingProduct({ ...editingProduct, slug: e.target.value })} />
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Категория</span>
-                <select value={editingProduct.category_id ?? ""} onChange={(e) => setEditingProduct({ ...editingProduct, category_id: e.target.value || null })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-                  <option value="">— без категории —</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.parent_id ? "↳ " : ""}{c.name_ru}</option>)}
-                </select>
-              </label>
-              <Field label="Название *" value={editingProduct.name_ru ?? ""} onChange={(e) => setEditingProduct({ ...editingProduct, name_ru: e.target.value })} />
-
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Материал</span>
-                <select value={editingProduct.material_id ?? ""} onChange={(e) => setEditingProduct({ ...editingProduct, material_id: e.target.value || null })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-                  <option value="">—</option>
-                  {materials.map((m) => <option key={m.id} value={m.id}>{m.name_ru}</option>)}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Аромат</span>
-                <select value={editingProduct.scent_id ?? ""} onChange={(e) => setEditingProduct({ ...editingProduct, scent_id: e.target.value || null })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-                  <option value="">—</option>
-                  {scents.map((s) => <option key={s.id} value={s.id}>{s.name_ru}</option>)}
-                </select>
-              </label>
-              <label className="block md:col-span-2">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Форма</span>
-                <select value={editingProduct.shape_id ?? ""} onChange={(e) => setEditingProduct({ ...editingProduct, shape_id: e.target.value || null })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-                  <option value="">—</option>
-                  {shapes.map((sh) => <option key={sh.id} value={sh.id}>{sh.name_ru}</option>)}
-                </select>
-              </label>
-
-              <div className="md:col-span-2">
-                <TextArea label="Описание" rows={3} value={editingProduct.description_ru ?? ""} onChange={(e) => setEditingProduct({ ...editingProduct, description_ru: e.target.value })} />
-              </div>
-              <div className="md:col-span-2">
-                <ImageUpload
-                  value={editingProduct.image_url ?? null}
-                  onChange={(url) => setEditingProduct({ ...editingProduct, image_url: url })}
-                />
-                <p className="mt-1 text-[11px] text-muted-foreground">Главное фото — используется в карточках. Если пусто, возьмётся первое из галереи.</p>
-              </div>
-              <div className="md:col-span-2">
-                <MultiImageUpload
-                  value={productGallery}
-                  onChange={setProductGallery}
-                  mainImageUrl={editingProduct.image_url ?? null}
-                />
-              </div>
-              <label className="md:col-span-2 flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={editingProduct.is_published ?? true} onChange={(e) => setEditingProduct({ ...editingProduct, is_published: e.target.checked })} className="h-4 w-4 accent-primary" />
-                Опубликован
-              </label>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditingProduct(null); setProductGallery([]); }}>Отмена</Button>
-            <Button onClick={saveProduct}>Сохранить</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* VARIANT DIALOG */}
-      <Dialog open={!!editingVariant} onOpenChange={(o) => { if (!o) { setEditingVariant(null); setVariantDiscounts([]); setVariantImages([]); } }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>{editingVariant?.id ? "Редактировать вариацию" : "Новая вариация"}</DialogTitle></DialogHeader>
-          {editingVariant && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="SKU *" value={editingVariant.sku ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, sku: e.target.value })} />
-              <Field label="Внешний ID (1С/МойСклад)" value={editingVariant.external_id ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, external_id: e.target.value })} />
-              <Field label="Размер" value={editingVariant.size ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, size: e.target.value })} />
-              <Field label="Цвет" value={editingVariant.color ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, color: e.target.value })} />
-              <Field label="Шт. в коробке" type="number" min={1} value={editingVariant.pieces_per_box ?? 1} onChange={(e) => setEditingVariant({ ...editingVariant, pieces_per_box: Number(e.target.value) })} />
-              <Field label="Остаток (коробок)" type="number" min={0} value={editingVariant.stock_boxes ?? 0} onChange={(e) => setEditingVariant({ ...editingVariant, stock_boxes: Number(e.target.value) })} />
-              <Field label="Цена за шт. (RUB)" type="number" min={0} step={0.01} value={editingVariant.price_per_piece_rub ?? 0} onChange={(e) => setEditingVariant({ ...editingVariant, price_per_piece_rub: Number(e.target.value) })} />
-              <Field label="Длина (мм)" type="number" min={0} value={editingVariant.length_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, length_mm: e.target.value ? Number(e.target.value) : null })} />
-              <Field label="Ширина (мм)" type="number" min={0} value={editingVariant.width_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, width_mm: e.target.value ? Number(e.target.value) : null })} />
-              <Field label="Высота (мм)" type="number" min={0} value={editingVariant.height_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, height_mm: e.target.value ? Number(e.target.value) : null })} />
-              <Field label="Вес (г)" type="number" min={0} value={editingVariant.weight_gr ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, weight_gr: e.target.value ? Number(e.target.value) : null })} />
-              <Field label="Время горения (ч)" type="number" min={0} value={editingVariant.burn_time_hours ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, burn_time_hours: e.target.value ? Number(e.target.value) : null })} />
-              <Field label="Упаковок в ТК" type="number" min={1} value={editingVariant.packages_per_box ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, packages_per_box: e.target.value ? Number(e.target.value) : null })} />
-              <Field label="Длина ТК (мм)" type="number" min={0} value={editingVariant.box_length_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, box_length_mm: e.target.value ? Number(e.target.value) : null })} />
-              <Field label="Ширина ТК (мм)" type="number" min={0} value={editingVariant.box_width_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, box_width_mm: e.target.value ? Number(e.target.value) : null })} />
-              <Field label="Высота ТК (мм)" type="number" min={0} value={editingVariant.box_height_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, box_height_mm: e.target.value ? Number(e.target.value) : null })} />
-              <Field label="Вес ТК (г)" type="number" min={0} value={editingVariant.box_weight_gr ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, box_weight_gr: e.target.value ? Number(e.target.value) : null })} />
-              <div className="md:col-span-2">
-                {editingVariant.id ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Фото вариации ({variantImages.length})
-                      </span>
-                      <label className="cursor-pointer">
-                        <input
-                          type="file"
-                          multiple
-                          accept="image/jpeg,image/png,image/webp,image/avif"
-                          className="hidden"
-                          onChange={async (e) => {
-                            const files = e.target.files;
-                            if (!files?.length || !editingVariant.id) return;
-                            setVariantImgUploading(true);
-                            let added = 0;
-                            for (const file of Array.from(files)) {
-                              if (file.size > 5 * 1024 * 1024) { toast.error(`${file.name}: больше 5 МБ`); continue; }
-                              try {
-                                const { url } = await uploadsApi.uploadProductImage(file);
-                                const img = await catalogApi.createVariantImage(editingVariant.id, { url, sort_order: variantImages.length + added });
-                                setVariantImages((prev) => [...prev, img]);
-                                added++;
-                              } catch (err) {
-                                toast.error(apiErrorMessage(err, `${file.name}: ошибка`));
-                              }
-                            }
-                            setVariantImgUploading(false);
-                            if (added) { toast.success(`Загружено: ${added}`); reloadProducts(); }
-                            e.target.value = "";
-                          }}
-                        />
-                        <Button type="button" size="sm" variant="outline" asChild disabled={variantImgUploading}>
-                          <span>{variantImgUploading ? "Загрузка..." : "Добавить фото"}</span>
-                        </Button>
-                      </label>
-                    </div>
-                    {variantImages.length === 0 ? (
-                      <div className="rounded-md border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
-                        Нет фото. Нажмите «Добавить фото».
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                        {variantImages.map((img, i) => (
-                          <div key={img.id} className="group relative overflow-hidden rounded-md border border-border bg-muted">
-                            <img src={img.url} alt="" className="aspect-square w-full object-cover" />
-                            {i === 0 && (
-                              <span className="absolute left-1 top-1 inline-flex items-center gap-0.5 rounded-sm bg-primary px-1.5 py-0.5 text-[9px] font-semibold uppercase text-primary-foreground">
-                                главное
-                              </span>
-                            )}
-                            <div className="absolute inset-x-0 bottom-0 flex justify-end bg-background/85 p-1 opacity-0 transition-opacity group-hover:opacity-100">
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  try {
-                                    await catalogApi.deleteVariantImage(img.id);
-                                    try { await uploadsApi.delete(img.url); } catch { /* ignore */ }
-                                    setVariantImages((prev) => prev.filter((x) => x.id !== img.id));
-                                    reloadProducts();
-                                  } catch (err) {
-                                    toast.error(apiErrorMessage(err, "Не удалось удалить"));
-                                  }
-                                }}
-                                className="rounded-sm p-1 text-destructive hover:bg-destructive/10"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <p className="text-[11px] text-muted-foreground">JPG / PNG / WebP, до 5 МБ. Первое фото — главное.</p>
-                  </div>
-                ) : (
-                  <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-                    Сохраните вариацию, чтобы добавить фото
-                  </div>
-                )}
-              </div>
-              <div className="md:col-span-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Скидки по объёму</span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setVariantDiscounts([...variantDiscounts, { min_boxes: 0, discount_percent: 0 }])}
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Порог
-                  </Button>
-                </div>
-                {variantDiscounts.length > 0 && (
-                  <div className="mt-2 space-y-2">
-                    {variantDiscounts.map((d, i) => (
-                      <div key={i} className="flex items-end gap-2">
-                        <label className="flex-1">
-                          <span className="mb-0.5 block text-[11px] text-muted-foreground">от (кор.)</span>
-                          <input
-                            type="number"
-                            min={1}
-                            value={d.min_boxes || ""}
-                            onChange={(e) => {
-                              const next = [...variantDiscounts];
-                              next[i] = { ...next[i], min_boxes: Number(e.target.value) };
-                              setVariantDiscounts(next);
-                            }}
-                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          />
-                        </label>
-                        <label className="flex-1">
-                          <span className="mb-0.5 block text-[11px] text-muted-foreground">Скидка %</span>
-                          <input
-                            type="number"
-                            min={0.01}
-                            max={100}
-                            step={0.01}
-                            value={d.discount_percent || ""}
-                            onChange={(e) => {
-                              const next = [...variantDiscounts];
-                              next[i] = { ...next[i], discount_percent: Number(e.target.value) };
-                              setVariantDiscounts(next);
-                            }}
-                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          />
-                        </label>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 text-destructive hover:text-destructive"
-                          onClick={() => setVariantDiscounts(variantDiscounts.filter((_, j) => j !== i))}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {variantDiscounts.length === 0 && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">Нет скидок — нажмите «Порог», чтобы добавить.</p>
-                )}
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditingVariant(null); setVariantDiscounts([]); setVariantImages([]); }}>Отмена</Button>
-            <Button onClick={saveVariant}>Сохранить</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* BULK VARIANT GENERATOR DIALOG */}
-      <Dialog open={!!bulkVariant} onOpenChange={(o) => { if (!o) { setBulkVariant(null); setBulkSizes(""); setBulkColors(""); setBulkSkuPrefix(""); setBulkPrice(0); setBulkPiecesPerBox(1); } }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Генератор вариаций</DialogTitle></DialogHeader>
-          {bulkVariant && (
-            <div className="grid gap-4">
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Размеры (через запятую)</label>
-                <input
-                  value={bulkSizes}
-                  onChange={(e) => setBulkSizes(e.target.value)}
-                  placeholder="Ø50×100, Ø60×150, Ø80×200"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Оставьте пустым, если размер один или не нужен</p>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Цвета (через запятую)</label>
-                <input
-                  value={bulkColors}
-                  onChange={(e) => setBulkColors(e.target.value)}
-                  placeholder="Медовый, Белый, Красный"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Оставьте пустым, если цвет один или не нужен</p>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="SKU-префикс *" value={bulkSkuPrefix} onChange={(e) => setBulkSkuPrefix(e.target.value)} />
-                <Field label="Шт. в коробке" type="number" min={1} value={bulkPiecesPerBox} onChange={(e) => setBulkPiecesPerBox(Number(e.target.value))} />
-                <Field label="Цена за шт. (₽)" type="number" min={0} step={0.01} value={bulkPrice} onChange={(e) => setBulkPrice(Number(e.target.value))} />
-              </div>
-              {(() => {
-                const sizes = bulkSizes.split(",").map((s) => s.trim()).filter(Boolean);
-                const colors = bulkColors.split(",").map((s) => s.trim()).filter(Boolean);
-                const count = sizes.length > 0 && colors.length > 0 ? sizes.length * colors.length : Math.max(sizes.length, colors.length);
-                return count > 0 ? (
-                  <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                    Будет создано <span className="font-semibold text-foreground">{count}</span> вариаций
-                    {sizes.length > 0 && colors.length > 0 && (
-                      <span> ({sizes.length} размер{sizes.length > 1 ? "ов" : ""} × {colors.length} цвет{colors.length > 1 ? (colors.length < 5 ? "а" : "ов") : ""})</span>
-                    )}
-                  </div>
-                ) : null;
-              })()}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setBulkVariant(null); setBulkSizes(""); setBulkColors(""); }}>Отмена</Button>
-            <Button onClick={saveBulkVariants} disabled={bulkSaving}>
-              {bulkSaving ? "Создание..." : "Создать"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* CATEGORY DIALOG */}
-      <Dialog open={!!editingCategory} onOpenChange={(o) => !o && setEditingCategory(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{editingCategory?.id ? "Редактировать категорию" : "Новая категория"}</DialogTitle></DialogHeader>
-          {editingCategory && (
-            <div className="grid gap-4">
-              <Field label="Название *" value={editingCategory.name_ru ?? ""} onChange={(e) => setEditingCategory({ ...editingCategory, name_ru: e.target.value })} />
-              <Field label="Slug *" value={editingCategory.slug ?? ""} onChange={(e) => setEditingCategory({ ...editingCategory, slug: e.target.value })} />
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Родительская категория</span>
-                <select value={editingCategory.parent_id ?? ""} onChange={(e) => setEditingCategory({ ...editingCategory, parent_id: e.target.value || null })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-                  <option value="">— корневая —</option>
-                  {categories.filter((c) => c.id !== editingCategory.id && !c.parent_id).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name_ru}</option>
-                  ))}
-                </select>
-              </label>
-
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingCategory(null)}>Отмена</Button>
-            <Button onClick={saveCategory}>Сохранить</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* LOOKUP DIALOG */}
-      <Dialog open={!!editingLookup} onOpenChange={(o) => !o && setEditingLookup(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{editingLookup?.data.id ? "Редактировать" : "Новая запись"} · {editingLookup && LOOKUP_LABEL[editingLookup.kind]}</DialogTitle></DialogHeader>
-          {editingLookup && (
-            <div className="grid gap-3">
-              <Field label="Slug *" value={editingLookup.data.slug ?? ""} onChange={(e) => setEditingLookup({ ...editingLookup, data: { ...editingLookup.data, slug: e.target.value } })} />
-              <Field label="Название RU *" value={editingLookup.data.name_ru ?? ""} onChange={(e) => setEditingLookup({ ...editingLookup, data: { ...editingLookup.data, name_ru: e.target.value } })} />
-              <Field label="Название EN" value={editingLookup.data.name_en ?? ""} onChange={(e) => setEditingLookup({ ...editingLookup, data: { ...editingLookup.data, name_en: e.target.value } })} />
-              <Field label="Сортировка" type="number" value={editingLookup.data.sort_order ?? 0} onChange={(e) => setEditingLookup({ ...editingLookup, data: { ...editingLookup.data, sort_order: Number(e.target.value) } })} />
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingLookup(null)}>Отмена</Button>
-            <Button onClick={saveLookup}>Сохранить</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* DISCOUNT DIALOG */}
-      <Dialog open={!!editingDiscount} onOpenChange={(o) => !o && setEditingDiscount(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              {editingDiscount?.id ? "Редактировать скидку" : "Новая скидка"}
-            </DialogTitle>
-          </DialogHeader>
-          {editingDiscount && (
-            <div className="grid gap-3">
-              <Field
-                label="От (коробок) *"
-                type="number"
-                min={1}
-                value={editingDiscount.min_boxes ?? 1}
-                onChange={(e) =>
-                  setEditingDiscount({
-                    ...editingDiscount,
-                    min_boxes: Number(e.target.value),
-                  })
-                }
-              />
-              <Field
-                label="Скидка, % *"
-                type="number"
-                min={0}
-                max={100}
-                step={0.5}
-                value={editingDiscount.discount_percent ?? 0}
-                onChange={(e) =>
-                  setEditingDiscount({
-                    ...editingDiscount,
-                    discount_percent: Number(e.target.value),
-                  })
-                }
-              />
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingDiscount(null)}>Отмена</Button>
-            <Button onClick={saveDiscount}>Сохранить</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
+      <ProductDialogs
+        editingProduct={editingProduct}
+        productGallery={productGallery}
+        editingVariant={editingVariant}
+        variantDiscounts={variantDiscounts}
+        variantImages={variantImages}
+        variantImgUploading={variantImgUploading}
+        bulkVariant={bulkVariant}
+        bulkSizes={bulkSizes}
+        bulkColors={bulkColors}
+        bulkPiecesPerBox={bulkPiecesPerBox}
+        bulkPrice={bulkPrice}
+        bulkSkuPrefix={bulkSkuPrefix}
+        bulkSaving={bulkSaving}
+        categories={categories}
+        materials={materials}
+        scents={scents}
+        shapes={shapes}
+        setEditingProduct={setEditingProduct}
+        setProductGallery={setProductGallery}
+        setEditingVariant={setEditingVariant}
+        setVariantDiscounts={setVariantDiscounts}
+        setVariantImages={setVariantImages}
+        setVariantImgUploading={setVariantImgUploading}
+        setBulkVariant={setBulkVariant}
+        setBulkSizes={setBulkSizes}
+        setBulkColors={setBulkColors}
+        setBulkPiecesPerBox={setBulkPiecesPerBox}
+        setBulkPrice={setBulkPrice}
+        setBulkSkuPrefix={setBulkSkuPrefix}
+        onSaveProduct={saveProduct}
+        onSaveVariant={saveVariant}
+        onSaveBulkVariants={saveBulkVariants}
+        onProductsChanged={reloadProducts}
+      />
+      <AdminEntityDialogs
+        editingCategory={editingCategory}
+        editingLookup={editingLookup}
+        editingDiscount={editingDiscount}
+        categories={categories}
+        setEditingCategory={setEditingCategory}
+        setEditingLookup={setEditingLookup}
+        setEditingDiscount={setEditingDiscount}
+        onSaveCategory={saveCategory}
+        onSaveLookup={saveLookup}
+        onSaveDiscount={saveDiscount}
+      />
       {/* ORDER DETAIL DIALOG (opened from the ⋮ menu: Открыть / Редактировать) */}
       <Dialog open={!!openOrderId} onOpenChange={(o) => !o && setOpenOrderId(null)}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
@@ -3294,7 +1492,7 @@ const Admin = () => {
           )}
           <DialogFooter>
             {/* FROZEN: Invoice download temporarily hidden */}
-            {false && openOrderQ.data && (
+            {INVOICE_DOWNLOAD_ENABLED && openOrderQ.data && (
               <Button
                 variant="outline"
                 onClick={() => downloadInvoice(openOrderQ.data as AdminOrder)}

@@ -1,6 +1,62 @@
-import { describe, it, expect } from "vitest";
-import axios, { AxiosError, AxiosHeaders } from "axios";
-import { apiErrorMessage } from "../client";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import axios, { AxiosError, AxiosHeaders, type AxiosResponse } from "axios";
+import { api, apiErrorMessage } from "../client";
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
+
+const unauthorizedAdapter = () => {
+  let calls = 0;
+  return vi.fn(async (config): Promise<AxiosResponse> => {
+    calls += 1;
+    if (calls === 1) {
+      const error = new AxiosError("Unauthorized", "ERR_BAD_REQUEST", config);
+      error.response = {
+        data: { detail: "expired access" },
+        status: 401,
+        statusText: "Unauthorized",
+        headers: {},
+        config,
+      };
+      throw error;
+    }
+    return {
+      data: { ok: true },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    };
+  });
+};
+
+describe("refresh interceptor", () => {
+  it("reuses HttpOnly cookies rotated by another tab", async () => {
+    vi.spyOn(axios, "post").mockRejectedValueOnce(new Error("refresh already used"));
+    vi.spyOn(axios, "get").mockResolvedValueOnce({ data: { id: "user-1" } });
+    const adapter = unauthorizedAdapter();
+
+    const response = await api.get("/protected", { adapter });
+
+    expect(response.data).toEqual({ ok: true });
+    expect(adapter).toHaveBeenCalledTimes(2);
+    expect(axios.get).toHaveBeenCalledWith(expect.stringContaining("/auth/me"), {
+      withCredentials: true,
+    });
+  });
+
+  it("rejects when neither refresh nor the cross-tab cookie probe succeeds", async () => {
+    vi.spyOn(axios, "post").mockRejectedValueOnce(new Error("refresh revoked"));
+    vi.spyOn(axios, "get").mockRejectedValueOnce(new Error("not authenticated"));
+
+    await expect(api.get("/protected", { adapter: unauthorizedAdapter() })).rejects.toThrow(
+      "Unauthorized",
+    );
+
+    expect(axios.get).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("apiErrorMessage", () => {
   const makeAxiosError = (detail: unknown, status = 400): AxiosError => {

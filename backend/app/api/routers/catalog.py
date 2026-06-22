@@ -5,11 +5,12 @@ and require `require_admin`. The shape of the product responses mirrors what
 the old Supabase nested `select()` returned, so the frontend rewrite can be
 done one component at a time.
 """
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -39,6 +40,7 @@ from app.schemas.catalog import (
     ProductImageOut,
     ProductImageUpdate,
     ProductOut,
+    ProductPageOut,
     ProductUpdate,
     ProductVariantCreate,
     ProductVariantOut,
@@ -78,6 +80,110 @@ def _product_query():
     )
 
 
+ProductSort = Literal["newest", "name", "stock", "price-asc", "price-desc"]
+CatalogLanguage = Literal["ru", "en"]
+CatalogCurrency = Literal["RUB", "USD"]
+
+
+def _apply_product_filters(
+    stmt,
+    *,
+    category_ids: list[UUID],
+    material_ids: list[UUID],
+    scent_ids: list[UUID],
+    shape_ids: list[UUID],
+    colors: list[str],
+    q: str | None,
+    in_stock: bool | None,
+    price_min: Decimal | None,
+    price_max: Decimal | None,
+    length_min: Decimal | None,
+    length_max: Decimal | None,
+    width_min: Decimal | None,
+    width_max: Decimal | None,
+    height_min: Decimal | None,
+    height_max: Decimal | None,
+    currency: CatalogCurrency,
+):
+    if category_ids:
+        stmt = stmt.where(Product.category_id.in_(category_ids))
+    if material_ids:
+        stmt = stmt.where(Product.material_id.in_(material_ids))
+    if scent_ids:
+        stmt = stmt.where(Product.scent_id.in_(scent_ids))
+    if shape_ids:
+        stmt = stmt.where(Product.shape_id.in_(shape_ids))
+    if q:
+        pattern = f"%{q.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Product.name_ru.ilike(pattern),
+                Product.name_en.ilike(pattern),
+                Product.description_ru.ilike(pattern),
+                Product.description_en.ilike(pattern),
+                Product.variants.any(ProductVariant.sku.ilike(pattern)),
+            )
+        )
+    variant_filters = []
+    if in_stock is True:
+        variant_filters.append(ProductVariant.stock_boxes > ProductVariant.reserved_boxes)
+    if colors:
+        variant_filters.append(ProductVariant.color.in_(colors))
+    price = (
+        ProductVariant.price_per_piece_rub
+        if currency == "RUB"
+        else ProductVariant.price_per_piece_usd
+    ) * ProductVariant.pieces_per_box
+    if price_min is not None:
+        variant_filters.append(price >= price_min)
+    if price_max is not None:
+        variant_filters.append(price <= price_max)
+    for column, minimum, maximum in (
+        (ProductVariant.length_mm, length_min, length_max),
+        (ProductVariant.width_mm, width_min, width_max),
+        (ProductVariant.height_mm, height_min, height_max),
+    ):
+        if minimum is not None:
+            variant_filters.append(column >= minimum)
+        if maximum is not None:
+            variant_filters.append(column <= maximum)
+    if variant_filters:
+        stmt = stmt.where(Product.variants.any(and_(*variant_filters)))
+    return stmt
+
+
+def _product_order(
+    sort: ProductSort, language: CatalogLanguage, currency: CatalogCurrency
+):
+    stock = (
+        select(func.coalesce(func.sum(ProductVariant.stock_boxes), 0))
+        .where(ProductVariant.product_id == Product.id)
+        .correlate(Product)
+        .scalar_subquery()
+    )
+    price_column = (
+        ProductVariant.price_per_piece_rub
+        if currency == "RUB"
+        else ProductVariant.price_per_piece_usd
+    )
+    min_box_price = (
+        select(func.min(price_column * ProductVariant.pieces_per_box))
+        .where(ProductVariant.product_id == Product.id)
+        .correlate(Product)
+        .scalar_subquery()
+    )
+    if sort == "name":
+        name = Product.name_ru if language == "ru" else Product.name_en
+        return (name.asc(), Product.id.asc())
+    if sort == "stock":
+        return (stock.desc(), Product.name_ru.asc(), Product.id.asc())
+    if sort == "price-asc":
+        return (min_box_price.is_(None), min_box_price.asc(), Product.id.asc())
+    if sort == "price-desc":
+        return (min_box_price.is_(None), min_box_price.desc(), Product.id.asc())
+    return (Product.created_at.desc(), Product.id.desc())
+
+
 # ========================================================================
 # Public: categories
 # ========================================================================
@@ -115,11 +221,96 @@ async def list_products(
     res = await session.scalars(
         _product_query()
         .where(Product.is_published.is_(True))
-        .order_by(Product.name_ru)
+        # A unique tie-breaker is required for offset pagination. Without it,
+        # products sharing a name may move between pages and be skipped or
+        # duplicated even when the dataset itself has not changed.
+        .order_by(Product.name_ru, Product.id)
         .offset(p.offset)
         .limit(p.limit)
     )
     return list(res.unique().all())
+
+
+@router.get("/products/search", response_model=ProductPageOut)
+async def search_products(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(24, ge=1, le=100),
+    category_ids: list[UUID] = Query(default=[]),
+    material_ids: list[UUID] = Query(default=[]),
+    scent_ids: list[UUID] = Query(default=[]),
+    shape_ids: list[UUID] = Query(default=[]),
+    colors: list[str] = Query(default=[]),
+    q: str | None = Query(None, max_length=200),
+    in_stock: bool | None = None,
+    price_min: Decimal | None = Query(None, ge=0),
+    price_max: Decimal | None = Query(None, ge=0),
+    length_min: Decimal | None = Query(None, ge=0),
+    length_max: Decimal | None = Query(None, ge=0),
+    width_min: Decimal | None = Query(None, ge=0),
+    width_max: Decimal | None = Query(None, ge=0),
+    height_min: Decimal | None = Query(None, ge=0),
+    height_max: Decimal | None = Query(None, ge=0),
+    sort: ProductSort = "newest",
+    language: CatalogLanguage = "ru",
+    currency: CatalogCurrency = "RUB",
+    session: AsyncSession = Depends(db_session),
+) -> ProductPageOut:
+    """Filter and paginate the public catalog without loading it wholesale."""
+    filters = {
+        "category_ids": category_ids,
+        "material_ids": material_ids,
+        "scent_ids": scent_ids,
+        "shape_ids": shape_ids,
+        "colors": colors,
+        "q": q,
+        "in_stock": in_stock,
+        "price_min": price_min,
+        "price_max": price_max,
+        "length_min": length_min,
+        "length_max": length_max,
+        "width_min": width_min,
+        "width_max": width_max,
+        "height_min": height_min,
+        "height_max": height_max,
+        "currency": currency,
+    }
+    base = _apply_product_filters(
+        select(Product).where(Product.is_published.is_(True)), **filters
+    )
+    total = int(
+        await session.scalar(select(func.count()).select_from(base.subquery())) or 0
+    )
+    pages = (total + page_size - 1) // page_size
+    rows = await session.scalars(
+        _apply_product_filters(
+            _product_query().where(Product.is_published.is_(True)), **filters
+        )
+        .order_by(*_product_order(sort, language, currency))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    return ProductPageOut(
+        items=list(rows.unique().all()),
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=pages,
+        has_next=page < pages,
+        has_previous=page > 1 and total > 0,
+    )
+
+
+@router.get("/products/colors", response_model=list[str])
+async def list_product_colors(session: AsyncSession = Depends(db_session)) -> list[str]:
+    """Return stable public filter options without downloading the catalog."""
+    rows = await session.scalars(
+        select(ProductVariant.color)
+        .join(Product, Product.id == ProductVariant.product_id)
+        .where(Product.is_published.is_(True), ProductVariant.color.is_not(None))
+        .distinct()
+        .order_by(ProductVariant.color)
+    )
+    return [color for color in rows.all() if color]
 
 
 @router.get("/products/{slug}", response_model=ProductOut)
@@ -142,7 +333,7 @@ async def admin_list_products(
 ) -> list[Product]:
     res = await session.scalars(
         _product_query()
-        .order_by(Product.name_ru)
+        .order_by(Product.name_ru, Product.id)
         .offset(p.offset)
         .limit(p.limit)
     )

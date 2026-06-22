@@ -1,12 +1,12 @@
-import enum
+from enum import StrEnum
 
 
-class AppRole(str, enum.Enum):
+class AppRole(StrEnum):
     admin = "admin"
     client = "client"
 
 
-class OrderStatus(str, enum.Enum):
+class OrderStatus(StrEnum):
     new = "new"
     processing = "processing"
     awaiting_payment = "awaiting_payment"
@@ -18,7 +18,7 @@ class OrderStatus(str, enum.Enum):
     cancelled = "cancelled"
 
 
-class StockMovementType(str, enum.Enum):
+class StockMovementType(StrEnum):
     in_ = "in"          # приход
     out = "out"         # расход (отгрузка)
     reserve = "reserve" # резерв под заявку

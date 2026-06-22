@@ -6,8 +6,7 @@ from app.schemas.user import UserOut
 
 _PASSWORD_RE = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}$")
 _PASSWORD_HINT = (
-    "Пароль должен содержать минимум 8 символов, одну заглавную, "
-    "одну строчную букву и одну цифру"
+    "Пароль должен содержать минимум 8 символов, одну заглавную, одну строчную букву и одну цифру"
 )
 
 
@@ -36,7 +35,9 @@ class LoginIn(BaseModel):
 
 
 class RefreshIn(BaseModel):
-    refresh: str
+    """Optional body fallback for non-browser API clients."""
+
+    refresh: str | None = None
 
 
 class LogoutIn(BaseModel):
@@ -48,29 +49,16 @@ class LogoutIn(BaseModel):
     реестра.
     """
 
-    refresh: str
+    refresh: str | None = None
 
 
-class TokenPair(BaseModel):
-    access: str
-    refresh: str
-    token_type: str = "bearer"
+class RefreshOut(BaseModel):
+    """JWT values stay exclusively in HttpOnly response cookies."""
+
+    ok: bool = True
 
 
-class AccessToken(BaseModel):
-    access: str
-    token_type: str = "bearer"
-
-
-class RefreshOut(TokenPair):
-    """Ответ ``/auth/refresh``: новые access **и** refresh.
-
-    После rotation предыдущий refresh инвалидирован — клиент обязан
-    положить себе новый, иначе следующий refresh-обмен провалится.
-    """
-
-
-class LoginOut(TokenPair):
+class LoginOut(BaseModel):
     user: UserOut
 
 

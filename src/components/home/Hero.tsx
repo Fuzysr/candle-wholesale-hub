@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-import { ArrowRight, Zap, Package } from "lucide-react";
+import { ArrowRight, Package } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -67,24 +67,6 @@ const Hero = () => {
               </Link>
 
             </Button>
-
-            {/* FROZEN: Quick Order feature temporarily hidden */}
-
-            {false && (
-
-              <Button asChild size="lg" variant="outline" className="gap-2">
-
-                <Link to="/quick-order">
-
-                  <Zap className="h-4 w-4 text-primary" />
-
-                  Быстрый заказ
-
-                </Link>
-
-              </Button>
-
-            )}
 
           </div>
 

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import db_session, require_admin
-from app.models.catalog import Product, ProductVariant
+from app.models.catalog import ProductVariant
 from app.models.enums import StockMovementType
 from app.models.stock import StockMovement
 from app.models.user import User

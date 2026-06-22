@@ -8,17 +8,19 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 # refuse to start in `APP_ENV=production` if any of these are still in
 # place — running with them is functionally equivalent to having no
 # authentication at all. Comparison is case-insensitive, post-strip.
-_WEAK_SECRETS: frozenset[str] = frozenset({
-    "",
-    "change-me",
-    "changeme",
-    "replace-me",
-    "replaceme",
-    "secret",
-    "password",
-    "test",
-    "default",
-})
+_WEAK_SECRETS: frozenset[str] = frozenset(
+    {
+        "",
+        "change-me",
+        "changeme",
+        "replace-me",
+        "replaceme",
+        "secret",
+        "password",
+        "test",
+        "default",
+    }
+)
 
 
 class Settings(BaseSettings):
@@ -50,6 +52,12 @@ class Settings(BaseSettings):
     access_token_ttl_min: int = 30
     refresh_token_ttl_days: int = 30
     password_reset_ttl_min: int = 60
+
+    # Browser auth cookies. `secure` is derived from the environment so local
+    # HTTP development keeps working while production refuses to transmit
+    # credentials over plaintext.
+    auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    auth_cookie_domain: str | None = None
 
     # CORS.
     #
@@ -152,14 +160,14 @@ class Settings(BaseSettings):
             problems.append("JWT_SECRET must be at least 32 characters long")
 
         if self.inventory_webhook_secret.strip().lower() in _WEAK_SECRETS:
-            problems.append(
-                "INVENTORY_WEBHOOK_SECRET is a placeholder/weak value"
-            )
+            problems.append("INVENTORY_WEBHOOK_SECRET is a placeholder/weak value")
 
         if any(o.strip() == "*" for o in self.cors_origins):
             problems.append("CORS_ORIGINS must not contain '*' in production")
         if not self.cors_origins:
             problems.append("CORS_ORIGINS must list at least one origin in production")
+        if self.auth_cookie_samesite == "none" and self.app_env != "production":
+            problems.append("AUTH_COOKIE_SAMESITE=none requires secure production cookies")
 
         # bootstrap_admin_password is only consulted when the bootstrap
         # script runs, but if an operator wired the bootstrap email
@@ -167,8 +175,7 @@ class Settings(BaseSettings):
         # with an empty password.
         if self.bootstrap_admin_email and not self.bootstrap_admin_password:
             problems.append(
-                "BOOTSTRAP_ADMIN_PASSWORD must be set whenever "
-                "BOOTSTRAP_ADMIN_EMAIL is set"
+                "BOOTSTRAP_ADMIN_PASSWORD must be set whenever BOOTSTRAP_ADMIN_EMAIL is set"
             )
         if (
             self.bootstrap_admin_password

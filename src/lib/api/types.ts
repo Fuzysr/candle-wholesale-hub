@@ -24,15 +24,11 @@ export type UserOut = {
 };
 
 export type LoginOut = {
-  access: string;
-  refresh: string;
-  token_type: "bearer";
   user: UserOut;
 };
 
-export type AccessToken = {
-  access: string;
-  token_type: "bearer";
+export type RefreshOut = {
+  ok: true;
 };
 
 export type PasswordResetRequestOut = {
@@ -249,13 +245,43 @@ export type OrderStatus =
 export type Currency = "RUB" | "USD";
 
 export type OrderItemIn = {
-  variant_id: string | null;
-  sku: string;
-  product_name: string;
-  variant_label: string | null;
-  pieces_per_box: number;
+  variant_id: string;
   boxes: number;
-  unit_price: number;
+};
+
+export type ProductSort = "newest" | "name" | "stock" | "price-asc" | "price-desc";
+
+export type ProductListParams = {
+  page?: number;
+  page_size?: number;
+  category_ids?: string[];
+  material_ids?: string[];
+  scent_ids?: string[];
+  shape_ids?: string[];
+  colors?: string[];
+  q?: string;
+  in_stock?: boolean;
+  price_min?: number;
+  price_max?: number;
+  length_min?: number;
+  length_max?: number;
+  width_min?: number;
+  width_max?: number;
+  height_min?: number;
+  height_max?: number;
+  sort?: ProductSort;
+  language?: "ru" | "en";
+  currency?: Currency;
+};
+
+export type ProductPageOut = {
+  items: ProductOut[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+  has_next: boolean;
+  has_previous: boolean;
 };
 
 export type OrderItemOut = {
@@ -313,7 +339,18 @@ export type OrderCreate = {
   phone?: string | null;
   inn?: string | null;
   email?: string | null;
+  quoted_total?: number | null;
   items: OrderItemIn[];
+};
+
+export type OrderQuoteIn = Pick<OrderCreate, "currency" | "items">;
+
+export type OrderQuoteOut = {
+  total_boxes: number;
+  subtotal: number;
+  discount_percent: number;
+  discount_amount: number;
+  total: number;
 };
 
 export type OrderUpdateAdmin = {

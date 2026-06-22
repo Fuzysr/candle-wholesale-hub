@@ -1,3 +1,6 @@
+# ruff: noqa: E402
+from secrets import compare_digest
+
 import email_validator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,19 +16,25 @@ email_validator.SPECIAL_USE_DOMAIN_NAMES = []
 from fastapi import Request  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 
-from app.api.routers import (  # noqa: E402  — imports must follow the patch above
-    auth as auth_router,
-    catalog as catalog_router,
-    company as company_router,
-    contact as contact_router,
-    discounts as discounts_router,
-    email as email_router,
-    inventory as inventory_router,
-    orders as orders_router,
-    profile as profile_router,
-    stock as stock_router,
-    uploads as uploads_router,
-    users as users_router,
+from app.api.routers import (  # imports must follow the email-validator patch above
+    auth,
+    catalog,
+    company,
+    contact,
+    discounts,
+    email,
+    inventory,
+    orders,
+    profile,
+    stock,
+    uploads,
+    users,
+)
+from app.core.auth_cookies import (
+    ACCESS_COOKIE,
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    REFRESH_COOKIE,
 )
 from app.core.config import settings
 
@@ -57,19 +66,54 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
     )
 
-    # In development, allow any origin so mobile devices on the same LAN
-    # can reach the API without manually listing every local IP.
-    origins = (
-        ["*"] if settings.app_env == "development"
-        else settings.cors_origins
-    )
+    # Credentialed cookie auth is incompatible with wildcard origins. Local
+    # LAN frontends must therefore be listed explicitly in CORS_ORIGINS too.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=settings.app_env != "development",
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def csrf_guard(request: Request, call_next):
+        """Double-submit CSRF protection for browser cookie authentication.
+
+        Bearer requests are not ambient browser credentials and remain exempt.
+        Public requests without auth cookies remain usable by guests.
+        """
+        unsafe = request.method.upper() not in {"GET", "HEAD", "OPTIONS"}
+        has_auth_cookie = bool(
+            request.cookies.get(ACCESS_COOKIE) or request.cookies.get(REFRESH_COOKIE)
+        )
+        uses_bearer = request.headers.get("authorization", "").lower().startswith("bearer ")
+        browser_request = bool(request.headers.get("origin"))
+        csrf_exempt_path = request.url.path in {
+            "/auth/login",
+            "/auth/register",
+            "/auth/password/reset-request",
+            "/auth/password/reset-confirm",
+        }
+        if (
+            unsafe
+            and browser_request
+            and has_auth_cookie
+            and not uses_bearer
+            and not csrf_exempt_path
+        ):
+            cookie_token = request.cookies.get(CSRF_COOKIE)
+            header_token = request.headers.get(CSRF_HEADER)
+            if (
+                not cookie_token
+                or not header_token
+                or not compare_digest(cookie_token, header_token)
+            ):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "CSRF validation failed"},
+                )
+        return await call_next(request)
 
     # Hardening headers on every response. HSTS is opt-in for production
     # only — see middleware module docstring for the «sticky pin in dev
@@ -118,18 +162,18 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok", "env": settings.app_env}
 
-    app.include_router(auth_router.router)
-    app.include_router(contact_router.router)
-    app.include_router(profile_router.router)
-    app.include_router(catalog_router.router)
-    app.include_router(discounts_router.router)
-    app.include_router(orders_router.router)
-    app.include_router(company_router.router)
-    app.include_router(stock_router.router)
-    app.include_router(inventory_router.router)
-    app.include_router(uploads_router.router)
-    app.include_router(users_router.router)
-    app.include_router(email_router.router)
+    app.include_router(auth.router)
+    app.include_router(contact.router)
+    app.include_router(profile.router)
+    app.include_router(catalog.router)
+    app.include_router(discounts.router)
+    app.include_router(orders.router)
+    app.include_router(company.router)
+    app.include_router(stock.router)
+    app.include_router(inventory.router)
+    app.include_router(uploads.router)
+    app.include_router(users.router)
+    app.include_router(email.router)
 
     return app
 

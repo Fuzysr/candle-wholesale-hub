@@ -12,6 +12,8 @@ import type {
   ProductImageOut,
   ProductImageUpdate,
   ProductOut,
+  ProductListParams,
+  ProductPageOut,
   ProductUpdate,
   ProductVariantCreate,
   ProductVariantOut,
@@ -21,6 +23,46 @@ import type {
   VolumeDiscountCreate,
   VolumeDiscountOut,
 } from "./types";
+
+const PRODUCT_PAGE_SIZE = 200;
+const MAX_PRODUCT_PAGES = 250;
+
+/**
+ * The backend intentionally caps list responses. Catalog screens currently
+ * filter and paginate locally, so their API boundary must assemble every
+ * server page before handing data to the UI.
+ */
+const listAllProducts = async (url: string): Promise<ProductOut[]> => {
+  const result: ProductOut[] = [];
+  const seenIds = new Set<string>();
+  let offset = 0;
+
+  for (let pageNumber = 0; pageNumber < MAX_PRODUCT_PAGES; pageNumber += 1) {
+    const page = await http.get<ProductOut[]>(url, {
+      params: { offset, limit: PRODUCT_PAGE_SIZE },
+    });
+    if (!Array.isArray(page)) {
+      throw new TypeError(`Expected an array response from ${url}`);
+    }
+
+    let added = 0;
+    for (const product of page) {
+      if (!seenIds.has(product.id)) {
+        seenIds.add(product.id);
+        result.push(product);
+        added += 1;
+      }
+    }
+
+    if (page.length < PRODUCT_PAGE_SIZE) return result;
+    if (added === 0) {
+      throw new Error(`Pagination made no progress while loading ${url}`);
+    }
+    offset += page.length;
+  }
+
+  throw new Error(`Catalog exceeds the supported ${MAX_PRODUCT_PAGES} pages`);
+};
 
 export const catalogApi = {
   // ---------- categories ----------
@@ -40,9 +82,17 @@ export const catalogApi = {
     http.delete<void>(`/admin/attributes/${kind}/${id}`),
 
   // ---------- products ----------
-  listProducts: () => http.get<ProductOut[]>("/products"),
+  searchProducts: (params: ProductListParams = {}) =>
+    http.get<ProductPageOut>("/products/search", {
+      params,
+      // FastAPI parses repeated keys (`category_ids=a&category_ids=b`). Axios
+      // uses bracketed array keys by default, so make the wire format explicit.
+      paramsSerializer: { indexes: null },
+    }),
+  listProductColors: () => http.get<string[]>("/products/colors"),
+  listProducts: () => listAllProducts("/products"),
   getProductBySlug: (slug: string) => http.get<ProductOut>(`/products/${slug}`),
-  adminListProducts: () => http.get<ProductOut[]>("/admin/products"),
+  adminListProducts: () => listAllProducts("/admin/products"),
   createProduct: (body: ProductCreate) => http.post<ProductOut>("/admin/products", body),
   updateProduct: (id: string, body: ProductUpdate) =>
     http.patch<ProductOut>(`/admin/products/${id}`, body),

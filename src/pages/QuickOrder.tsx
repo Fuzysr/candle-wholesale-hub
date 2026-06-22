@@ -8,25 +8,16 @@ import {
   FileSpreadsheet,
   ImageOff,
   Package,
-  Send,
 } from "lucide-react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-// `xlsx-js-style` is a drop-in superset of the community `xlsx` package that
-// preserves cell-level styling (fills, fonts, borders) when writing .xlsx
-// files. We use it here so the ИТОГО row can be highlighted green.
-import * as XLSX from "xlsx-js-style";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import Reveal from "@/components/ui/reveal";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  QuickOrderSubmitDialog,
+  type QuickOrderForm,
+} from "@/components/quick-order/QuickOrderSubmitDialog";
 import {
   apiErrorMessage,
   catalogApi,
@@ -62,22 +53,7 @@ const thumbFor = (p: Product | null | undefined) => {
 
 /** Small inline label+input helper for the submit dialog. Kept local so the
  *  dialog can be self-contained without pulling in a shared form primitive. */
-const Field = ({
-  label,
-  ...props
-}: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
-  <label className="block">
-    <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-      {label}
-    </span>
-    <input
-      {...props}
-      className="h-10 w-full rounded-md border border-input bg-surface px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    />
-  </label>
-);
-
-const EMPTY_FORM = {
+const EMPTY_FORM: QuickOrderForm = {
   company_name: "",
   contact_name: "",
   phone: "",
@@ -86,6 +62,7 @@ const EMPTY_FORM = {
   delivery_date: "",
   customer_comment: "",
 };
+const EMPTY_PRODUCTS: Product[] = [];
 
 const QuickOrder = () => {
   const navigate = useNavigate();
@@ -113,7 +90,7 @@ const QuickOrder = () => {
       { queryKey: ["discount-tiers"], queryFn: () => stockApi.listDiscountTiers() },
     ],
   });
-  const products: Product[] = productsQ.data ?? [];
+  const products: Product[] = productsQ.data ?? EMPTY_PRODUCTS;
   const tiers = tiersQ.data ?? [];
 
   /*
@@ -257,6 +234,7 @@ const QuickOrder = () => {
   /* ────────────────────── Import / export / cart ────────────────────── */
 
   const handleImport = async (file: File) => {
+    const XLSX = await import("xlsx-js-style");
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf);
     const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -316,7 +294,8 @@ const QuickOrder = () => {
     toast.success(`Импортировано ${next.length} позиций`);
   };
 
-  const handleTemplate = () => {
+  const handleTemplate = async () => {
+    const XLSX = await import("xlsx-js-style");
     /*
       Previously the template was a bare two-column grid («sku» / «qty»)
       with English headers — visually dry and confusing for shop owners.
@@ -373,7 +352,7 @@ const QuickOrder = () => {
     toast.success("Шаблон скачан");
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     /*
       Previously the export was a five-column English dump
       (sku/name/qty/unit_price/line_total) with cramped default widths
@@ -391,6 +370,8 @@ const QuickOrder = () => {
       toast.error("Нет валидных позиций для экспорта");
       return;
     }
+
+    const XLSX = await import("xlsx-js-style");
 
     const isRub = currency === "RUB";
     // Excel number format codes. The quoted symbol prevents Excel from
@@ -554,18 +535,10 @@ const QuickOrder = () => {
         .filter((r) => r.v && r.p && r.qty > 0)
         .map((r) => ({
           variant_id: r.v!.id,
-          sku: r.v!.sku,
-          product_name: productName(r.p!, lang),
-          variant_label: variantLabel(r.v!),
-          pieces_per_box: r.v!.pieces_per_box,
           boxes: Math.min(r.qty, r.v!.stock_boxes),
-          unit_price:
-            currency === "RUB"
-              ? Number(r.v!.price_per_piece_rub)
-              : Number(r.v!.price_per_piece_usd),
         }))
         .filter((i) => i.boxes > 0),
-    [enriched, lang, currency],
+    [enriched],
   );
 
   // When the dialog opens, prefill missing fields from the auth profile so
@@ -991,149 +964,19 @@ const QuickOrder = () => {
       </div>
 
       {/* ───────── Submit-order dialog ───────── */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <DialogHeader>
-              <DialogTitle>Оформить быструю заявку</DialogTitle>
-              <DialogDescription>
-                Проверьте реквизиты и отправьте. Менеджер свяжется и пришлёт
-                счёт в течение 2 часов в рабочее время.
-              </DialogDescription>
-            </DialogHeader>
-
-            {/* Compact order summary so the user sees what's about to be
-                submitted without scrolling back to the main grid. */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-                <span className="text-muted-foreground">
-                  Позиций:{" "}
-                  <span className="font-semibold text-foreground">
-                    {validItems.length}
-                  </span>
-                </span>
-                <span className="text-muted-foreground">
-                  Коробок:{" "}
-                  <span className="font-semibold text-foreground">
-                    {totalBoxes}
-                  </span>
-                </span>
-                {discount > 0 && (
-                  <span className="font-medium text-amber">
-                    Скидка {discount}%
-                  </span>
-                )}
-              </div>
-              <div className="text-right">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Итого
-                </div>
-                <div className="price text-xl">
-                  {formatMoney(total, currency)}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field
-                label="Компания *"
-                required
-                value={form.company_name}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, company_name: e.target.value }))
-                }
-              />
-              <Field
-                label="ИНН"
-                value={form.inn}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, inn: e.target.value }))
-                }
-              />
-              <Field
-                label="Контактное лицо *"
-                required
-                value={form.contact_name}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, contact_name: e.target.value }))
-                }
-              />
-              <Field
-                label="Телефон *"
-                required
-                value={form.phone}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, phone: e.target.value }))
-                }
-              />
-              <Field
-                label="Email *"
-                required
-                type="email"
-                value={form.email}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, email: e.target.value }))
-                }
-              />
-              <Field
-                label="Желаемая дата самовывоза"
-                type="date"
-                value={form.delivery_date}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, delivery_date: e.target.value }))
-                }
-              />
-              <div className="md:col-span-2 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-                Заказы отгружаются только самовывозом со склада. Адрес склада менеджер пришлёт вместе со счётом.
-              </div>
-              <div className="md:col-span-2">
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Комментарий
-                  </span>
-                  <textarea
-                    rows={2}
-                    value={form.customer_comment}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        customer_comment: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-md border border-input bg-background p-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                </label>
-              </div>
-            </div>
-
-            <DialogFooter className="gap-2 pt-2 sm:gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="lg"
-                onClick={() => setDialogOpen(false)}
-                disabled={submitting}
-              >
-                Отмена
-              </Button>
-              <Button
-                type="submit"
-                size="lg"
-                disabled={submitting || validItems.length === 0}
-                className="gap-2"
-              >
-                {submitting ? (
-                  "Отправка…"
-                ) : (
-                  <>
-                    Отправить заявку <Send className="h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <QuickOrderSubmitDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSubmit={handleSubmit}
+        form={form}
+        setForm={setForm}
+        positions={validItems.length}
+        totalBoxes={totalBoxes}
+        discount={discount}
+        total={total}
+        currency={currency}
+        submitting={submitting}
+      />
     </PublicLayout>
   );
 };

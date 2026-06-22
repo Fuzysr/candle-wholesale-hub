@@ -3,10 +3,13 @@ import type {
   OrderCreate,
   OrderListOut,
   OrderOut,
+  OrderQuoteIn,
+  OrderQuoteOut,
   OrderUpdateAdmin,
 } from "./types";
 
 export const ordersApi = {
+  quote: (body: OrderQuoteIn) => http.post<OrderQuoteOut>("/orders/quote", body),
   create: (body: OrderCreate) => http.post<OrderOut>("/orders", body),
   listMine: () => http.get<OrderListOut[]>("/orders"),
   getById: (id: string) => http.get<OrderOut>(`/orders/${id}`),

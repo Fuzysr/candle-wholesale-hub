@@ -21,17 +21,30 @@ export type Shape = AttributeOut;
 export type DiscountTier = Pick<DiscountTierOut, "min_boxes" | "discount_percent"> & {
   id?: string;
 };
+type PricedVariant = Pick<
+  ProductVariant,
+  "pieces_per_box" | "price_per_piece_rub" | "price_per_piece_usd"
+>;
+type VariantLabelFields = {
+  size?: string | null;
+  color?: string | null;
+  shape?: string | null;
+};
+type VariantStock = {
+  stock_boxes?: number | null;
+  reserved_boxes?: number | null;
+};
 
 export const productName = (p: Pick<Product, "name_ru" | "name_en">, lang: Lang) =>
   lang === "ru" ? p.name_ru : p.name_en;
 
-export const variantPrice = (v: ProductVariant, currency: Currency) =>
+export const variantPrice = (v: PricedVariant, currency: Currency) =>
   currency === "RUB" ? Number(v.price_per_piece_rub) : Number(v.price_per_piece_usd);
 
-export const variantBoxPrice = (v: ProductVariant, currency: Currency) =>
+export const variantBoxPrice = (v: PricedVariant, currency: Currency) =>
   variantPrice(v, currency) * v.pieces_per_box;
 
-export const variantLabel = (v: ProductVariant) =>
+export const variantLabel = (v: VariantLabelFields) =>
   [v.size, v.color, v.shape].filter(Boolean).join(" · ");
 
 export const computeDiscount = (totalBoxes: number, tiers: DiscountTier[]) => {
@@ -65,10 +78,13 @@ export const nextDiscountTier = (totalBoxes: number, tiers: DiscountTier[]) => {
   return upcoming[0] ?? null;
 };
 
-export const availableBoxes = (v: ProductVariant) =>
+export const availableBoxes = (v: VariantStock) =>
   Math.max(0, (v.stock_boxes ?? 0) - (v.reserved_boxes ?? 0));
 
-export const productMinBoxPrice = (p: Product, currency: Currency): number => {
+export const productMinBoxPrice = (
+  p: { variants?: PricedVariant[] | null },
+  currency: Currency,
+): number => {
   const prices = (p.variants ?? []).map((v) => variantBoxPrice(v, currency));
   return prices.length ? Math.min(...prices) : 0;
 };

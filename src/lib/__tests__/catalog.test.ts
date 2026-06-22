@@ -72,17 +72,17 @@ describe("computeLineVolumeDiscount (per-variant)", () => {
 
 describe("availableBoxes", () => {
   it("returns stock minus reserved", () => {
-    expect(availableBoxes({ stock_boxes: 50, reserved_boxes: 10 } as any)).toBe(40);
+    expect(availableBoxes({ stock_boxes: 50, reserved_boxes: 10 })).toBe(40);
   });
 
   it("returns 0 when reserved >= stock", () => {
-    expect(availableBoxes({ stock_boxes: 5, reserved_boxes: 5 } as any)).toBe(0);
-    expect(availableBoxes({ stock_boxes: 3, reserved_boxes: 10 } as any)).toBe(0);
+    expect(availableBoxes({ stock_boxes: 5, reserved_boxes: 5 })).toBe(0);
+    expect(availableBoxes({ stock_boxes: 3, reserved_boxes: 10 })).toBe(0);
   });
 
   it("handles nullish values", () => {
-    expect(availableBoxes({ stock_boxes: null, reserved_boxes: null } as any)).toBe(0);
-    expect(availableBoxes({ stock_boxes: undefined, reserved_boxes: undefined } as any)).toBe(0);
+    expect(availableBoxes({ stock_boxes: null, reserved_boxes: null })).toBe(0);
+    expect(availableBoxes({ stock_boxes: undefined, reserved_boxes: undefined })).toBe(0);
   });
 });
 
@@ -111,17 +111,17 @@ describe("nextDiscountTier", () => {
 
 describe("variantLabel", () => {
   it("joins size, color, shape with separator", () => {
-    expect(variantLabel({ size: "Large", color: "Red", shape: "Pillar" } as any)).toBe(
+    expect(variantLabel({ size: "Large", color: "Red", shape: "Pillar" })).toBe(
       "Large · Red · Pillar",
     );
   });
 
   it("skips null/undefined fields", () => {
-    expect(variantLabel({ size: null, color: "Blue", shape: null } as any)).toBe("Blue");
+    expect(variantLabel({ size: null, color: "Blue", shape: null })).toBe("Blue");
   });
 
   it("returns empty string when all fields are empty", () => {
-    expect(variantLabel({ size: null, color: null, shape: null } as any)).toBe("");
+    expect(variantLabel({ size: null, color: null, shape: null })).toBe("");
   });
 });
 
@@ -132,7 +132,7 @@ describe("productMinBoxPrice", () => {
         { pieces_per_box: 10, price_per_piece_rub: 15, price_per_piece_usd: 0.2 },
         { pieces_per_box: 100, price_per_piece_rub: 12, price_per_piece_usd: 0.15 },
       ],
-    } as any;
+    };
     // 10*15=150, 100*12=1200 → min=150
     expect(productMinBoxPrice(p, "RUB")).toBe(150);
     // 10*0.2=2, 100*0.15=15 → min=2
@@ -140,7 +140,7 @@ describe("productMinBoxPrice", () => {
   });
 
   it("returns 0 for empty variants", () => {
-    expect(productMinBoxPrice({ variants: [] } as any, "RUB")).toBe(0);
-    expect(productMinBoxPrice({ variants: undefined } as any, "RUB")).toBe(0);
+    expect(productMinBoxPrice({ variants: [] }, "RUB")).toBe(0);
+    expect(productMinBoxPrice({ variants: undefined }, "RUB")).toBe(0);
   });
 });

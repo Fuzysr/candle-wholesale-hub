@@ -22,7 +22,7 @@ import {
   CheckSquare,
   ShoppingCart,
 } from "lucide-react";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -74,7 +74,14 @@ import NumberStepper from "@/components/shop/NumberStepper";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import AddToCartConfirm from "@/components/shop/AddToCartConfirm";
-import { downloadPriceListXlsx } from "@/lib/exportPriceList";
+import {
+  FilterCard,
+  FilterCheckList,
+  MobileListRow,
+  ProductCard,
+  RangeFilter,
+  TableRow,
+} from "@/components/catalog/CatalogComponents";
 import {
   useCatalogRestore,
   useCatalogTracking,
@@ -144,16 +151,28 @@ const renderHighlighted = (text: string, query: string): ReactNode => {
 
 // ── Lightweight filter persistence (survives clearState) ──────────────
 const FILTERS_KEY = "catalog_filters";
+const EMPTY_CATEGORIES: Category[] = [];
+const EMPTY_PRODUCTS: Product[] = [];
+const EMPTY_MATERIALS: Material[] = [];
+const EMPTY_SCENTS: Scent[] = [];
+const EMPTY_SHAPES: Shape[] = [];
+const EMPTY_COLORS: string[] = [];
 
 const readSavedFilters = (): Record<string, unknown> | null => {
   try {
     const raw = sessionStorage.getItem(FILTERS_KEY);
     return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 };
 
 const writeSavedFilters = (f: Record<string, unknown>) => {
-  try { sessionStorage.setItem(FILTERS_KEY, JSON.stringify(f)); } catch {}
+  try {
+    sessionStorage.setItem(FILTERS_KEY, JSON.stringify(f));
+  } catch {
+    // Storage may be disabled by browser privacy settings.
+  }
 };
 
 const Catalog = () => {
@@ -356,21 +375,20 @@ const Catalog = () => {
     }
   };
 
-  const [catQ, prodQ, matQ, scentQ, shapeQ] = useQueries({
+  const [catQ, matQ, scentQ, shapeQ, colorsQ] = useQueries({
     queries: [
       { queryKey: ["categories"], queryFn: () => catalogApi.listCategories() },
-      { queryKey: ["products"], queryFn: () => catalogApi.listProducts() },
       { queryKey: ["attributes", "materials"], queryFn: () => catalogApi.listAttributes("materials") },
       { queryKey: ["attributes", "scents"], queryFn: () => catalogApi.listAttributes("scents") },
       { queryKey: ["attributes", "shapes"], queryFn: () => catalogApi.listAttributes("shapes") },
+      { queryKey: ["products", "colors"], queryFn: () => catalogApi.listProductColors() },
     ],
   });
-  const categories: Category[] = catQ.data ?? [];
-  const products: Product[] = prodQ.data ?? [];
-  const materials: Material[] = matQ.data ?? [];
-  const scents: Scent[] = scentQ.data ?? [];
-  const shapes: Shape[] = shapeQ.data ?? [];
-  const loading = catQ.isPending || prodQ.isPending;
+  const categories = catQ.data ?? EMPTY_CATEGORIES;
+  const materials = matQ.data ?? EMPTY_MATERIALS;
+  const scents = scentQ.data ?? EMPTY_SCENTS;
+  const shapes = shapeQ.data ?? EMPTY_SHAPES;
+  const allColors = colorsQ.data ?? EMPTY_COLORS;
 
   // Category tree
   const rootCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
@@ -401,6 +419,65 @@ const Catalog = () => {
     }
     return ids;
   }, [categorySlug, categoryIds, categories]);
+
+  // Server pagination is product-based. Matching variants are narrowed again
+  // below for presentation, while `total/pages` remain authoritative and do
+  // not depend on which page happens to be loaded in the browser.
+  const [page, setPage] = useState(() => restore.initialPage);
+  const productSearchParams = useMemo(
+    () => ({
+      page,
+      page_size: PAGE_SIZE,
+      category_ids: activeCategoryAndDescendants
+        ? Array.from(activeCategoryAndDescendants)
+        : undefined,
+      material_ids: materialIds.size ? Array.from(materialIds) : undefined,
+      scent_ids: scentIds.size ? Array.from(scentIds) : undefined,
+      shape_ids: shapeIds.size ? Array.from(shapeIds) : undefined,
+      colors: colorIds.size ? Array.from(colorIds) : undefined,
+      q: search || undefined,
+      in_stock: onlyInStock || undefined,
+      price_min: priceMin ? Number(priceMin) : undefined,
+      price_max: priceMax ? Number(priceMax) : undefined,
+      length_min: lengthMin ? Number(lengthMin) : undefined,
+      length_max: lengthMax ? Number(lengthMax) : undefined,
+      width_min: widthMin ? Number(widthMin) : undefined,
+      width_max: widthMax ? Number(widthMax) : undefined,
+      height_min: heightMin ? Number(heightMin) : undefined,
+      height_max: heightMax ? Number(heightMax) : undefined,
+      sort,
+      language: lang,
+      currency,
+    }),
+    [
+      page,
+      activeCategoryAndDescendants,
+      materialIds,
+      scentIds,
+      shapeIds,
+      colorIds,
+      search,
+      onlyInStock,
+      priceMin,
+      priceMax,
+      lengthMin,
+      lengthMax,
+      widthMin,
+      widthMax,
+      heightMin,
+      heightMax,
+      sort,
+      lang,
+      currency,
+    ],
+  );
+  const prodQ = useQuery({
+    queryKey: ["products", "search", productSearchParams],
+    queryFn: () => catalogApi.searchProducts(productSearchParams),
+    placeholderData: (previous) => previous,
+  });
+  const products = prodQ.data?.items ?? EMPTY_PRODUCTS;
+  const loading = catQ.isPending || prodQ.isPending;
 
   const toggleSet = <T,>(set: Set<T>, value: T): Set<T> => {
     const next = new Set(set);
@@ -459,13 +536,27 @@ const Catalog = () => {
         sorted.sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
     }
     return sorted;
-  }, [products, activeCategoryAndDescendants, search, onlyInStock, colorIds, lang, materialIds, scentIds, shapeIds, sort, currency, priceMin, priceMax]);
-
-  const allColors = useMemo(() => {
-    const s = new Set<string>();
-    products.forEach((p) => p.variants?.forEach((v) => v.color && s.add(v.color)));
-    return Array.from(s).sort();
-  }, [products]);
+  }, [
+    products,
+    activeCategoryAndDescendants,
+    search,
+    onlyInStock,
+    colorIds,
+    lang,
+    materialIds,
+    scentIds,
+    shapeIds,
+    sort,
+    currency,
+    priceMin,
+    priceMax,
+    lengthMin,
+    lengthMax,
+    widthMin,
+    widthMax,
+    heightMin,
+    heightMax,
+  ]);
 
   /*
     Pagination — each product may have multiple variants and every variant is
@@ -479,12 +570,8 @@ const Catalog = () => {
     () => filtered.flatMap((p) => (p.variants ?? []).map((v) => ({ p, v }))),
     [filtered],
   );
-  const totalItems = flatFiltered.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
-
-  // Pagination state — initialised from the restore snapshot so a returning
-  // user lands on the same page they left.
-  const [page, setPage] = useState(() => restore.initialPage);
+  const totalItems = prodQ.data?.total ?? 0;
+  const totalPages = Math.max(1, prodQ.data?.pages ?? 0);
 
   // Reset to page 1 whenever the active filter/search/sort set changes so the
   // user doesn't land on an empty page 5 after narrowing the catalog. The
@@ -518,10 +605,7 @@ const Catalog = () => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const pagedItems = useMemo(
-    () => flatFiltered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [flatFiltered, page],
-  );
+  const pagedItems = flatFiltered;
 
   // Variant ids visible on the current page — written into the snapshot so
   // we can detect CASE 3 (saved card filtered out) on the next return.
@@ -778,14 +862,20 @@ const Catalog = () => {
    * или активному фильтру) — клиенты обычно хотят полную выгрузку. Если
    * данные ещё грузятся — показываем ошибку, чтобы не отдать пустой файл.
    */
-  const handleExportPriceList = () => {
-    if (loading || products.length === 0) {
+  const handleExportPriceList = async () => {
+    if (loading) {
       toast.error("Каталог ещё загружается");
       return;
     }
     try {
-      downloadPriceListXlsx(products);
-      toast.success(`Прайс-лист сформирован (${products.length} товаров)`);
+      const allProducts = await catalogApi.listProducts();
+      if (allProducts.length === 0) {
+        toast.error("В каталоге пока нет товаров");
+        return;
+      }
+      const { downloadPriceListXlsx } = await import("@/lib/exportPriceList");
+      downloadPriceListXlsx(allProducts);
+      toast.success(`Прайс-лист сформирован (${allProducts.length} товаров)`);
     } catch (err) {
       console.error("Price list export failed", err);
       toast.error("Не удалось сформировать прайс-лист");
@@ -1773,588 +1863,4 @@ const Catalog = () => {
  * Collapsible filter section with an animated chevron + optional active-count pill.
  * Mirrors the reference design from the ticket (see screenshot 1).
  */
-const FilterCard = ({
-  title,
-  children,
-  defaultOpen = false,
-  count = 0,
-}: {
-  title: string;
-  children: ReactNode;
-  defaultOpen?: boolean;
-  count?: number;
-}) => {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <div className="overflow-hidden rounded-lg border border-border bg-surface transition-colors">
-        <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left outline-none transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset data-[state=open]:bg-accent/20">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold">{title}</span>
-            {count > 0 && (
-              <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                {count}
-              </span>
-            )}
-          </div>
-          <ChevronDown
-            className={cn(
-              "h-4 w-4 text-muted-foreground transition-transform duration-300",
-              open && "rotate-180",
-            )}
-          />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
-          <div className="border-t border-border px-4 py-3">{children}</div>
-        </CollapsibleContent>
-      </div>
-    </Collapsible>
-  );
-};
-
-/**
- * Reusable min/max numeric range — used for price + dimension filters.
- * Keeps the same visual style as the original inline price inputs.
- */
-const RangeFilter = ({
-  min,
-  max,
-  onMin,
-  onMax,
-  unit,
-}: {
-  min: string;
-  max: string;
-  onMin: (v: string) => void;
-  onMax: (v: string) => void;
-  unit?: string;
-}) => (
-  <div className="flex items-center gap-2">
-    <div className="flex-1">
-      <input
-        type="number"
-        min={0}
-        placeholder={unit ? `от, ${unit}` : "от"}
-        value={min}
-        onChange={(e) => onMin(e.target.value)}
-        className="h-9 w-full min-w-0 rounded-full border border-input bg-background px-3.5 text-start text-sm tabular-nums placeholder:text-muted-foreground/60 transition-all duration-200 outline-none hover:border-primary/30 focus:border-primary/60 focus:ring-4 focus:ring-primary/15 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-      />
-    </div>
-    <span className="text-muted-foreground">—</span>
-    <div className="flex-1">
-      <input
-        type="number"
-        min={0}
-        placeholder={unit ? `до, ${unit}` : "до"}
-        value={max}
-        onChange={(e) => onMax(e.target.value)}
-        className="h-9 w-full min-w-0 rounded-full border border-input bg-background px-3.5 text-start text-sm tabular-nums placeholder:text-muted-foreground/60 transition-all duration-200 outline-none hover:border-primary/30 focus:border-primary/60 focus:ring-4 focus:ring-primary/15 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-      />
-    </div>
-  </div>
-);
-
-/** Reusable attribute checklist used inside FilterCard sections. */
-const FilterCheckList = ({
-  items,
-  selected,
-  onToggle,
-}: {
-  items: { id: string; label: string }[];
-  selected: Set<string>;
-  onToggle: (id: string) => void;
-}) => (
-  <div className="space-y-0.5">
-    {items.map((it) => {
-      const active = selected.has(it.id);
-      return (
-        <label
-          key={it.id}
-          className="flex cursor-pointer items-center gap-2.5 rounded-md px-1 py-1.5 text-sm transition-colors hover:bg-accent/60"
-        >
-          <Checkbox
-            checked={active}
-            onCheckedChange={() => onToggle(it.id)}
-            className="border-muted-foreground/40 data-[state=checked]:border-primary"
-          />
-          <span className={cn(active ? "font-medium" : "text-foreground/80")}>{it.label}</span>
-        </label>
-      );
-    })}
-  </div>
-);
-
-/**
- * Product card for the grid view. When the corresponding variant is already in
- * the cart, the "+ В корзину" button is replaced with a NumberStepper bound to
- * `onSetBoxes`, plus a small trash button to remove the item (ticket #11).
- */
-const ProductCard = ({
-  p,
-  v,
-  cartBoxes,
-  currency,
-  lang,
-  onAdd,
-  onSetBoxes,
-  onRemove,
-  registerRef,
-  selectMode = false,
-  selected = false,
-  onToggleSelect,
-}: {
-  p: Product;
-  v: ProductVariant;
-  cartBoxes: number;
-  currency: Currency;
-  lang: Lang;
-  onAdd: () => void;
-  onSetBoxes: (n: number) => void;
-  onRemove: () => void;
-  registerRef?: (variantId: string, node: HTMLElement | null) => void;
-  selectMode?: boolean;
-  selected?: boolean;
-  onToggleSelect?: () => void;
-}) => {
-  const cover = variantCoverUrl(p, v);
-  const stock = availableBoxes(v);
-  const inCart = cartBoxes > 0;
-  const selectable = selectMode && stock > 0;
-
-  return (
-    <article
-      ref={(el) => registerRef?.(v.id, el)}
-      data-variant-id={v.id}
-      className={cn(
-        "group relative flex h-full flex-col overflow-hidden rounded-lg border bg-surface transition-all duration-300 ease-out",
-        stock > 0 && !selectMode
-          ? "border-border hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/15"
-          : stock > 0 && selectMode && selected
-            ? "border-primary bg-primary/5 ring-2 ring-primary/40"
-            : stock > 0
-              ? "border-border hover:border-primary/40"
-              : "border-border/50 opacity-60 grayscale",
-      )}
-    >
-      {/*
-        В режиме выбора весь блок карточки превращается в большой
-        toggle-button через невидимый overlay поверх ссылок. Это надёжнее
-        чем перехватывать клики на каждом <Link/> (карточка содержит 2-3
-        ссылки на /product/...), и не ломает SEO/доступность вне режима.
-      */}
-      {selectable && (
-        <button
-          type="button"
-          onClick={onToggleSelect}
-          aria-pressed={selected}
-          aria-label={selected ? "Снять выделение товара" : "Выбрать товар"}
-          className="absolute inset-0 z-10 cursor-pointer"
-        />
-      )}
-
-      <Link
-        to={`/product/${p.slug}?variant=${v.id}`}
-        className="relative block aspect-square overflow-hidden bg-muted"
-        aria-label={productName(p, lang)}
-        tabIndex={selectable ? -1 : 0}
-      >
-        <img
-          src={getProductImage(cover)}
-          alt={productName(p, lang)}
-          loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
-        />
-        {inCart && !selectMode && (
-          <span className="absolute right-3 top-3 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground shadow-md">
-            В корзине · {cartBoxes}
-          </span>
-        )}
-        {selectMode && (
-          <div
-            className={cn(
-              "absolute left-3 top-3 z-20 grid h-7 w-7 place-items-center rounded-md border-2 shadow-sm transition-all",
-              selected
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-white/80 bg-background/90 text-transparent",
-              stock <= 0 && "opacity-40",
-            )}
-          >
-            <Check className="h-4 w-4" />
-          </div>
-        )}
-      </Link>
-
-      <div className="flex flex-1 flex-col p-2.5 sm:p-4">
-        <div className="flex items-start justify-between gap-2">
-          <span className="num text-[11px] text-muted-foreground">{v.sku}</span>
-          <StockIndicator stockBoxes={stock} />
-        </div>
-        <Link
-          to={`/product/${p.slug}?variant=${v.id}`}
-          className="mt-1 line-clamp-2 h-[2.5em] text-sm font-bold leading-snug text-foreground transition-colors hover:text-primary"
-        >
-          {productName(p, lang)}
-        </Link>
-        <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">{variantLabel(v)}</div>
-
-        <div className="mt-auto flex items-baseline justify-between pt-2 sm:pt-3">
-          <div>
-            <div className="price text-base font-bold sm:text-lg">{formatMoney(variantBoxPrice(v, currency), currency)}</div>
-            <div className="text-[11px] text-muted-foreground">
-              за коробку · {v.pieces_per_box} шт
-            </div>
-          </div>
-        </div>
-
-        {/* Volume-discount mini-table — only when product has tiered pricing,
-            mirrors the rucandle.ru pattern where buyers see the price-by-volume
-            ladder directly in the grid without opening the product page. */}
-        {v.volume_discounts && v.volume_discounts.length > 0 && (() => {
-          const base = variantBoxPrice(v, currency);
-          const tiers = [...v.volume_discounts]
-            .sort((a, b) => a.min_boxes - b.min_boxes)
-            .slice(0, 4);
-          return (
-            <div className="mt-2 grid grid-cols-1 gap-1 rounded-md border border-amber/30 bg-amber/5 p-1.5 text-[10px] sm:grid-cols-2 sm:text-[11px]">
-              {tiers.map((vd) => {
-                const after = Math.round(base * (1 - Number(vd.discount_percent) / 100));
-                return (
-                  <div key={vd.id ?? `${vd.min_boxes}-${vd.discount_percent}`} className="flex items-baseline justify-between gap-1 px-1 leading-tight whitespace-nowrap">
-                    <span className="num text-muted-foreground">от {vd.min_boxes} кор</span>
-                    <span className="price font-semibold text-amber">{formatMoney(after, currency)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
-
-        {/* Cart-aware CTA: stepper while in cart, add button otherwise.
-            В selectMode CTA визуально приглушаем — клики всё равно
-            перехватываются overlay-button выше и должны переключать
-            выбор, а не добавлять в корзину. */}
-        <div
-          className={cn(
-            "mt-2 sm:mt-3",
-            selectMode && "pointer-events-none opacity-50",
-          )}
-          aria-hidden={selectMode}
-        >
-          {inCart ? (
-            <div className="flex items-stretch gap-2">
-              <NumberStepper
-                value={cartBoxes}
-                onChange={onSetBoxes}
-                min={1}
-                max={stock}
-                size="sm"
-                block
-                className="flex-1"
-              />
-              <button
-                type="button"
-                onClick={onRemove}
-                aria-label="Убрать из корзины"
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-destructive/30 text-destructive transition-colors hover:bg-destructive/10 hover:border-destructive/50"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
-            <Button
-              onClick={onAdd}
-              disabled={stock <= 0}
-              className="w-full transition-all duration-200 hover:shadow-md hover:shadow-primary/25"
-            >
-              {stock > 0 ? "+ В корзину" : "Нет в наличии"}
-            </Button>
-          )}
-        </div>
-      </div>
-    </article>
-  );
-};
-
-/**
- * Mobile list-row — compact horizontal card for the "table" view on phones.
- * Small image left, info right, fits the viewport without horizontal scroll.
- */
-const MobileListRow = ({
-  p,
-  v,
-  onAdd,
-  index = 0,
-  registerRef,
-  selectMode = false,
-  selected = false,
-  onToggleSelect,
-}: {
-  p: Product;
-  v: ProductVariant;
-  onAdd: (p: Product, v: ProductVariant, n: number) => void;
-  index?: number;
-  registerRef?: (variantId: string, node: HTMLElement | null) => void;
-  selectMode?: boolean;
-  selected?: boolean;
-  onToggleSelect?: () => void;
-}) => {
-  const { currency, lang } = useAppStore();
-  const cartItem = useCartStore((s) => s.items.find((i) => i.variantId === v.id));
-  const setCartBoxes = useCartStore((s) => s.setBoxes);
-  const removeFromCart = useCartStore((s) => s.remove);
-  const stock = availableBoxes(v);
-  const cover = variantCoverUrl(p, v);
-  const inCart = Boolean(cartItem);
-  const delayMs = Math.min(index, 13) * 20;
-  const selectable = selectMode && stock > 0;
-
-  return (
-    <div
-      ref={(el) => registerRef?.(v.id, el)}
-      data-variant-id={v.id}
-      className={cn(
-        "relative flex gap-3 p-3 animate-in fade-in slide-in-from-bottom-1 fill-mode-both duration-500 ease-out",
-        stock <= 0 && "opacity-60 grayscale",
-        selected && "bg-primary/5",
-      )}
-      style={{ animationDelay: `${delayMs}ms` }}
-    >
-      {/* Overlay toggle для batch-выбора — см. ProductCard. */}
-      {selectable && (
-        <button
-          type="button"
-          onClick={onToggleSelect}
-          aria-pressed={selected}
-          aria-label={selected ? "Снять выделение товара" : "Выбрать товар"}
-          className="absolute inset-0 z-10 cursor-pointer"
-        />
-      )}
-      {selectMode && (
-        <div
-          className={cn(
-            "absolute left-2 top-2 z-20 grid h-6 w-6 place-items-center rounded-md border-2 shadow-sm transition-all",
-            selected
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-white/80 bg-background/90 text-transparent",
-            stock <= 0 && "opacity-40",
-          )}
-        >
-          <Check className="h-3.5 w-3.5" />
-        </div>
-      )}
-      <Link
-        to={`/product/${p.slug}?variant=${v.id}`}
-        className="block h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
-        aria-label={productName(p, lang)}
-        tabIndex={selectable ? -1 : 0}
-      >
-        <img
-          src={getProductImage(cover)}
-          alt={productName(p, lang)}
-          loading="lazy"
-          className="h-full w-full object-cover"
-        />
-      </Link>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="price text-base font-bold">
-          {formatMoney(variantBoxPrice(v, currency), currency)}
-        </div>
-        <Link
-          to={`/product/${p.slug}?variant=${v.id}`}
-          className="mt-0.5 line-clamp-2 text-sm font-medium leading-snug text-foreground transition-colors hover:text-primary"
-        >
-          {productName(p, lang)}
-        </Link>
-        <div className="mt-0.5 text-xs text-muted-foreground">
-          {variantLabel(v)} · {v.pieces_per_box} шт/кор
-        </div>
-
-        <div
-          className={cn(
-            "mt-auto flex items-center gap-2 pt-1.5",
-            selectMode && "pointer-events-none opacity-50",
-          )}
-          aria-hidden={selectMode}
-        >
-          {inCart ? (
-            <div className="flex flex-1 items-center gap-1.5">
-              <NumberStepper
-                value={cartItem!.boxes}
-                onChange={(n) => setCartBoxes(v.id, n)}
-                min={1}
-                max={stock}
-                size="sm"
-                className="flex-1"
-              />
-              <button
-                type="button"
-                onClick={() => removeFromCart(v.id)}
-                aria-label="Убрать из корзины"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-destructive/30 text-destructive hover:bg-destructive/10"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
-            <Button size="sm" className="h-8 text-xs" onClick={() => onAdd(p, v, 1)} disabled={stock <= 0}>
-              {stock > 0 ? "В корзину" : "Нет"}
-            </Button>
-          )}
-          <StockIndicator stockBoxes={stock} />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/**
- * Table row — now includes a thumbnail (ticket #7) and becomes cart-aware:
- * the quantity stepper is bound to the cart entry and the CTA flips to
- * "Убрать" once the variant is already in the cart.
- *
- * `index` is used to stagger the row's reveal animation so the table feels as
- * lively as the grid view.
- */
-const TableRow = ({
-  p,
-  v,
-  onAdd,
-  index = 0,
-  registerRef,
-  selectMode = false,
-  selected = false,
-  onToggleSelect,
-}: {
-  p: Product;
-  v: ProductVariant;
-  onAdd: (p: Product, v: ProductVariant, n: number) => void;
-  index?: number;
-  registerRef?: (variantId: string, node: HTMLElement | null) => void;
-  selectMode?: boolean;
-  selected?: boolean;
-  onToggleSelect?: () => void;
-}) => {
-  const { currency, lang } = useAppStore();
-  const cartItem = useCartStore((s) => s.items.find((i) => i.variantId === v.id));
-  const setCartBoxes = useCartStore((s) => s.setBoxes);
-  const removeFromCart = useCartStore((s) => s.remove);
-  const [qty, setQty] = useState(1);
-  const stock = availableBoxes(v);
-  const cover = variantCoverUrl(p, v);
-  const inCart = Boolean(cartItem);
-  const delayMs = Math.min(index, 13) * 20;
-  const selectable = selectMode && stock > 0;
-
-  return (
-    <div
-      ref={(el) => registerRef?.(v.id, el)}
-      data-variant-id={v.id}
-      className={cn(
-        "relative flex items-center gap-5 px-4 py-4 transition-colors hover:bg-accent/30 animate-in fade-in slide-in-from-bottom-1 fill-mode-both duration-500 ease-out",
-        stock <= 0 && "opacity-60 grayscale",
-        selected && "bg-primary/5",
-      )}
-      style={{ animationDelay: `${delayMs}ms` }}
-    >
-      {/* Overlay toggle for batch-выбора (см. ProductCard). */}
-      {selectable && (
-        <button
-          type="button"
-          onClick={onToggleSelect}
-          aria-pressed={selected}
-          aria-label={selected ? "Снять выделение товара" : "Выбрать товар"}
-          className="absolute inset-0 z-10 cursor-pointer"
-        />
-      )}
-      {selectMode && (
-        <div
-          className={cn(
-            "z-20 grid h-6 w-6 shrink-0 place-items-center rounded-md border-2 transition-all",
-            selected
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-muted-foreground/40 bg-background text-transparent",
-            stock <= 0 && "opacity-40",
-          )}
-        >
-          <Check className="h-3.5 w-3.5" />
-        </div>
-      )}
-      {/* Thumbnail */}
-      <Link
-        to={`/product/${p.slug}?variant=${v.id}`}
-        className="block h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
-        aria-label={productName(p, lang)}
-        tabIndex={selectable ? -1 : 0}
-      >
-        <img
-          src={getProductImage(cover)}
-          alt={productName(p, lang)}
-          loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-300 hover:scale-110"
-        />
-      </Link>
-
-      {/* Info — middle */}
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="text-lg font-bold">
-          {formatMoney(variantBoxPrice(v, currency), currency)}
-        </div>
-        <Link
-          to={`/product/${p.slug}?variant=${v.id}`}
-          className="line-clamp-1 text-sm font-medium text-foreground transition-colors hover:text-primary"
-        >
-          {productName(p, lang)}
-        </Link>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          <span>{variantLabel(v)}</span>
-          <span>·</span>
-          <span>{v.pieces_per_box} шт/кор</span>
-          <span>·</span>
-          <span className="num">{v.sku}</span>
-          <span>·</span>
-          <StockIndicator stockBoxes={stock} />
-        </div>
-      </div>
-
-      {/* Actions — right side. В selectMode CTA приглушается, клики
-          съедает overlay-button сверху. */}
-      <div
-        className={cn(
-          "flex shrink-0 items-center gap-3",
-          selectMode && "pointer-events-none opacity-50",
-        )}
-        aria-hidden={selectMode}
-      >
-        {inCart ? (
-          <>
-            <NumberStepper
-              value={cartItem!.boxes}
-              onChange={(n) => setCartBoxes(v.id, n)}
-              min={1}
-              max={stock}
-              size="sm"
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => removeFromCart(v.id)}
-              className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-            >
-              <Trash2 className="mr-1 h-3.5 w-3.5" /> Убрать
-            </Button>
-          </>
-        ) : (
-          <>
-            {stock > 0 && <NumberStepper value={qty} onChange={setQty} min={1} max={stock} size="sm" />}
-            <Button size="sm" onClick={() => onAdd(p, v, qty)} disabled={stock <= 0}>
-              {stock > 0 ? "В корзину" : "Нет в наличии"}
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
-
 export default Catalog;

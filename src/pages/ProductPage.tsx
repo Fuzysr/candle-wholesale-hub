@@ -38,6 +38,7 @@ const ProductPage = () => {
   const { push } = useRecentlyViewed();
   const [variantId, setVariantId] = useState<string>(urlVariantId ?? "");
   const [qty, setQty] = useState(1);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const productQuery = useQuery({
     queryKey: ["product", slug],
@@ -95,8 +96,6 @@ const ProductPage = () => {
   const stock = variant ? availableBoxes(variant) : 0;
 
   const gallery = variantGalleryUrls(product, variant);
-
-  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleAdd = () => {
     if (!variant) return;

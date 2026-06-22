@@ -4,13 +4,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { apiErrorMessage, ordersApi, profileApi, stockApi } from "@/lib/api";
+import { apiErrorMessage, ordersApi, profileApi } from "@/lib/api";
 import { AUTH_ME_KEY } from "@/hooks/useAuth";
 import { useAppStore } from "@/store/appStore";
 import { useCartStore } from "@/store/cartStore";
 import { useAuth } from "@/hooks/useAuth";
 import { formatMoney } from "@/lib/format";
-import { computeDiscount } from "@/lib/catalog";
 import { toast } from "sonner";
 
 const Field = ({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
@@ -26,10 +25,6 @@ const Checkout = () => {
   const { user, loading: authLoading } = useAuth();
   const { items, clear } = useCartStore();
   const { currency } = useAppStore();
-  const { data: tiers = [] } = useQuery({
-    queryKey: ["discount-tiers"],
-    queryFn: () => stockApi.listDiscountTiers(),
-  });
   const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({
@@ -55,23 +50,29 @@ const Checkout = () => {
     }
   }, [user]);
 
-  const totals = useMemo(() => {
-    const totalBoxes = items.reduce((s, i) => s + i.boxes, 0);
-    const subtotal = items.reduce((s, i) => {
-      const price = currency === "RUB" ? i.priceRub : i.priceUsd;
-      return s + price * i.piecesPerBox * i.boxes;
-    }, 0);
-    const discountPercent = computeDiscount(totalBoxes, tiers);
-    const discountAmount = (subtotal * discountPercent) / 100;
-    return { totalBoxes, subtotal, discountPercent, discountAmount, total: subtotal - discountAmount };
-  }, [items, currency, tiers]);
-
   // Если хотя бы одной позиции не хватает на складе — заявку отправить
   // нельзя (бэкенд тоже вернёт 409). Блокируем кнопку и подсказываем,
   // что нужно вернуться в корзину.
   const hasStockIssues = items.some(
     (i) => i.stockBoxes <= 0 || i.boxes > i.stockBoxes,
   );
+
+  const orderItems = useMemo(
+    () =>
+      items.map((i) => ({
+        variant_id: i.variantId,
+        boxes: i.boxes,
+      })),
+    [items],
+  );
+
+  const quoteQuery = useQuery({
+    queryKey: ["orders", "quote", currency, orderItems],
+    queryFn: () => ordersApi.quote({ currency, items: orderItems }),
+    enabled: orderItems.length > 0 && !hasStockIssues,
+    retry: false,
+  });
+  const totals = quoteQuery.data;
 
   if (authLoading) {
     return (
@@ -117,6 +118,10 @@ const Checkout = () => {
       toast.error("Часть позиций недоступна на складе — поправьте корзину");
       return;
     }
+    if (!totals) {
+      toast.error("Не удалось рассчитать итоговую сумму. Повторите попытку.");
+      return;
+    }
     setSubmitting(true);
 
     try {
@@ -131,15 +136,8 @@ const Checkout = () => {
         phone: form.phone,
         inn: form.inn,
         email: form.email,
-        items: items.map((i) => ({
-          variant_id: i.variantId,
-          sku: i.sku,
-          product_name: i.productName,
-          variant_label: i.variantLabel,
-          pieces_per_box: i.piecesPerBox,
-          boxes: i.boxes,
-          unit_price: currency === "RUB" ? i.priceRub : i.priceUsd,
-        })),
+        quoted_total: totals.total,
+        items: orderItems,
       });
 
       // Keep the profile snapshot in sync for next checkout.
@@ -161,6 +159,7 @@ const Checkout = () => {
       navigate(`/order/success/${order.id}`, { state: { order, guest: !user } });
     } catch (err) {
       toast.error(apiErrorMessage(err, "Не удалось создать заявку"));
+      quoteQuery.refetch();
     } finally {
       setSubmitting(false);
     }
@@ -220,21 +219,40 @@ const Checkout = () => {
                 ))}
               </div>
               <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Коробок</span><span className="num">{totals.totalBoxes}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Сумма</span><span className="price">{formatMoney(totals.subtotal, currency)}</span></div>
-                {totals.discountPercent > 0 && (
-                  <div className="flex justify-between text-amber"><span>Скидка {totals.discountPercent}%</span><span className="price">−{formatMoney(totals.discountAmount, currency)}</span></div>
+                {quoteQuery.isPending ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-5 w-full" />
+                    <Skeleton className="h-8 w-full" />
+                  </div>
+                ) : quoteQuery.isError || !totals ? (
+                  <div className="space-y-2 text-xs text-destructive">
+                    <p>{apiErrorMessage(quoteQuery.error, "Не удалось рассчитать сумму")}</p>
+                    <Button type="button" size="sm" variant="outline" onClick={() => quoteQuery.refetch()}>
+                      Повторить расчёт
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Коробок</span><span className="num">{totals.total_boxes}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Сумма</span><span className="price">{formatMoney(totals.subtotal, currency)}</span></div>
+                    {totals.discount_amount > 0 && (
+                      <div className="flex justify-between text-amber">
+                        <span>{totals.discount_percent > 0 ? `Скидка ${totals.discount_percent}%` : "Скидка"}</span>
+                        <span className="price">−{formatMoney(totals.discount_amount, currency)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-baseline justify-between border-t border-border pt-3">
+                      <span className="font-semibold">К оплате</span>
+                      <span className="price text-2xl">{formatMoney(totals.total, currency)}</span>
+                    </div>
+                  </>
                 )}
-                <div className="flex items-baseline justify-between border-t border-border pt-3">
-                  <span className="font-semibold">К оплате</span>
-                  <span className="price text-2xl">{formatMoney(totals.total, currency)}</span>
-                </div>
               </div>
               <Button
                 type="submit"
                 size="lg"
                 className="mt-5 w-full"
-                disabled={submitting || hasStockIssues}
+                disabled={submitting || hasStockIssues || !totals || quoteQuery.isFetching}
               >
                 {submitting ? "Отправка..." : "Отправить заявку"}
               </Button>

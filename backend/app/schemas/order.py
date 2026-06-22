@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -18,13 +19,11 @@ Currency = Literal["RUB", "USD"]
 
 
 class OrderItemIn(BaseModel):
-    variant_id: UUID | None = None
-    sku: str = Field(min_length=1, max_length=128)
-    product_name: str = Field(min_length=1, max_length=500)
-    variant_label: str | None = Field(default=None, max_length=500)
-    pieces_per_box: int = Field(ge=1, le=100_000)
+    # Every priced order line must resolve to a catalog variant. Free-form
+    # enquiries belong to a separate workflow and must never carry a
+    # client-controlled price into the canonical orders ledger.
+    variant_id: UUID
     boxes: int = Field(ge=1, le=100_000)
-    unit_price: float = Field(ge=0, le=1_000_000)
 
 
 class OrderItemOut(_ORM):
@@ -67,7 +66,21 @@ class OrderCreate(BaseModel):
     phone: str | None = Field(default=None, max_length=50)
     inn: str | None = Field(default=None, max_length=20)
     email: EmailStr | None = None
+    quoted_total: Decimal | None = Field(default=None, ge=0, le=1_000_000_000)
     items: list[OrderItemIn] = Field(min_length=1, max_length=200)
+
+
+class OrderQuoteIn(BaseModel):
+    currency: Currency = "RUB"
+    items: list[OrderItemIn] = Field(min_length=1, max_length=200)
+
+
+class OrderQuoteOut(BaseModel):
+    total_boxes: int
+    subtotal: float
+    discount_percent: float
+    discount_amount: float
+    total: float
 
 
 class OrderUpdateAdmin(BaseModel):

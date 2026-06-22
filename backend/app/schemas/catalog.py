@@ -248,6 +248,18 @@ class ProductOut(ProductBase):
     shape: AttributeOut | None = None
 
 
+class ProductPageOut(BaseModel):
+    """A stable metadata envelope for server-side catalog pagination."""
+
+    items: list[ProductOut]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+    has_next: bool
+    has_previous: bool
+
+
 class ProductCreate(BaseModel):
     slug: str = Field(min_length=1, max_length=128)
     category_id: UUID | None = None

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { authApi, tokenStore } from "@/lib/api";
+import { authApi } from "@/lib/api";
+import { onAuthChanged } from "@/lib/api/auth-session";
 import type { UserOut } from "@/lib/api";
 
 export type AuthProfile = {
@@ -34,44 +35,43 @@ const toAppUser = (u: UserOut): AppUser => ({
 export const AUTH_ME_KEY = ["auth", "me"] as const;
 
 /**
- * React hook that resolves the current user from the JWT in `localStorage`.
+ * Resolve the current user from server-managed HttpOnly cookies.
  *
  * Shape is kept deliberately close to a typical Supabase-style auth hook so
  * existing pages can stay thin:
  *
- * - `session`  — truthy when a token exists, `null` otherwise.
+ * - `session`  — truthy when `/auth/me` resolves, `null` otherwise.
  * - `user`     — `AppUser | null`, shape identical to the old one.
  * - `loading`  — `true` while the first `/auth/me` fetch is in-flight.
  */
 export const useAuth = () => {
   const queryClient = useQueryClient();
-  const [hasToken, setHasToken] = useState<boolean>(() => !!tokenStore.getAccess());
 
   useEffect(() => {
-    return tokenStore.onChange(() => {
-      const next = !!tokenStore.getAccess();
-      setHasToken(next);
-      if (!next) queryClient.removeQueries({ queryKey: AUTH_ME_KEY });
-      else queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY });
+    return onAuthChanged((authenticated) => {
+      if (authenticated) {
+        queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY });
+      } else {
+        queryClient.removeQueries({ queryKey: AUTH_ME_KEY });
+      }
     });
   }, [queryClient]);
 
   const query = useQuery({
     queryKey: AUTH_ME_KEY,
     queryFn: () => authApi.me(),
-    enabled: hasToken,
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
 
   const user: AppUser | null = query.data ? toAppUser(query.data) : null;
-  const session = hasToken && user ? { user } : null;
-  const loading = hasToken && !query.data && (query.isPending || query.isFetching);
+  const session = user ? { user } : null;
+  const loading = !query.data && (query.isPending || query.isFetching);
 
   return { session, user, loading };
 };
 
-/** Clear persisted tokens; the matching `useAuth` instance will update. */
+/** Revoke the server-side refresh and expire all browser auth cookies. */
 export const signOut = async (): Promise<void> => {
-  authApi.logout();
+  await authApi.logout();
 };

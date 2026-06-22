@@ -73,8 +73,8 @@ const ProductGallery = ({ images, alt }: Props) => {
   // Phase 2: after "enter" is painted, trigger the "move" transition
   useEffect(() => {
     if (!slide || slide.phase !== "enter") return;
-    let id1: number, id2: number;
-    id1 = requestAnimationFrame(() => {
+    let id2 = 0;
+    const id1 = requestAnimationFrame(() => {
       id2 = requestAnimationFrame(() => {
         setSlide((prev) => (prev ? { ...prev, phase: "move" } : null));
       });

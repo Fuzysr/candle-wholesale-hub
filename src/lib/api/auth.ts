@@ -1,6 +1,6 @@
 import { http } from "./client";
-import { tokenStore } from "./token-store";
-import type { AccessToken, LoginOut, PasswordResetRequestOut, UserOut } from "./types";
+import { notifyAuthChanged } from "./auth-session";
+import type { LoginOut, PasswordResetRequestOut, UserOut } from "./types";
 
 export type RegisterPayload = {
   email: string;
@@ -15,29 +15,27 @@ export type LoginPayload = {
   password: string;
 };
 
-const persistLogin = (data: LoginOut): LoginOut => {
-  tokenStore.set(data.access, data.refresh);
+const completeLogin = (data: LoginOut): LoginOut => {
+  notifyAuthChanged(true);
   return data;
 };
 
 export const authApi = {
   register: async (payload: RegisterPayload): Promise<LoginOut> =>
-    persistLogin(await http.post<LoginOut>("/auth/register", payload)),
+    completeLogin(await http.post<LoginOut>("/auth/register", payload)),
 
   login: async (payload: LoginPayload): Promise<LoginOut> =>
-    persistLogin(await http.post<LoginOut>("/auth/login", payload)),
+    completeLogin(await http.post<LoginOut>("/auth/login", payload)),
 
-  refresh: async (refresh: string): Promise<AccessToken> =>
-    http.post<AccessToken>("/auth/refresh", { refresh }),
+  refresh: (): Promise<{ ok: true }> => http.post<{ ok: true }>("/auth/refresh", {}),
 
   me: async (): Promise<UserOut> => http.get<UserOut>("/auth/me"),
 
-  logout: () => {
-    const refresh = tokenStore.getRefresh();
-    tokenStore.clear();
-    if (refresh) {
-      // Best-effort server-side revocation — don't block the UI.
-      http.post("/auth/logout", { refresh }).catch(() => {});
+  logout: async (): Promise<void> => {
+    try {
+      await http.post("/auth/logout", {});
+    } finally {
+      notifyAuthChanged(false);
     }
   },
 

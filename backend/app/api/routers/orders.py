@@ -27,25 +27,30 @@ Price + stock integrity (#price-canonicalisation, #stock-reservation)
   decrements them back; marking ``shipped`` converts the reservation into a
   real ``stock_boxes`` decrement and writes a `StockMovement` row.
 """
+
 import logging
-from decimal import ROUND_HALF_UP, Decimal
+import secrets
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.api.deps import db_session, get_current_user, get_current_user_optional, require_admin
-from app.core.security import hash_password
-import secrets
 from app.api.pagination import PaginationParams, pagination_params
 from app.core import storage
 from app.core.config import settings as app_settings
-from app.core.mime_sniff import detect_mime
-from app.core.rate_limit import limiter
-from app.core.email import send_email
 from app.core.email_templates import (
     EmailSender,
     PaymentDetails,
@@ -54,368 +59,111 @@ from app.core.email_templates import (
     render_order_contact_email,
     render_order_created_email,
     render_order_ready_email,
-    order_status_label,
     render_order_rejected_email,
-    render_order_status_changed_email,
     render_receipt_uploaded_email,
 )
+from app.core.mime_sniff import detect_mime
 from app.core.order_state_machine import assert_transition_allowed
-from app.models.catalog import ProductVariant, VolumeDiscount
+from app.core.rate_limit import limiter
+from app.core.security import hash_password
 from app.models.company import CompanySettings
-from app.models.enums import AppRole, OrderStatus, StockMovementType
-from app.models.order import Order, OrderItem, OrderNumberCounter, OrderStatusHistory
-from app.models.stock import DiscountTier, StockMovement
+from app.models.enums import AppRole, OrderStatus
+from app.models.order import Order, OrderItem, OrderStatusHistory
 from app.models.user import User
 from app.schemas.order import (
     OrderCreate,
-    OrderItemIn,
     OrderListOut,
     OrderOut,
+    OrderQuoteIn,
+    OrderQuoteOut,
     OrderUpdateAdmin,
+)
+from app.services.orders.inventory import (
+    assert_stock_available as _assert_stock_available_canonical,
+)
+from app.services.orders.inventory import (
+    release_reservation as _release_reservation,
+)
+from app.services.orders.inventory import (
+    ship_reservation as _ship_reservation,
+)
+from app.services.orders.notifications import (
+    COMPANY_SETTINGS_ID as _COMPANY_SETTINGS_ID,
+)
+from app.services.orders.notifications import (
+    build_email_sender as _build_email_sender,
+)
+from app.services.orders.notifications import (
+    queue_status_change_email as _queue_status_change_email,
+)
+from app.services.orders.notifications import (
+    send_email_safe as _send_email_safe,
+)
+from app.services.orders.pricing import (
+    compute_order_pricing as _compute_order_pricing,
+)
+from app.services.orders.pricing import (
+    quantize_money as _q,
+)
+from app.services.orders.pricing import (
+    resolve_canonical_items as _resolve_canonical_items,
+)
+from app.services.orders.receipts import (
+    attach_presigned_receipt as _attach_presigned_receipt,
+)
+from app.services.orders.receipts import (
+    attach_presigned_receipts as _attach_presigned_receipts,
+)
+from app.services.orders.receipts import (
+    receipt_key_for as _receipt_key_for,
+)
+from app.services.orders.repository import (
+    load_order as _load_order,
+)
+from app.services.orders.repository import (
+    lock_order as _lock_order,
+)
+from app.services.orders.repository import (
+    next_order_number as _next_order_number,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["orders"])
 
-# Singleton row id + first number for the order-number counter. Mirrors the old
-# PostgreSQL sequence (`CREATE SEQUENCE order_number_seq START 10000`).
-_ORDER_COUNTER_ID = 1
-_ORDER_NUMBER_START = 10000
-
-
-async def _next_order_number(session: AsyncSession) -> str:
-    """Reserve the next sequential order number inside the current transaction.
-
-    Replaces the old PostgreSQL trigger + sequence. The singleton counter row
-    is locked with ``SELECT … FOR UPDATE`` so two concurrent checkouts can't be
-    handed the same number; this serialises order creation, which is fine at our
-    volume. Must be called inside an open transaction that later commits — the
-    lock (and the reserved value) are released/persisted with that commit.
-    """
-    counter = (
-        await session.execute(
-            select(OrderNumberCounter)
-            .where(OrderNumberCounter.id == _ORDER_COUNTER_ID)
-            .with_for_update()
-        )
-    ).scalar_one_or_none()
-    if counter is None:
-        # Safety net for a DB that wasn't seeded (the migration/bootstrap seed
-        # the row). First-ever order creates it; the PK makes a concurrent
-        # double-insert fail loudly rather than duplicate a number.
-        counter = OrderNumberCounter(id=_ORDER_COUNTER_ID, next_value=_ORDER_NUMBER_START)
-        session.add(counter)
-        await session.flush()
-    value = counter.next_value
-    counter.next_value = value + 1
-    return f"CW-{value}"
-
-
-def _q(value: Decimal | float | int | str) -> Decimal:
-    """Round to 2 decimal places using banker-safe ROUND_HALF_UP.
-
-    Money must never be float-arithmetic'd; we accept a few input types only
-    so callers don't have to think about conversion.
-    """
-    if not isinstance(value, Decimal):
-        value = Decimal(str(value))
-    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
-def _build_variant_label(v: ProductVariant) -> str | None:
-    """Human-readable label for the order line snapshot.
-
-    Mirrors the way the catalog UI labels SKUs: «size · color · shape» where
-    available. Not security-critical (only used in invoice/UI), but keeping
-    the snapshot canonical avoids client-supplied label drift.
-    """
-    parts = [p for p in (v.size, v.color, v.shape) if p]
-    return " · ".join(parts) if parts else None
-
-
-async def _resolve_canonical_items(
-    session: AsyncSession,
-    items: list[OrderItemIn],
-    currency: str,
-) -> list[dict]:
-    """Resolve every item against ``product_variants`` server-side.
-
-    For lines WITH ``variant_id`` we override sku / product_name / variant_label
-    / pieces_per_box / unit_price from the DB so the client cannot tamper with
-    pricing. Variants are locked with ``SELECT … FOR UPDATE`` so the
-    subsequent stock check + reservation is race-free against concurrent
-    checkouts on the same SKU (#stock-reservation).
-
-    Lines WITHOUT ``variant_id`` (free-text rows from QuickOrder that didn't
-    match an SKU) are passed through untouched — the manager reconciles them
-    by hand later. They never affect inventory.
-    """
-    variant_ids = [i.variant_id for i in items if i.variant_id is not None]
-    variants_by_id: dict[UUID, ProductVariant] = {}
-    if variant_ids:
-        rows = (
-            await session.execute(
-                select(ProductVariant)
-                .options(
-                    selectinload(ProductVariant.product),
-                    selectinload(ProductVariant.volume_discounts),
-                )
-                .where(ProductVariant.id.in_(variant_ids))
-                .with_for_update()
-            )
-        ).scalars().all()
-        variants_by_id = {v.id: v for v in rows}
-
-    canonical: list[dict] = []
-    for item in items:
-        if item.variant_id is None:
-            canonical.append({
-                "variant_id": None,
-                "variant_obj": None,
-                "sku": item.sku,
-                "product_name": item.product_name,
-                "variant_label": item.variant_label,
-                "pieces_per_box": item.pieces_per_box,
-                "boxes": item.boxes,
-                "unit_price": _q(item.unit_price),
-            })
-            continue
-
-        v = variants_by_id.get(item.variant_id)
-        if v is None:
-            # Variant disappeared between adding to cart and checkout. Mirror
-            # the legacy 409 «out_of_stock» shape so the frontend keeps its
-            # one-shot error path.
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "message": f"Товар {item.sku} больше недоступен",
-                    "out_of_stock": [{
-                        "variant_id": str(item.variant_id),
-                        "sku": item.sku,
-                        "product_name": item.product_name,
-                        "requested_boxes": item.boxes,
-                        "available_boxes": 0,
-                        "reason": "not_found",
-                    }],
-                },
-            )
-
-        unit = v.price_per_piece_rub if currency == "RUB" else v.price_per_piece_usd
-        product_name = v.product.name_ru if v.product else item.product_name
-        canonical.append({
-            "variant_id": v.id,
-            "variant_obj": v,
-            "sku": v.sku,
-            "product_name": product_name,
-            "variant_label": _build_variant_label(v),
-            "pieces_per_box": v.pieces_per_box,
-            "boxes": item.boxes,
-            "unit_price": _q(unit),
-            "volume_discounts": list(v.volume_discounts),
-        })
-    return canonical
-
-
-def _best_volume_discount(volume_discounts: list, boxes: int) -> Decimal:
-    """Find the highest applicable per-variant volume discount percent."""
-    best = Decimal("0")
-    for vd in volume_discounts:
-        if boxes >= vd.min_boxes:
-            pct = Decimal(str(vd.discount_percent))
-            if pct > best:
-                best = pct
-    return best
-
-
-def _compute_totals_canonical(
-    rows: list[dict],
-) -> tuple[int, Decimal, Decimal, Decimal, Decimal, list[Decimal]]:
-    """Return `(total_boxes, subtotal, discount_percent, discount_amount, total, line_totals)`
-    in Decimal so money never round-trips through float.
-
-    Each line applies its own per-variant volume discount independently.
-    `discount_amount` is the sum of all per-line discounts; `discount_percent`
-    is set to 0 (no global order-level discount).
-    """
-    line_totals: list[Decimal] = []
-    total_boxes = 0
-    subtotal_before = Decimal("0")
-    subtotal_after = Decimal("0")
-    for r in rows:
-        line = _q(r["unit_price"] * Decimal(r["pieces_per_box"]) * Decimal(r["boxes"]))
-        subtotal_before += line
-        # Per-variant volume discount
-        vd_list = r.get("volume_discounts", [])
-        if vd_list:
-            vd_pct = _best_volume_discount(vd_list, r["boxes"])
-            if vd_pct > 0:
-                line = _q(line * (Decimal("100") - vd_pct) / Decimal("100"))
-        line_totals.append(line)
-        total_boxes += r["boxes"]
-        subtotal_after += line
-
-    discount_amount = _q(subtotal_before - subtotal_after)
-    return total_boxes, _q(subtotal_before), Decimal("0"), discount_amount, _q(subtotal_after), line_totals
-
-
-async def _load_order(session: AsyncSession, order_id: UUID) -> Order | None:
-    return await session.scalar(
-        select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
-    )
-
-
-# ---------------------------------------------------------------------------
-# Receipt URL helpers (#receipt-private-storage)
-# ---------------------------------------------------------------------------
-#
-# Receipts live in a **private** local-storage category (never served by
-# StaticFiles). The Order ORM model carries the canonical
-# `payment_receipt_key`; on every response we mint a short-lived **signed**
-# URL pointing at the authenticated `/orders/{id}/receipt-file` endpoint, so
-# the frontend can drop it straight into an `<img src>` / `<a href>` (which
-# carry no auth header) yet leaked links expire quickly. `payment_receipt_url`
-# is kept on the model only for legacy rows that stored a public URL directly.
-
-
-def _receipt_key_for(order: Order) -> str | None:
-    """Return the storage key for ``order``'s receipt, if any.
-
-    Falls back to parsing the legacy ``payment_receipt_url`` so receipts
-    uploaded before the migration are still serveable.
-    """
-    if order.payment_receipt_key:
-        return order.payment_receipt_key
-    legacy = order.payment_receipt_url
-    if not legacy:
-        return None
-    parsed = storage.parse_public_url(
-        legacy, categories=[app_settings.storage_category_receipts]
-    )
-    return parsed[1] if parsed else None
-
-
-async def _attach_presigned_receipt(order: Order) -> None:
-    """Replace ``order.payment_receipt_url`` in place with a signed URL.
-
-    The mutation is intentionally on the ORM instance: FastAPI's response
-    serializer reads the attribute via `from_attributes=True`. Because we
-    never flush/commit after this point in the request lifecycle, the
-    write does not propagate to the database.
-    """
-    key = _receipt_key_for(order)
-    if not key:
-        # Either no receipt at all, or a legacy URL we can no longer
-        # match — clear the field so the frontend doesn't render a
-        # broken link.
-        order.payment_receipt_url = None
-        return
-    order.payment_receipt_url = storage.signed_receipt_url(str(order.id))
-
-
-async def _attach_presigned_receipts(orders: list[Order]) -> None:
-    for o in orders:
-        await _attach_presigned_receipt(o)
-
-
-def _assert_stock_available_canonical(rows: list[dict]) -> None:
-    """Reject the order if any canonical line asks for more boxes than
-    `stock_boxes - reserved_boxes` on the (already FOR-UPDATE-locked) variant.
-
-    Reports every shortage at once so the client can fix the cart in one go.
-    Free-text lines (without variant_id) are not inventory-tracked.
-    """
-    shortages: list[dict[str, object]] = []
-    for r in rows:
-        v = r.get("variant_obj")
-        if v is None:
-            continue
-        available = max(0, (v.stock_boxes or 0) - (v.reserved_boxes or 0))
-        if r["boxes"] > available:
-            shortages.append({
-                "variant_id": str(v.id),
-                "sku": v.sku,
-                "product_name": r["product_name"],
-                "requested_boxes": r["boxes"],
-                "available_boxes": available,
-                "reason": "insufficient_stock",
-            })
-    if shortages:
-        lines = ", ".join(
-            f"{s['sku']} (нужно {s['requested_boxes']}, доступно {s['available_boxes']})"
-            for s in shortages
-        )
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": f"Недостаточно товара на складе: {lines}",
-                "out_of_stock": shortages,
-            },
-        )
-
-
-async def _release_reservation(session: AsyncSession, order: Order) -> None:
-    """Decrement ``reserved_boxes`` for every line of ``order``.
-
-    Called when an order is cancelled/rejected — the boxes go back into the
-    available pool. Variants are FOR-UPDATE-locked so a concurrent checkout on
-    the same SKU sees consistent ``available`` after we commit. ``max(0, …)``
-    guards against double-release if the same order is somehow cancelled
-    twice (shouldn't happen, but cheap to be safe).
-    """
-    items_list = list((await session.scalars(
-        select(OrderItem).where(OrderItem.order_id == order.id)
-    )).all())
-    variant_ids = [i.variant_id for i in items_list if i.variant_id is not None]
-    if not variant_ids:
-        return
-    variants = (await session.scalars(
-        select(ProductVariant)
-        .where(ProductVariant.id.in_(variant_ids))
-        .with_for_update()
-    )).all()
-    by_id = {v.id: v for v in variants}
-    for it in items_list:
-        if it.variant_id and (v := by_id.get(it.variant_id)) is not None:
-            v.reserved_boxes = max(0, (v.reserved_boxes or 0) - it.boxes)
-
-
-async def _ship_reservation(session: AsyncSession, order: Order) -> None:
-    """Convert the order's reservation into a real stock decrement.
-
-    Called when an order is marked `shipped`: subtract from both
-    ``stock_boxes`` and ``reserved_boxes``, and append a `StockMovement` row
-    so the warehouse audit log reflects the outbound shipment.
-    """
-    items_list = list((await session.scalars(
-        select(OrderItem).where(OrderItem.order_id == order.id)
-    )).all())
-    variant_ids = [i.variant_id for i in items_list if i.variant_id is not None]
-    if not variant_ids:
-        return
-    variants = (await session.scalars(
-        select(ProductVariant)
-        .where(ProductVariant.id.in_(variant_ids))
-        .with_for_update()
-    )).all()
-    by_id = {v.id: v for v in variants}
-    for it in items_list:
-        if it.variant_id and (v := by_id.get(it.variant_id)) is not None:
-            v.stock_boxes = max(0, (v.stock_boxes or 0) - it.boxes)
-            v.reserved_boxes = max(0, (v.reserved_boxes or 0) - it.boxes)
-            session.add(StockMovement(
-                variant_id=v.id,
-                type=StockMovementType.out,
-                qty_boxes=-it.boxes,
-                source="order",
-                comment=f"order #{order.order_number}",
-            ))
-
-
 # ========================================================================
 # Client: create order
 # ========================================================================
+
+
+@router.post("/orders/quote", response_model=OrderQuoteOut)
+async def quote_order(
+    payload: OrderQuoteIn,
+    session: AsyncSession = Depends(db_session),
+) -> OrderQuoteOut:
+    """Return the exact server-side totals that order creation will use."""
+    canonical = await _resolve_canonical_items(
+        session,
+        payload.items,
+        payload.currency,
+        lock_variants=False,
+    )
+    _assert_stock_available_canonical(canonical)
+    (
+        total_boxes,
+        subtotal,
+        discount_percent,
+        discount_amount,
+        total,
+        _,
+    ) = await _compute_order_pricing(session, canonical)
+    return OrderQuoteOut(
+        total_boxes=total_boxes,
+        subtotal=float(subtotal),
+        discount_percent=float(discount_percent),
+        discount_amount=float(discount_amount),
+        total=float(total),
+    )
 
 
 @router.post("/orders", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -442,24 +190,32 @@ async def create_order(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="contact_name is required for guest checkout",
             )
-        existing = await session.scalar(select(User).where(User.email == guest_email))
+        existing = await session.scalar(select(User.id).where(User.email == guest_email))
         if existing is not None:
-            user = existing
-        else:
-            # Random unguessable password — guest must use "Forgot password"
-            # to claim the account. Marked active so they receive emails.
-            user = User(
-                email=guest_email,
-                password_hash=hash_password(secrets.token_urlsafe(32)),
-                role=AppRole.client,
-                company_name=payload.company_name or None,
-                contact_name=guest_name,
-                phone=payload.phone or None,
-                inn=payload.inn or None,
-                is_active=True,
+            # An email address is not proof of account ownership. Never attach a
+            # guest order to an existing user: the profile update below would
+            # otherwise let anyone overwrite that user's contact information.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Аккаунт с таким email уже существует. Войдите в него, чтобы оформить заказ."
+                ),
             )
-            session.add(user)
-            await session.flush()
+
+        # Random unguessable password — guest must use "Forgot password"
+        # to claim the account. Marked active so they receive emails.
+        user = User(
+            email=guest_email,
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            role=AppRole.client,
+            company_name=payload.company_name or None,
+            contact_name=guest_name,
+            phone=payload.phone or None,
+            inn=payload.inn or None,
+            is_active=True,
+        )
+        session.add(user)
+        await session.flush()
 
     # Resolve every item against `product_variants` (FOR UPDATE) — this both
     # locks rows for the stock-availability check and ignores any tampered
@@ -467,23 +223,19 @@ async def create_order(
     canonical = await _resolve_canonical_items(session, payload.items, payload.currency)
     _assert_stock_available_canonical(canonical)
 
-    total_boxes, subtotal, discount_percent, discount_amount, total, line_totals = (
-        _compute_totals_canonical(canonical)
-    )
-
-    # Apply global discount tiers on top of any per-variant volume discounts.
-    # The global tier is based on the total number of boxes in the order.
-    global_tiers = (await session.scalars(select(DiscountTier))).all()
-    global_pct = Decimal("0")
-    for tier in global_tiers:
-        pct = Decimal(str(tier.discount_percent))
-        if total_boxes >= tier.min_boxes and pct > global_pct:
-            global_pct = pct
-    if global_pct > 0:
-        global_discount = _q(subtotal * global_pct / Decimal("100"))
-        discount_percent = global_pct
-        discount_amount = _q(discount_amount + global_discount)
-        total = _q(max(Decimal("0"), total - global_discount))
+    (
+        total_boxes,
+        subtotal,
+        discount_percent,
+        discount_amount,
+        total,
+        line_totals,
+    ) = await _compute_order_pricing(session, canonical)
+    if payload.quoted_total is not None and _q(payload.quoted_total) != total:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=("Стоимость заказа изменилась. Обновите расчёт и подтвердите новую сумму."),
+        )
 
     order = Order(
         order_number=await _next_order_number(session),
@@ -654,10 +406,7 @@ async def admin_list_orders(
     session: AsyncSession = Depends(db_session),
 ) -> list[Order]:
     res = await session.scalars(
-        select(Order)
-        .order_by(Order.created_at.desc())
-        .offset(p.offset)
-        .limit(p.limit)
+        select(Order).order_by(Order.created_at.desc()).offset(p.offset).limit(p.limit)
     )
     orders = list(res.all())
     await _attach_presigned_receipts(orders)
@@ -669,9 +418,7 @@ async def admin_list_orders(
     response_model=OrderOut,
     dependencies=[Depends(require_admin)],
 )
-async def admin_get_order(
-    order_id: UUID, session: AsyncSession = Depends(db_session)
-) -> Order:
+async def admin_get_order(order_id: UUID, session: AsyncSession = Depends(db_session)) -> Order:
     order = await _load_order(session, order_id)
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="order not found")
@@ -690,7 +437,7 @@ async def admin_update_order(
     admin: User = Depends(require_admin),
     session: AsyncSession = Depends(db_session),
 ) -> Order:
-    order = await session.get(Order, order_id)
+    order = await _lock_order(session, order_id)
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="order not found")
 
@@ -784,89 +531,6 @@ class OrderContactOut(BaseModel):
     queued_to: str
 
 
-async def _send_email_safe(
-    to_email: str,
-    subject: str,
-    body: str,
-    html_body: str | None = None,
-) -> None:
-    """BackgroundTasks wrapper — swallows errors into the log.
-
-    The HTTP response has already been sent by the time this runs, so we
-    cannot surface failures to the caller. Logging with `exc_info` keeps
-    a trail for ops without leaking SMTP details to the client.
-    """
-    try:
-        await send_email(
-            to_email=to_email,
-            subject=subject,
-            body=body,
-            html_body=html_body,
-        )
-    except Exception:
-        logger.exception("Background send_email failed (to=%s)", to_email)
-
-
-_COMPANY_SETTINGS_ID = 1
-
-
-def _build_email_sender(company: CompanySettings | None) -> EmailSender:
-    """Сборка `EmailSender` из настроек компании (или дефолтных значений).
-
-    Вынесено в отдельный helper, потому что повторяется в каждой точке
-    отправки писем по заявкам.
-    """
-    return EmailSender(
-        company_name=company.short_name if company else "CANDWAX",
-        phone=company.phone if company else "",
-        email=company.email if company else "",
-    )
-
-
-async def _resolve_order_email(session: AsyncSession, order: Order) -> str | None:
-    """Email клиента: сначала snapshot заявки, потом профиль пользователя."""
-    if order.email:
-        return order.email
-    user = await session.get(User, order.user_id)
-    return user.email if user else None
-
-
-def _queue_status_change_email(
-    background_tasks: BackgroundTasks,
-    *,
-    to_email: str,
-    order_number: str,
-    new_status: str,
-    comment: str | None,
-    sender: EmailSender,
-    customer_name: str | None,
-) -> None:
-    """Поставить в фоновую очередь письмо о смене статуса заявки.
-
-    Используется только для статусов БЕЗ специализированного шаблона
-    (paid, payment_review, processing, completed). Approve/reject/
-    mark-ready отправляют свои собственные письма и не должны звать
-    этот helper, иначе клиент получит две нотификации на одно событие.
-    """
-    if not app_settings.smtp_host or not to_email:
-        return
-    plain_body, html_body = render_order_status_changed_email(
-        order_number=order_number,
-        new_status=new_status,
-        comment=comment,
-        sender=sender,
-        customer_name=customer_name,
-    )
-    subject = f"Заявка №{order_number}: {order_status_label(new_status)}"
-    background_tasks.add_task(
-        _send_email_safe,
-        to_email=to_email,
-        subject=subject,
-        body=plain_body,
-        html_body=html_body,
-    )
-
-
 @router.post(
     "/admin/orders/{order_id}/contact",
     response_model=OrderContactOut,
@@ -906,6 +570,7 @@ async def admin_contact_order_customer(
     # Fail fast if SMTP is not configured — avoids silently losing the
     # message in the background task.
     from app.core.config import settings as _s
+
     if not _s.smtp_host:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -962,11 +627,18 @@ async def admin_approve_order(
     Отправляет клиенту email с суммой и банковскими реквизитами компании.
     Допустимые исходные статусы: new, processing.
     """
-    order = await session.get(Order, order_id)
+    order = await _lock_order(session, order_id)
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="order not found")
 
     assert_transition_allowed(order.status, OrderStatus.awaiting_payment)
+
+    # Named transition endpoints are idempotent. This matters when a client
+    # retries after a timeout or two operators click at once: the row lock
+    # serialises both requests and the later one becomes a side-effect-free
+    # success instead of duplicating history/email work.
+    if order.status == OrderStatus.awaiting_payment:
+        return ApproveOut(new_status=OrderStatus.awaiting_payment.value)
 
     order.status = OrderStatus.awaiting_payment
     session.add(
@@ -1051,11 +723,14 @@ async def admin_reject_order(
     Клиенту отправляется email с причиной отказа.
     Допустимые исходные статусы: все, кроме cancelled и completed.
     """
-    order = await session.get(Order, order_id)
+    order = await _lock_order(session, order_id)
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="order not found")
 
     assert_transition_allowed(order.status, OrderStatus.cancelled)
+
+    if order.status == OrderStatus.cancelled:
+        return RejectOut(new_status=OrderStatus.cancelled.value)
 
     # Snapshot fields before commit (commit expires ORM attributes).
     to_email = order.email
@@ -1150,7 +825,7 @@ async def upload_payment_receipt(
     * Content-type: JPEG/PNG/WebP/AVIF/PDF
     * Размер ≤ UPLOAD_MAX_BYTES (5 МБ)
     """
-    order = await session.get(Order, order_id)
+    order = await _lock_order(session, order_id)
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="order not found")
     if order.user_id != user.id:
@@ -1193,8 +868,7 @@ async def upload_payment_receipt(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"заявленный тип {content_type} не совпадает "
-                f"с реальным содержимым ({detected})"
+                f"заявленный тип {content_type} не совпадает с реальным содержимым ({detected})"
             ),
         )
 
@@ -1236,13 +910,9 @@ async def upload_payment_receipt(
         # Best-effort cleanup of the previous object so the bucket doesn't
         # accumulate orphaned receipts on re-uploads.
         try:
-            await storage.delete_object(
-                app_settings.storage_category_receipts, previous_key
-            )
+            await storage.delete_object(app_settings.storage_category_receipts, previous_key)
         except Exception:
-            logger.exception(
-                "failed to delete previous receipt object %s", previous_key
-            )
+            logger.exception("failed to delete previous receipt object %s", previous_key)
 
     # --- Notify admin(s) via email ---
     # IMPORTANT: we deliberately do NOT include any direct/presigned URL in
@@ -1371,11 +1041,14 @@ async def admin_confirm_payment(
     Допустимый исходный статус: payment_review.
     Клиенту отправляется письмо «Оплата подтверждена».
     """
-    order = await session.get(Order, order_id)
+    order = await _lock_order(session, order_id)
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="order not found")
 
     assert_transition_allowed(order.status, OrderStatus.paid)
+
+    if order.status == OrderStatus.paid:
+        return ConfirmPaymentOut(new_status=OrderStatus.paid.value)
 
     # Snapshot до commit.
     snapshot_email = order.email
@@ -1439,11 +1112,14 @@ async def admin_mark_ready(
     Клиенту отправляется email «Заказ собран — можете забирать».
     Допустимый исходный статус: paid.
     """
-    order = await session.get(Order, order_id)
+    order = await _lock_order(session, order_id)
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="order not found")
 
     assert_transition_allowed(order.status, OrderStatus.shipped)
+
+    if order.status == OrderStatus.shipped:
+        return MarkReadyOut(new_status=OrderStatus.shipped.value)
 
     order.status = OrderStatus.shipped
     # Convert the reservation into a real stock decrement and write a

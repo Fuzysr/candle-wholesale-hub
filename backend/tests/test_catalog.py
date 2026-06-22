@@ -49,6 +49,141 @@ async def test_public_products_lists_only_published(client, admin_token, auth_he
     assert slugs_admin == {"visible", "draft"}
 
 
+async def test_product_pagination_has_a_stable_unique_order(
+    client, admin_token, auth_headers
+):
+    created_ids = []
+    for index in range(3):
+        created = await client.post(
+            "/admin/products",
+            json={
+                "slug": f"same-name-{index}",
+                "name_ru": "Same name",
+                "name_en": "Same name",
+            },
+            headers=auth_headers(admin_token),
+        )
+        assert created.status_code == 201, created.text
+        created_ids.append(created.json()["id"])
+
+    page_ids = []
+    for offset in range(3):
+        page = await client.get(
+            "/admin/products",
+            params={"offset": offset, "limit": 1},
+            headers=auth_headers(admin_token),
+        )
+        assert page.status_code == 200, page.text
+        page_ids.append(page.json()[0]["id"])
+
+    assert page_ids == sorted(created_ids)
+    assert len(set(page_ids)) == 3
+
+
+async def test_product_search_filters_and_returns_page_metadata(
+    client, admin_token, auth_headers
+):
+    headers = auth_headers(admin_token)
+    category = await client.post(
+        "/admin/categories",
+        json={"slug": "filtered", "name_ru": "Filtered", "name_en": "Filtered"},
+        headers=headers,
+    )
+    category_id = category.json()["id"]
+
+    product_ids = []
+    for index in range(3):
+        product = await client.post(
+            "/admin/products",
+            json={
+                "slug": f"searchable-{index}",
+                "category_id": category_id,
+                "name_ru": f"Searchable {index}",
+                "name_en": f"Searchable {index}",
+            },
+            headers=headers,
+        )
+        assert product.status_code == 201, product.text
+        product_ids.append(product.json()["id"])
+        variant = await client.post(
+            f"/admin/products/{product.json()['id']}/variants",
+            json={
+                "sku": f"FILTER-SKU-{index}",
+                "pieces_per_box": 2,
+                "price_per_piece_rub": 100 + index,
+                "price_per_piece_usd": 2 + index,
+                "stock_boxes": 5 if index == 1 else 0,
+                "color": "ivory" if index == 1 else "white",
+                "length_mm": 100 + index * 10,
+            },
+            headers=headers,
+        )
+        assert variant.status_code == 201, variant.text
+
+    first = await client.get(
+        "/products/search",
+        params={
+            "category_ids": category_id,
+            "q": "filter-sku",
+            "page": 1,
+            "page_size": 2,
+            "sort": "name",
+        },
+    )
+    assert first.status_code == 200, first.text
+    body = first.json()
+    assert body["total"] == 3
+    assert body["page"] == 1
+    assert body["page_size"] == 2
+    assert body["pages"] == 2
+    assert body["has_next"] is True
+    assert body["has_previous"] is False
+    assert [item["id"] for item in body["items"]] == product_ids[:2]
+
+    second = await client.get(
+        "/products/search",
+        params={"category_ids": category_id, "page": 2, "page_size": 2, "sort": "name"},
+    )
+    assert second.status_code == 200, second.text
+    assert [item["id"] for item in second.json()["items"]] == product_ids[2:]
+    assert second.json()["has_previous"] is True
+    assert second.json()["has_next"] is False
+
+    in_stock = await client.get(
+        "/products/search",
+        params={"category_ids": category_id, "in_stock": True},
+    )
+    assert in_stock.status_code == 200, in_stock.text
+    assert [item["slug"] for item in in_stock.json()["items"]] == ["searchable-1"]
+
+    variant_filtered = await client.get(
+        "/products/search",
+        params={
+            "category_ids": category_id,
+            "colors": "ivory",
+            "price_min": 200,
+            "price_max": 202,
+            "length_min": 110,
+            "length_max": 110,
+            "currency": "RUB",
+        },
+    )
+    assert variant_filtered.status_code == 200, variant_filtered.text
+    assert variant_filtered.json()["total"] == 1
+    assert [item["slug"] for item in variant_filtered.json()["items"]] == [
+        "searchable-1"
+    ]
+
+    colors = await client.get("/products/colors")
+    assert colors.status_code == 200, colors.text
+    assert colors.json() == ["ivory", "white"]
+
+
+async def test_product_search_rejects_invalid_pagination(client):
+    response = await client.get("/products/search", params={"page": 0, "page_size": 201})
+    assert response.status_code == 422
+
+
 async def test_product_slug_lookup_returns_nested_relations(
     client, admin_token, auth_headers
 ):

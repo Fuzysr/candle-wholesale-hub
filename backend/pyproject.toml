@@ -54,4 +54,6 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "W"]
-ignore = ["E501"]
+# FastAPI's dependency injection intentionally calls Depends/File in function
+# defaults; Ruff's generic B008 rule does not understand this framework idiom.
+ignore = ["E501", "B008"]

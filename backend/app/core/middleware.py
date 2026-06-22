@@ -16,7 +16,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-
 # Headers that are unconditional — always safe and useful regardless of
 # environment (dev, test, prod).
 _UNCONDITIONAL_HEADERS: dict[str, str] = {

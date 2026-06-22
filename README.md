@@ -43,7 +43,7 @@ Prerequisites: **Python 3.12+**, **Node 18+**, a running **MySQL 8**.
    ```bash
    cp .env.example .env                       # frontend points to http://localhost:8000
    npm install
-   npm run dev                                # http://localhost:5173
+   npm run dev                                # http://localhost:8080
    ```
 
 The bootstrap script prints the generated admin password on stdout (or uses
@@ -53,13 +53,13 @@ The bootstrap script prints the generated admin password on stdout (or uses
 
 ### Frontend → Backend
 
-- Auth: `POST /auth/register` / `POST /auth/login` return a JWT access + refresh
-  pair. The access token is attached to every request as `Authorization: Bearer
-  ...`. On a 401 the axios interceptor in `src/lib/api/client.ts` silently
-  retries once after hitting `POST /auth/refresh`.
-- Tokens live in `localStorage` (`cwh:access` / `cwh:refresh`). The
-  `tokenStore` helper dispatches a `cwh:auth-changed` event so the `useAuth`
-  hook can invalidate its react-query cache across tabs.
+- Auth: `POST /auth/register` / `POST /auth/login` set short-lived access and
+  rotating refresh JWTs as `HttpOnly` cookies; JWT values are never exposed to
+  browser JavaScript. On a 401 the axios interceptor silently refreshes once.
+- Cookie-auth mutations use a double-submit CSRF cookie/header. Axios sends
+  credentials only to the configured API origin, while `BroadcastChannel`
+  synchronizes login/logout state across tabs. Bearer auth remains supported
+  for non-browser API clients.
 - Every page fetches data via react-query + the typed endpoint modules:
   `authApi`, `catalogApi`, `ordersApi`, `stockApi`, `profileApi`, `companyApi`,
   `uploadsApi`.
@@ -68,7 +68,7 @@ The bootstrap script prints the generated admin password on stdout (or uses
 
 - Single `users` table replaces Supabase `auth.users` + `profiles` + `user_roles`.
 - Order numbers (`CW-xxxxx`) are handed out application-side from the
-  `order_number_counters` table (see `orders._next_order_number`).
+  `order_number_counters` table (see `app.services.orders.repository`).
 - Admin uploads go through `POST /admin/uploads/{product-images|company-assets}`;
   files are saved under `backend/storage/` and served as static files at
   `/uploads/...`. Payment receipts are private — served only via a short-lived
@@ -84,8 +84,10 @@ The bootstrap script prints the generated admin password on stdout (or uses
 | Run backend migrations        | `alembic upgrade head`                         |
 | Create admin + seed demo data | `python -m scripts.bootstrap_admin`            |
 | Backend tests                 | `pytest -q`                                    |
-| Frontend dev server           | `npm run dev` (from repo root)                 |
-| Frontend type check           | `npx tsc --noEmit`                            |
+| Full local quality gate       | `npm run check` (running API + Playwright)     |
+| Fast local quality gate       | `npm run check:fast` (SQLite, without E2E)     |
+| Frontend dev server           | `npm run dev` (from repo root, port 8080)      |
+| Frontend type check           | `npm run typecheck`                            |
 | Frontend unit tests           | `npm test`                                     |
 
 ## Environment variables
@@ -107,3 +109,13 @@ storage paths, webhook secret, CORS origins, and bootstrap admin email/password.
 (nginx / Caddy) + TLS; статика и загрузки (`backend/storage/`) отдаются nginx
 или самим приложением. Пошагово, с nginx-конфигом, обновлениями и откатами — в
 **[`docs/RUNBOOK.md` → «Продакшен»](docs/RUNBOOK.md#продакшен)**.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main`:
+
+- frontend: clean install, ESLint, TypeScript, Vitest, production build;
+- backend: Ruff and the complete pytest suite against MySQL 8.4.
+
+The same checks are available locally through `npm run check:fast` or the
+full `npm run check`. Do not merge a release while either CI job is red.

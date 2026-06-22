@@ -1,12 +1,13 @@
 /**
  * Axios instance with request + response interceptors:
  *
- * - request: attach `Bearer <access>` if a token is present
+ * - request: send HttpOnly auth cookies and the readable CSRF token
  * - response: on 401 to any non-auth endpoint, try to refresh once; if that
  *   fails, clear tokens and let the UI redirect to /auth
  *
- * Concurrent 401s share the same in-flight refresh promise so we never ping
- * `/auth/refresh` more than once at a time.
+ * Concurrent 401s in one tab share the same in-flight refresh promise. A
+ * losing tab probes `/auth/me` after refresh failure: cookies rotated by the
+ * winning tab are shared by the browser even though they are HttpOnly.
  */
 import axios, {
   AxiosError,
@@ -16,10 +17,19 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 
-import { tokenStore } from "./token-store";
-import type { AccessToken } from "./types";
+import { notifyAuthChanged } from "./auth-session";
 
-type RefreshOut = { access: string; refresh: string; token_type: string };
+type RefreshOut = { ok: true };
+const CSRF_COOKIE = "cwh_csrf";
+const CSRF_HEADER = "X-CSRF-Token";
+
+const getCsrfToken = (): string | null => {
+  const encoded = document.cookie
+    .split("; ")
+    .find((part) => part.startsWith(`${CSRF_COOKIE}=`))
+    ?.slice(CSRF_COOKIE.length + 1);
+  return encoded ? decodeURIComponent(encoded) : null;
+};
 
 const BASE_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
@@ -27,39 +37,47 @@ const BASE_URL =
 
 export const api = axios.create({
   baseURL: BASE_URL,
-  // We deliberately don't send cookies — auth is Bearer token in a header.
-  withCredentials: false,
+  withCredentials: true,
 });
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
 api.interceptors.request.use((config) => {
-  const token = tokenStore.getAccess();
-  if (token) {
+  const csrf = getCsrfToken();
+  if (csrf) {
     const headers =
       config.headers instanceof AxiosHeaders ? config.headers : new AxiosHeaders(config.headers);
-    headers.set("Authorization", `Bearer ${token}`);
+    headers.set(CSRF_HEADER, decodeURIComponent(csrf));
     config.headers = headers;
   }
   return config;
 });
 
-let refreshPromise: Promise<string | null> | null = null;
+let refreshPromise: Promise<boolean> | null = null;
 
-const refreshAccessToken = async (): Promise<string | null> => {
-  const refresh = tokenStore.getRefresh();
-  if (!refresh) return null;
+const refreshAccessToken = async (): Promise<boolean> => {
   try {
-    const { data } = await axios.post<RefreshOut>(
+    const csrf = getCsrfToken();
+    await axios.post<RefreshOut>(
       `${BASE_URL}/auth/refresh`,
-      { refresh },
-      { withCredentials: false },
+      {},
+      {
+        withCredentials: true,
+        headers: csrf ? { [CSRF_HEADER]: csrf } : undefined,
+      },
     );
-    tokenStore.set(data.access, data.refresh);
-    return data.access;
+    notifyAuthChanged(true);
+    return true;
   } catch {
-    tokenStore.clear();
-    return null;
+    // Another tab may have completed rotation first. HttpOnly cookies are
+    // invisible to JS, so verify the shared access cookie with a clean probe.
+    try {
+      await axios.get(`${BASE_URL}/auth/me`, { withCredentials: true });
+      return true;
+    } catch {
+      notifyAuthChanged(false);
+      return false;
+    }
   }
 };
 
@@ -72,7 +90,8 @@ const shouldAttemptRefresh = (config: RetriableConfig | undefined) => {
   if (url.includes("/auth/register")) return false;
   if (url.includes("/auth/refresh")) return false;
   if (url.includes("/auth/password/")) return false;
-  return !!tokenStore.getRefresh();
+  if (url.includes("/auth/logout")) return false;
+  return true;
 };
 
 api.interceptors.response.use(
@@ -83,20 +102,14 @@ api.interceptors.response.use(
 
     if (status === 401 && shouldAttemptRefresh(original)) {
       if (!refreshPromise) refreshPromise = refreshAccessToken();
-      let newToken: string | null = null;
+      let refreshed = false;
       try {
-        newToken = await refreshPromise;
+        refreshed = await refreshPromise;
       } finally {
         refreshPromise = null;
       }
-      if (newToken && original) {
+      if (refreshed && original) {
         original._retry = true;
-        const headers =
-          original.headers instanceof AxiosHeaders
-            ? original.headers
-            : new AxiosHeaders(original.headers);
-        headers.set("Authorization", `Bearer ${newToken}`);
-        original.headers = headers;
         return api.request(original);
       }
     }

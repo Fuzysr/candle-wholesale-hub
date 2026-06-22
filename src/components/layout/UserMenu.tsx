@@ -127,7 +127,7 @@ const UserMenu = ({ triggerClassName, alwaysVisible = false }: UserMenuProps) =>
         sideOffset={10}
         className={cn(
           "w-72 overflow-hidden rounded-xl border-border/70 p-0 shadow-lg",
-          "data-[state=open]:duration-[220ms] data-[state=closed]:duration-150",
+          "data-[state=open]:[transition-duration:220ms] data-[state=closed]:duration-150",
         )}
       >
         {/* Header card with avatar */}

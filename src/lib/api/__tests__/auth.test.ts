@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { tokenStore } from "../token-store";
 
 // Mock the http module
 vi.mock("../client", () => ({
@@ -15,17 +14,13 @@ import { authApi } from "../auth";
 import { http } from "../client";
 
 beforeEach(() => {
-  localStorage.clear();
   vi.clearAllMocks();
 });
 
 describe("authApi", () => {
   describe("login", () => {
-    it("persists tokens on successful login", async () => {
+    it("returns the user without exposing JWT values", async () => {
       const mockResponse = {
-        access: "test-access",
-        refresh: "test-refresh",
-        token_type: "bearer",
         user: { id: "1", email: "test@test.com" },
       };
       vi.mocked(http.post).mockResolvedValueOnce(mockResponse);
@@ -33,17 +28,14 @@ describe("authApi", () => {
       const result = await authApi.login({ email: "test@test.com", password: "Pw123456" });
 
       expect(result).toEqual(mockResponse);
-      expect(tokenStore.getAccess()).toBe("test-access");
-      expect(tokenStore.getRefresh()).toBe("test-refresh");
+      expect(result).not.toHaveProperty("access");
+      expect(result).not.toHaveProperty("refresh");
     });
   });
 
   describe("register", () => {
-    it("persists tokens on successful registration", async () => {
+    it("returns the new user without exposing JWT values", async () => {
       const mockResponse = {
-        access: "reg-access",
-        refresh: "reg-refresh",
-        token_type: "bearer",
         user: { id: "2", email: "new@test.com" },
       };
       vi.mocked(http.post).mockResolvedValueOnce(mockResponse);
@@ -51,36 +43,20 @@ describe("authApi", () => {
       const result = await authApi.register({ email: "new@test.com", password: "Pw123456" });
 
       expect(result).toEqual(mockResponse);
-      expect(tokenStore.getAccess()).toBe("reg-access");
-      expect(tokenStore.getRefresh()).toBe("reg-refresh");
+      expect(result).not.toHaveProperty("access");
+      expect(result).not.toHaveProperty("refresh");
     });
   });
 
-  describe("logout (BUG-2 fix)", () => {
-    it("clears localStorage immediately", () => {
-      tokenStore.set("access-tok", "refresh-tok");
-      authApi.logout();
-      expect(tokenStore.getAccess()).toBeNull();
-      expect(tokenStore.getRefresh()).toBeNull();
+  describe("logout", () => {
+    it("asks the backend to revoke its HttpOnly refresh cookie", async () => {
+      await authApi.logout();
+      expect(http.post).toHaveBeenCalledWith("/auth/logout", {});
     });
 
-    it("calls POST /auth/logout with the refresh token", () => {
-      tokenStore.set("access-tok", "refresh-tok");
-      authApi.logout();
-      expect(http.post).toHaveBeenCalledWith("/auth/logout", { refresh: "refresh-tok" });
-    });
-
-    it("does not call backend when no refresh token exists", () => {
-      tokenStore.setAccessOnly("access-only");
-      authApi.logout();
-      expect(http.post).not.toHaveBeenCalled();
-    });
-
-    it("does not throw when backend revocation fails", () => {
-      tokenStore.set("access-tok", "refresh-tok");
+    it("propagates backend failures after notifying auth state", async () => {
       vi.mocked(http.post).mockRejectedValueOnce(new Error("Network error"));
-      // Should not throw — fire-and-forget
-      expect(() => authApi.logout()).not.toThrow();
+      await expect(authApi.logout()).rejects.toThrow("Network error");
     });
   });
 
