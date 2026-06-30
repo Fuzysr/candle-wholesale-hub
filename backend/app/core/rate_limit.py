@@ -21,6 +21,7 @@ accordingly.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from ipaddress import ip_address
 
 from fastapi import Request
 from slowapi import Limiter
@@ -38,15 +39,23 @@ def _client_key(request: Request) -> str:
     deploy would let an attacker rotate the «source IP» trivially, so
     operators MUST terminate / strip XFF at the edge in production.
     """
+    direct_peer = get_remote_address(request)
+    try:
+        peer_is_trusted = ip_address(direct_peer) in {
+            ip_address(value) for value in settings.trusted_proxy_ips
+        }
+    except ValueError:
+        peer_is_trusted = False
+
     xff = request.headers.get("x-forwarded-for") or ""
-    if xff:
+    if peer_is_trusted and xff:
         # XFF is a comma-separated list, leftmost being the original
         # client. Trim whitespace; ignore empty entries from misconfigured
         # proxies that just append commas.
         first = xff.split(",", 1)[0].strip()
         if first:
             return first
-    return get_remote_address(request)
+    return direct_peer
 
 
 # Defaults: NO limit applied unless the route explicitly opts in via a
@@ -64,6 +73,7 @@ limiter = Limiter(
     enabled=settings.rate_limit_enabled,
     headers_enabled=False,
     default_limits=[],
+    storage_uri=settings.rate_limit_storage_uri,
 )
 
 

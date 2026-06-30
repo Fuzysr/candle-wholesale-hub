@@ -30,6 +30,13 @@ from app.core.auth_cookies import (
 from app.core.config import settings
 from app.core.email import send_email
 from app.core.email_templates import EmailSender, render_password_reset_email
+from app.core.mfa import (
+    decrypt_secret,
+    encrypt_secret,
+    generate_secret,
+    provisioning_uri,
+    verify_code,
+)
 from app.core.rate_limit import (
     LOGIN_LIMIT,
     PASSWORD_RESET_REQUEST_LIMIT,
@@ -55,6 +62,9 @@ from app.schemas.auth import (
     LoginIn,
     LoginOut,
     LogoutIn,
+    MfaCodeIn,
+    MfaSetupOut,
+    MfaStatusOut,
     PasswordResetConfirmIn,
     PasswordResetRequestIn,
     PasswordResetRequestOut,
@@ -305,6 +315,18 @@ async def login(
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="user disabled")
 
+    if user.mfa_enabled:
+        if not user.mfa_secret_encrypted or not payload.mfa_code:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="mfa_required",
+            )
+        if not verify_code(decrypt_secret(user.mfa_secret_encrypted), payload.mfa_code):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="invalid_mfa_code",
+            )
+
     # Opportunistic rehash when argon2 parameters are upgraded.
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(payload.password)
@@ -312,6 +334,58 @@ async def login(
     out = await _issue_login(session, user, request, response)
     await session.commit()
     return out
+
+
+@router.get("/mfa/status", response_model=MfaStatusOut)
+async def mfa_status(user: User = Depends(get_current_user)) -> MfaStatusOut:
+    return MfaStatusOut(enabled=user.mfa_enabled)
+
+
+@router.post("/mfa/setup", response_model=MfaSetupOut)
+async def mfa_setup(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(db_session),
+) -> MfaSetupOut:
+    if user.mfa_enabled:
+        raise HTTPException(status_code=409, detail="mfa_already_enabled")
+    secret = generate_secret()
+    user.mfa_secret_encrypted = encrypt_secret(secret)
+    await session.commit()
+    return MfaSetupOut(
+        secret=secret,
+        provisioning_uri=provisioning_uri(secret, user.email),
+    )
+
+
+@router.post("/mfa/enable", response_model=MfaStatusOut)
+async def mfa_enable(
+    payload: MfaCodeIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(db_session),
+) -> MfaStatusOut:
+    if not user.mfa_secret_encrypted:
+        raise HTTPException(status_code=409, detail="mfa_setup_required")
+    if not verify_code(decrypt_secret(user.mfa_secret_encrypted), payload.code):
+        raise HTTPException(status_code=400, detail="invalid_mfa_code")
+    user.mfa_enabled = True
+    await session.commit()
+    return MfaStatusOut(enabled=True)
+
+
+@router.post("/mfa/disable", response_model=MfaStatusOut)
+async def mfa_disable(
+    payload: MfaCodeIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(db_session),
+) -> MfaStatusOut:
+    if not user.mfa_enabled or not user.mfa_secret_encrypted:
+        raise HTTPException(status_code=409, detail="mfa_not_enabled")
+    if not verify_code(decrypt_secret(user.mfa_secret_encrypted), payload.code):
+        raise HTTPException(status_code=400, detail="invalid_mfa_code")
+    user.mfa_enabled = False
+    user.mfa_secret_encrypted = None
+    await session.commit()
+    return MfaStatusOut(enabled=False)
 
 
 @router.post("/refresh", response_model=RefreshOut)

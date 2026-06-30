@@ -31,6 +31,7 @@ const Auth = () => {
       : "register";
   const [mode, setMode] = useState<Mode>(initialMode);
   const [loading, setLoading] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
 
   const [form, setForm] = useState({
     email: "",
@@ -38,6 +39,7 @@ const Auth = () => {
     company_name: "",
     contact_name: "",
     phone: "",
+    mfa_code: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -72,13 +74,23 @@ const Auth = () => {
         toast.success("Аккаунт создан");
         navigate(next);
       } else {
-        await authApi.login({ email: form.email, password: form.password });
+        await authApi.login({
+          email: form.email,
+          password: form.password,
+          mfa_code: mfaRequired ? form.mfa_code : undefined,
+        });
         await queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY });
         toast.success("Добро пожаловать");
         navigate(next);
       }
     } catch (err) {
-      toast.error(apiErrorMessage(err, "Не удалось выполнить запрос"));
+      const message = apiErrorMessage(err, "Не удалось выполнить запрос");
+      if (message === "mfa_required" || message === "invalid_mfa_code") {
+        setMfaRequired(true);
+        toast.error(message === "mfa_required" ? "Введите код из приложения-аутентификатора" : "Неверный одноразовый код");
+      } else {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -124,6 +136,19 @@ const Auth = () => {
                 <Field label="Пароль *" type="password" autoComplete="new-password" required minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
                 <PasswordStrength password={form.password} show={mode === "register"} />
               </>
+            )}
+            {mode === "login" && mfaRequired && (
+              <Field
+                label="Код двухфакторной аутентификации *"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                minLength={6}
+                maxLength={6}
+                required
+                value={form.mfa_code}
+                onChange={(e) => setForm({ ...form, mfa_code: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+              />
             )}
             <Button type="button" size="lg" className="w-full" disabled={loading} onClick={handleSubmit}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === "register" ? "Создать аккаунт" : mode === "login" ? "Войти" : "Отправить ссылку"}

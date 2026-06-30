@@ -103,7 +103,13 @@ async def test_refresh_issues_new_access(client):
     )
     refresh_token = register.cookies.get("cwh_refresh")
     assert refresh_token
-    resp = await client.post("/auth/refresh", json={"refresh": refresh_token})
+    csrf = client.cookies.get("cwh_csrf")
+    assert csrf
+    resp = await client.post(
+        "/auth/refresh",
+        json={"refresh": refresh_token},
+        headers={"X-CSRF-Token": csrf},
+    )
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
     assert resp.cookies.get("cwh_access")

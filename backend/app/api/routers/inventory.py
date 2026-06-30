@@ -4,14 +4,16 @@ Authentication is a shared secret in the `x-webhook-secret` header — this
 mirrors the Supabase edge function `inventory-webhook`.
 """
 import hmac
+import time
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import db_session
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.models.catalog import ProductVariant
 from app.models.enums import StockMovementType
 from app.models.stock import StockMovement
@@ -32,7 +34,10 @@ _WEAK_WEBHOOK_SECRETS = frozenset({
 
 
 async def _verify_webhook_secret(
+    request: Request,
     x_webhook_secret: str | None = Header(default=None, alias="x-webhook-secret"),
+    x_webhook_timestamp: str | None = Header(default=None, alias="x-webhook-timestamp"),
+    x_webhook_signature: str | None = Header(default=None, alias="x-webhook-signature"),
 ) -> None:
     expected = settings.inventory_webhook_secret or ""
     presented = x_webhook_secret or ""
@@ -47,7 +52,30 @@ async def _verify_webhook_secret(
     # `hmac.compare_digest` is constant-time over the length of the
     # smaller string, which is what we want for this comparison —
     # `==` would short-circuit on the first mismatched byte.
-    if not hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8")):
+    signed = bool(x_webhook_timestamp and x_webhook_signature)
+    if signed:
+        try:
+            timestamp = int(x_webhook_timestamp or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=401, detail="unauthorized") from exc
+        if abs(int(time.time()) - timestamp) > 300:
+            raise HTTPException(status_code=401, detail="unauthorized")
+        body = await request.body()
+        expected_signature = "sha256=" + hmac.new(
+            expected.encode(),
+            (x_webhook_timestamp + ".").encode() + body,
+            "sha256",
+        ).hexdigest()
+        if not hmac.compare_digest(x_webhook_signature or "", expected_signature):
+            raise HTTPException(status_code=401, detail="unauthorized")
+        return
+
+    # Legacy header remains available in development/test for existing local
+    # integrations. Production requires a timestamped body signature so a
+    # captured request cannot be replayed indefinitely.
+    if settings.app_env == "production" or not hmac.compare_digest(
+        presented.encode("utf-8"), expected.encode("utf-8")
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized"
         )
@@ -58,7 +86,9 @@ async def _verify_webhook_secret(
     response_model=InventoryWebhookOut,
     dependencies=[Depends(_verify_webhook_secret)],
 )
+@limiter.limit("30/minute")
 async def inventory_webhook(
+    request: Request,  # noqa: ARG001 -- slowapi client key
     payload: InventoryWebhookIn,
     session: AsyncSession = Depends(db_session),
 ) -> InventoryWebhookOut:

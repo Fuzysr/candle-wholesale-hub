@@ -22,6 +22,8 @@ export default {
     extend: {
       fontFamily: {
         sans: ["DM Sans", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["Georgia", "Cambria", "Times New Roman", "serif"],
+        brand: ["Bodoni Moda", "Didot", "Bodoni MT", "Times New Roman", "serif"],
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {

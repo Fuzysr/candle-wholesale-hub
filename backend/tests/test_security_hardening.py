@@ -40,6 +40,12 @@ def _build_settings(**overrides):
         "jwt_secret": "x" * 64,
         "inventory_webhook_secret": "y" * 64,
         "cors_origins": ["https://shop.example.com"],
+        "trusted_hosts": ["api.example.com"],
+        "rate_limit_storage_uri": "redis://localhost:6379/1",
+        "public_upload_url_base": "https://api.example.com/uploads",
+        "backend_base_url": "https://api.example.com",
+        "web_app_url": "https://shop.example.com",
+        "mfa_encryption_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "bootstrap_admin_email": "",
         "bootstrap_admin_password": "",
     }
@@ -922,17 +928,18 @@ async def test_patch_rejected_transition_does_not_release_reservation(
     assert variant.reserved_boxes == reserved_after_ship
 
 
-def test_security_headers_middleware_emits_hsts_in_production():
+@pytest.mark.asyncio
+async def test_security_headers_middleware_emits_hsts_in_production():
     """Direct, env-independent unit test of the middleware itself: when
     constructed with `enable_hsts=True` it stamps the HSTS header.
 
     We exercise the middleware via a tiny throwaway Starlette app so the
     test doesn't depend on global FastAPI app state.
     """
+    from httpx import ASGITransport, AsyncClient
     from starlette.applications import Starlette
     from starlette.responses import PlainTextResponse
     from starlette.routing import Route
-    from starlette.testclient import TestClient
 
     from app.core.middleware import SecurityHeadersMiddleware
 
@@ -942,8 +949,11 @@ def test_security_headers_middleware_emits_hsts_in_production():
     app = Starlette(routes=[Route("/", _handler)])
     app.add_middleware(SecurityHeadersMiddleware, enable_hsts=True)
 
-    with TestClient(app) as test_client:
-        resp = test_client.get("/")
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as test_client:
+        resp = await test_client.get("/")
 
     assert resp.headers["strict-transport-security"].startswith(
         "max-age=31536000"

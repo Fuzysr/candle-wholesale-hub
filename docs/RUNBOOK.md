@@ -383,7 +383,9 @@ alembic upgrade head
 python -m scripts.bootstrap_admin
 ```
 
-Запусти uvicorn под systemd (`/etc/systemd/system/candles.service`):
+Запусти uvicorn под systemd (`/etc/systemd/system/candles.service`).
+Актуальный hardened-шаблон находится в
+[`deploy/systemd/candwax.service`](../deploy/systemd/candwax.service):
 
 ```ini
 [Unit]
@@ -421,7 +423,10 @@ VITE_API_URL=https://shop.example.com npm run build
 
 ### 5. Reverse proxy + TLS
 
-Пример nginx (`/etc/nginx/sites-available/candles`):
+Пример nginx (`/etc/nginx/sites-available/candles`). Актуальный
+production-шаблон находится в
+[`deploy/nginx/candwax.conf.example`](../deploy/nginx/candwax.conf.example);
+фрагмент ниже оставлен как сокращённая схема:
 
 ```nginx
 server {
@@ -452,16 +457,19 @@ server {
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
-        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-For   $remote_addr;
         proxy_set_header   X-Forwarded-Proto $scheme;
     }
 
-    # Публичные загрузки можно отдавать прямо с диска (быстрее, чем через uvicorn)
-    location /uploads/ {
-        alias /opt/candles/backend/storage/;
-        # ВНИМАНИЕ: отдавай только публичные категории. Приватные чеки лежат в
-        # storage/payment-receipts — закрой их, чтобы они не утекли статикой:
-        location /uploads/payment-receipts/ { deny all; return 404; }
+    # Отдавай только явно перечисленные публичные категории.
+    location /uploads/product-images/ {
+        alias /var/lib/candwax/storage/product-images/;
+    }
+    location /uploads/company-assets/ {
+        alias /var/lib/candwax/storage/company-assets/;
+    }
+    location /uploads/payment-receipts/ {
+        return 404;
     }
 }
 ```

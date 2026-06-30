@@ -1,318 +1,106 @@
 import { Link } from "react-router-dom";
-
-import { ArrowRight, Package } from "lucide-react";
-
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowRight, Check, Clock3, MapPin, PackageCheck, Percent } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-import Reveal from "@/components/ui/reveal";
-
-import CountUp from "@/components/ui/count-up";
-
-import { cn } from "@/lib/utils";
-
+import { useIsMobile } from "@/hooks/use-mobile";
 import heroImage from "@/assets/hero-candles.jpg";
 
-
+const facts = ["Заказ от 1 коробки", "Оптовая цена сразу", "Остатки онлайн"];
+const terms = [
+  { icon: PackageCheck, value: "1 коробка", label: "минимальный заказ" },
+  { icon: Percent, value: "до 15%", label: "скидка от объёма" },
+  { icon: Clock3, value: "1–2 дня", label: "срок отгрузки" },
+];
 
 const Hero = () => {
+  const reduceMotion = useReducedMotion();
+  const isMobile = useIsMobile();
+  const connection = (
+    navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }
+  ).connection;
+  const constrainedConnection =
+    connection?.saveData === true ||
+    connection?.effectiveType === "slow-2g" ||
+    connection?.effectiveType === "2g";
+  const showVideo = !reduceMotion && !isMobile && !constrainedConnection;
+  const enter = (delay = 0) => ({
+    initial: reduceMotion ? false : { opacity: 0, y: 22 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] as const },
+  });
 
   return (
-
-    <section className="border-b border-border">
-
-      <div className="container grid items-center gap-8 py-10 sm:gap-10 md:py-20 lg:grid-cols-2 lg:gap-16">
-
-        <div className="animate-fade-in">
-
-          {/* Badge */}
-
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3.5 py-1.5 text-sm font-medium text-muted-foreground">
-
-            <Package className="h-3.5 w-3.5 text-primary" strokeWidth={2} />
-
-            Оптовые поставки свечей
-
-          </div>
-
-
-
-          <h1 className="font-bold leading-[1.05] tracking-tight text-[clamp(2rem,4.5vw,3.25rem)]">
-
-            Свечи оптом{" "}
-
-            <br className="sm:hidden" />
-
-            <span className="text-primary">для&nbsp;бизнеса</span>
-
-          </h1>
-
-          <p className="mt-4 max-w-lg text-[clamp(0.875rem,1.5vw,1.125rem)] text-muted-foreground sm:mt-5">
-
-            Надежный поставщик свечей для вашего бизнеса. Прозрачная система заявок и всегда актуальное наличие на складе. Мы ценим ваше доверие и стабильность поставок, поэтому выстраиваем прозрачные процессы и работаем без ошибок.
-
-          </p>
-
-
-
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-
-            <Button asChild size="lg" variant="hero" className="gap-2 group">
-
-              <Link to="/catalog">
-
-                Перейти в каталог
-
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-
-              </Link>
-
-            </Button>
-
-          </div>
-
-
-
-          {/* Mini KPI strip with staggered reveal, count-up & per-cell hover */}
-
-          <dl className="mt-8 grid grid-cols-3 gap-1 border-t border-border pt-5 max-w-md sm:mt-10 sm:gap-2 sm:pt-6">
-
-            <Reveal delay={0} y={18}>
-
-              <div className="group relative cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
-
-                <span
-
-                  aria-hidden
-
-                  className="pointer-events-none absolute left-2 right-2 top-0 h-px origin-left scale-x-0 bg-primary/70 transition-transform duration-500 ease-out group-hover:scale-x-100"
-
-                />
-
-                <dt className="text-xs uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
-
-                  Минимум
-
-                </dt>
-
-                <dd className="mt-1 price text-base transition-colors group-hover:text-primary sm:text-xl">
-
-                  <CountUp to={1} duration={900} /> коробка
-
-                </dd>
-
-              </div>
-
-            </Reveal>
-
-            <Reveal delay={180} y={18}>
-
-              <div className="group relative cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
-
-                <span
-
-                  aria-hidden
-
-                  className="pointer-events-none absolute left-2 right-2 top-0 h-px origin-left scale-x-0 bg-primary/70 transition-transform duration-500 ease-out group-hover:scale-x-100"
-
-                />
-
-                <dt className="text-xs uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
-
-                  Скидка
-
-                </dt>
-
-                <dd className="mt-1 price text-base transition-colors group-hover:text-primary sm:text-xl">
-
-                  до&nbsp;<CountUp to={15} duration={1400} />%
-
-                </dd>
-
-              </div>
-
-            </Reveal>
-
-            <Reveal delay={360} y={18}>
-
-              <div className="group relative cursor-default rounded-md px-2 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-accent/60">
-
-                <span
-
-                  aria-hidden
-
-                  className="pointer-events-none absolute left-2 right-2 top-0 h-px origin-left scale-x-0 bg-primary/70 transition-transform duration-500 ease-out group-hover:scale-x-100"
-
-                />
-
-                <dt className="text-xs uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-foreground">
-
-                  Отгрузка
-
-                </dt>
-
-                <dd className="mt-1 price text-base transition-colors group-hover:text-primary sm:text-xl">
-
-                  1–2 дня
-
-                </dd>
-
-              </div>
-
-            </Reveal>
-
-          </dl>
-
-        </div>
-
-
-
-        {/*
-
-          Visual — cinematic reveal: translate + scale + blur, softer than `fade-in`.
-
-          Hidden below the lg breakpoint: on mobile the photo competes with the
-
-          dense "Почему B2B-клиенты выбирают нас" block right below it and
-
-          adds little signal — better to give the headline + CTA strip the
-
-          full viewport.
-
-        */}
-
-        <div
-
-          className="relative hidden animate-hero-in [transform-origin:50%_60%] motion-reduce:animate-none lg:block"
-
-          style={{ animationDelay: "200ms" }}
-
-        >
-
-          <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-md">
-
-            <img
-
-              src={heroImage}
-
-              alt="Ассортимент свечей для оптовых заказов: столбчатые и конусные свечи в светлых и янтарных оттенках"
-
-              className="aspect-[5/4] w-full object-cover"
-
-              loading="eager"
-
-            />
-
-          </div>
-
-
-
-          {/*
-
-            Floating spec card.
-
-            IMPORTANT: the entry animation `animate-card-in` has `animation-fill-mode: both`,
-
-            which pins `transform` on the animated element and would *override* any hover
-
-            transform per the CSS Animations spec. So we split responsibilities:
-
-              - outer <div>  → absolute position + entry animation (owns animated transform)
-
-              - inner <Link> → hover lift (owns interactive transform)
-
-          */}
-
-          <div
-
-            className="absolute -bottom-5 left-0 hidden w-56 animate-card-in motion-reduce:animate-none sm:block sm:w-64 md:-left-6"
-
-            style={{ animationDelay: "450ms" }}
-
+    <section className="relative isolate min-h-[760px] overflow-hidden bg-foreground text-white lg:min-h-[calc(100dvh-108px)]">
+      <div className="absolute inset-0 z-0 overflow-hidden">
+        {!showVideo ? (
+          <img src={heroImage} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <video
+            className="h-[calc(100%+36px)] w-full object-cover object-top"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            poster={heroImage}
+            aria-hidden="true"
           >
+            <source src="/media/hero-candle-shop-a5e9bfc1.mp4" type="video/mp4" />
+          </video>
+        )}
+      </div>
+      <div aria-hidden className="absolute inset-0 z-[1] bg-gradient-to-r from-black/90 via-black/60 to-black/20" />
+      <div aria-hidden className="absolute inset-0 z-[2] bg-gradient-to-t from-black/70 via-transparent to-black/10" />
 
-            <Link
+      <div className="container relative z-10 grid min-h-[760px] items-end gap-10 pb-12 pt-20 lg:min-h-[calc(100dvh-108px)] lg:grid-cols-[minmax(0,1fr)_340px] lg:pb-14 lg:pt-24">
+        <div className="max-w-4xl">
+          <motion.div {...enter()} className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-black/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-white/90 backdrop-blur-sm">
+            <PackageCheck className="h-4 w-4 text-primary" /> Оптовая витрина для вашего магазина
+          </motion.div>
 
-              to="/catalog?q=PIL-070-IV"
+          <motion.h1 {...enter(0.06)} className="hero-title mt-7 max-w-4xl font-display tracking-[-0.05em] text-white">
+            Свечи, которые <span className="italic text-[#efa06d]">хочется</span> поставить на полку
+          </motion.h1>
 
-              aria-label="Перейти к товару PIL-070-IV: Свеча столбчатая 7×15 см"
+          <motion.p {...enter(0.12)} className="mt-7 max-w-2xl text-base leading-relaxed text-white/75 sm:text-lg">
+            Соберите ассортимент для магазина, студии или кофейни без закупки «на склад». Начните с одной коробки — наличие и оптовая выгода видны сразу.
+          </motion.p>
 
-              className={cn(
+          <motion.div {...enter(0.18)} className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg" className="group h-14 min-w-[220px] px-8 text-base shadow-xl shadow-black/20 sm:h-16 sm:min-w-[250px] sm:text-lg">
+              <Link to="/catalog">Смотреть каталог <ArrowRight className="transition-transform group-hover:translate-x-1" /></Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="h-14 min-w-[220px] border-white/55 bg-white/95 px-8 text-base text-foreground hover:bg-white sm:h-16 sm:min-w-[250px] sm:text-lg">
+              <Link to="/wholesale-terms">Условия для бизнеса</Link>
+            </Button>
+          </motion.div>
 
-                "group relative block rounded-xl border border-border bg-surface p-4 shadow-md transition-all duration-500 ease-out",
-
-                // Pronounced lift on hover: 12px up + 3% scale + amber-tinted 2xl shadow
-
-                "hover:-translate-y-3 hover:scale-[1.03] hover:border-primary/60 hover:shadow-2xl hover:shadow-primary/30",
-
-                "focus-visible:-translate-y-3 focus-visible:scale-[1.03] focus-visible:border-primary/60 focus-visible:shadow-2xl focus-visible:shadow-primary/30",
-
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-
-                "motion-reduce:transform-none motion-reduce:transition-none",
-
-              )}
-
-            >
-
-              <div className="flex items-baseline justify-between">
-
-                <span className="text-xs font-medium text-muted-foreground transition-colors duration-300 group-hover:text-foreground">
-
-                  Артикул PIL-070-IV
-
-                </span>
-
-                <span className="rounded-sm bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-success transition-transform duration-300 group-hover:scale-110">
-
-                  в наличии
-
-                </span>
-
-              </div>
-
-              <div className="mt-2 text-sm font-medium transition-colors duration-300 group-hover:text-primary">
-
-                Свеча столбчатая 7×15 см
-
-              </div>
-
-              <div className="mt-3 flex items-baseline justify-between">
-
-                <span className="text-xs text-muted-foreground">за коробку (12 шт)</span>
-
-                <span className="price text-base transition-colors duration-300 group-hover:text-primary">
-
-                  1 920 ₽
-
-                </span>
-
-              </div>
-
-              {/* Amber underline that scales in as the card lifts */}
-
-              <span
-
-                aria-hidden
-
-                className="pointer-events-none absolute inset-x-4 bottom-1.5 h-px origin-left scale-x-0 bg-primary/60 transition-transform duration-500 ease-out group-hover:scale-x-100"
-
-              />
-
-            </Link>
-
-          </div>
-
+          <motion.ul {...enter(0.24)} className="mt-8 flex flex-col gap-3 text-sm text-white/75 sm:flex-row sm:gap-7">
+            {facts.map((fact) => (
+              <li key={fact} className="flex items-center gap-2">
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/15 text-[#efa06d]"><Check className="h-3 w-3" strokeWidth={3} /></span>
+                {fact}
+              </li>
+            ))}
+          </motion.ul>
         </div>
 
+        <motion.aside {...enter(0.2)} className="rounded-3xl border border-white/20 bg-black/30 p-5 shadow-2xl backdrop-blur-md lg:mb-1">
+          <div className="flex items-center gap-2 border-b border-white/15 pb-4 text-sm font-semibold"><MapPin className="h-4 w-4 text-[#efa06d]" />Склад и отгрузка в Москве</div>
+          <dl className="mt-2 divide-y divide-white/12">
+            {terms.map(({ icon: Icon, value, label }) => (
+              <div key={label} className="flex items-center gap-3 py-3.5">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-[#efa06d]"><Icon className="h-4 w-4" /></span>
+                <div><dt className="text-lg font-semibold text-white">{value}</dt><dd className="text-xs text-white/55">{label}</dd></div>
+              </div>
+            ))}
+          </dl>
+        </motion.aside>
       </div>
-
     </section>
-
   );
-
 };
 
-
-
 export default Hero;
-

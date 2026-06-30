@@ -4,6 +4,7 @@ from secrets import compare_digest
 import email_validator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 # `email_validator` (used by pydantic `EmailStr`) rejects any address whose
 # TLD is reserved by RFC 6762 / 2606 — `.local`, `.localhost`, `.test`,
@@ -61,21 +62,15 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="CANDWAX API",
         version="0.1.0",
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url=None if settings.app_env == "production" else "/docs",
+        redoc_url=None if settings.app_env == "production" else "/redoc",
+        openapi_url=None if settings.app_env == "production" else "/openapi.json",
     )
+
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
 
     # Credentialed cookie auth is incompatible with wildcard origins. Local
     # LAN frontends must therefore be listed explicitly in CORS_ORIGINS too.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
     @app.middleware("http")
     async def csrf_guard(request: Request, call_next):
         """Double-submit CSRF protection for browser cookie authentication.
@@ -88,7 +83,8 @@ def create_app() -> FastAPI:
             request.cookies.get(ACCESS_COOKIE) or request.cookies.get(REFRESH_COOKIE)
         )
         uses_bearer = request.headers.get("authorization", "").lower().startswith("bearer ")
-        browser_request = bool(request.headers.get("origin"))
+        origin = request.headers.get("origin")
+        fetch_site = request.headers.get("sec-fetch-site", "").lower()
         csrf_exempt_path = request.url.path in {
             "/auth/login",
             "/auth/register",
@@ -97,11 +93,12 @@ def create_app() -> FastAPI:
         }
         if (
             unsafe
-            and browser_request
             and has_auth_cookie
             and not uses_bearer
             and not csrf_exempt_path
         ):
+            if fetch_site == "cross-site" or (origin and origin not in settings.cors_origins):
+                return JSONResponse(status_code=403, content={"detail": "cross-site request blocked"})
             cookie_token = request.cookies.get(CSRF_COOKIE)
             header_token = request.headers.get(CSRF_HEADER)
             if (
@@ -118,7 +115,16 @@ def create_app() -> FastAPI:
     # Hardening headers on every response. HSTS is opt-in for production
     # only — see middleware module docstring for the «sticky pin in dev
     # browser» rationale.
-    from app.core.middleware import SecurityHeadersMiddleware
+    from app.core.middleware import (
+        RequestBodyLimitMiddleware,
+        SecurityHeadersMiddleware,
+        UnhandledExceptionMiddleware,
+    )
+
+    app.add_middleware(
+        RequestBodyLimitMiddleware,
+        max_bytes=settings.max_request_body_bytes,
+    )
 
     app.add_middleware(
         SecurityHeadersMiddleware,
@@ -160,7 +166,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:
-        return {"status": "ok", "env": settings.app_env}
+        return {"status": "ok"}
 
     app.include_router(auth.router)
     app.include_router(contact.router)
@@ -174,6 +180,19 @@ def create_app() -> FastAPI:
     app.include_router(uploads.router)
     app.include_router(users.router)
     app.include_router(email.router)
+
+    # Keep exception normalization immediately inside CORS.  If an unhandled
+    # exception escapes all the way to Starlette's ServerErrorMiddleware, the
+    # generated 500 response has no CORS headers and browsers misreport it as
+    # a network failure instead of exposing the actual HTTP response.
+    app.add_middleware(UnhandledExceptionMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Accept", "Authorization", "Content-Type", CSRF_HEADER],
+    )
 
     return app
 

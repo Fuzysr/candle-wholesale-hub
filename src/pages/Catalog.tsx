@@ -247,6 +247,11 @@ const Catalog = () => {
   );
   const search = searchInput.trim().toLowerCase();
 
+  // Tracks the last `q` value our own debounced writer pushed to the URL, so
+  // the URL→input sync below can tell our echo apart from a genuine external
+  // navigation (e.g. the header search bar, or browser back/forward).
+  const lastPushedQ = useRef(params.get("q") ?? "");
+
   // Persist filters to a separate sessionStorage key so they survive
   // clearState() and are restored on next catalog visit.
   useEffect(() => {
@@ -262,6 +267,7 @@ const Catalog = () => {
     const current = params.get("q") ?? "";
     if (trimmed === current) return;
     const t = setTimeout(() => {
+      lastPushedQ.current = trimmed;
       setParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -274,6 +280,22 @@ const Catalog = () => {
     }, 250);
     return () => clearTimeout(t);
   }, [searchInput, params, setParams]);
+
+  /*
+    Sync the URL's `q` back INTO the input on external navigations. The header
+    search bar navigates to `/catalog?q=...`; when the catalog is already
+    mounted that only changes the URL, so without this the controlled input
+    (and therefore the results) would never update. We ignore the echo of our
+    own writer above by comparing against `lastPushedQ`, and skip when already
+    in sync so we don't clobber the user mid-typing (e.g. trailing spaces).
+  */
+  useEffect(() => {
+    const urlQ = params.get("q") ?? "";
+    if (urlQ === lastPushedQ.current) return;
+    if (urlQ === searchInput.trim()) return;
+    lastPushedQ.current = urlQ;
+    setSearchInput(urlQ);
+  }, [params, searchInput]);
 
   /*
     Custom, styled "recent searches" dropdown — the native browser autofill

@@ -21,6 +21,7 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .idea
+.claude/
 .DS_Store
 *.suo
 *.ntvs*
@@ -30,10 +31,26 @@ dist-ssr
 .windsurf/
 skills-lock.json
 
+# Python/tool caches and local build metadata
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+__pycache__/
+
 # Test output
 pytest_out.txt
 test-results/
 playwright-report/
+coverage/
+htmlcov/
+*.db
+*.sqlite
+*.sqlite3
 
 # Temp / local clones
 my-clone/
+.tmp-*
+
+# Accidental root-level storage. Runtime uploads belong in backend/storage/
+# locally and in a dedicated persistent directory on production.
+/storage/

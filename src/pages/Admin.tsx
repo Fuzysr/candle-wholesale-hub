@@ -29,6 +29,7 @@ import { SettingsTab } from "@/components/admin/tabs/SettingsTab";
 import { useAdminData } from "@/components/admin/useAdminData";
 import NotFound from "@/pages/NotFound";
 import { signOut, useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 import {
   apiErrorMessage,
   catalogApi,
@@ -63,6 +64,7 @@ type Lookup = AttributeOut;
 const INVOICE_DOWNLOAD_ENABLED = false;
 
 const Admin = () => {
+  const navigate = useNavigate();
   const { user, loading } = useAuth();
   const isAdmin = !!user?.isAdmin;
   const {
@@ -99,10 +101,8 @@ const Admin = () => {
   */
   const handleSignOut = async () => {
     toast.success("Вы успешно вышли из аккаунта");
+    navigate("/");
     await signOut();
-    // Once `user` becomes null the guard below renders <NotFound />, which
-    // hides /admin from non-admins. The user can navigate away from there
-    // via the regular header — no programmatic redirect needed.
   };
 
   const [editingProduct, setEditingProduct] = useState<Partial<AdminProduct> | null>(null);
@@ -744,7 +744,7 @@ const Admin = () => {
   const approveOrder = async (o: AdminOrder) => {
     try {
       await ordersApi.adminApprove(o.id);
-      toast.success("Заявка одобрена — клиенту отправлено письмо с реквизитами");
+      toast.success("Заявка одобрена");
       reloadOrders();
     } catch (err) {
       toast.error(apiErrorMessage(err, "Не удалось одобрить заявку"));
@@ -764,7 +764,7 @@ const Admin = () => {
   const markReady = async (o: AdminOrder) => {
     try {
       await ordersApi.adminMarkReady(o.id);
-      toast.success("Заказ отмечен как готовый — клиенту отправлено уведомление");
+      toast.success("Заказ отмечен как готовый");
       reloadOrders();
     } catch (err) {
       toast.error(apiErrorMessage(err, "Не удалось отметить заказ"));
@@ -1648,8 +1648,8 @@ const Admin = () => {
                   if (ok > 0) {
                     toast.success(
                       ok === 1
-                        ? "Заявка отклонена — клиенту отправлено письмо"
-                        : `Отклонено заявок: ${ok} — клиентам отправлены письма`,
+                        ? "Заявка отклонена"
+                        : `Отклонено заявок: ${ok}`,
                     );
                   }
                   if (fail > 0) toast.error(`Не удалось отклонить: ${fail} шт.`);

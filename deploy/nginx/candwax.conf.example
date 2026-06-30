@@ -1,0 +1,102 @@
+# Replace shop.example.com and certificate paths before enabling this file.
+# Include deploy/nginx/security.conf once from nginx's http {} block so the
+# candwax_api, candwax_auth and candwax_conn shared zones exist.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name shop.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name shop.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/shop.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/shop.example.com/privkey.pem;
+
+    root /var/www/candwax;
+    index index.html;
+
+    limit_conn candwax_conn 20;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Credential-creation endpoints receive the tighter request bucket.
+    # Refresh/logout remain on the normal API bucket so ordinary sessions do
+    # not exhaust a five-requests-per-minute login allowance.
+    location = /api/auth/login {
+        limit_req zone=candwax_auth burst=5 nodelay;
+        proxy_pass http://127.0.0.1:8000/auth/login;
+        include /etc/nginx/snippets/candwax-proxy-common.conf;
+    }
+
+    location = /api/auth/register {
+        limit_req zone=candwax_auth burst=5 nodelay;
+        proxy_pass http://127.0.0.1:8000/auth/register;
+        include /etc/nginx/snippets/candwax-proxy-common.conf;
+    }
+
+    location = /api/auth/password/reset-request {
+        limit_req zone=candwax_auth burst=5 nodelay;
+        proxy_pass http://127.0.0.1:8000/auth/password/reset-request;
+        include /etc/nginx/snippets/candwax-proxy-common.conf;
+    }
+
+    location ^~ /api/auth/ {
+        limit_req zone=candwax_api burst=40 nodelay;
+        proxy_pass http://127.0.0.1:8000/auth/;
+        include /etc/nginx/snippets/candwax-proxy-common.conf;
+    }
+
+    location ^~ /api/ {
+        limit_req zone=candwax_api burst=40 nodelay;
+        proxy_pass http://127.0.0.1:8000/;
+        include /etc/nginx/snippets/candwax-proxy-common.conf;
+    }
+
+    # Expose only public storage categories. payment-receipts is deliberately
+    # absent and remains accessible solely through signed backend URLs.
+    location ^~ /uploads/product-images/ {
+        alias /var/lib/candwax/storage/product-images/;
+        add_header X-Content-Type-Options nosniff always;
+        expires 7d;
+    }
+
+    location ^~ /uploads/company-assets/ {
+        alias /var/lib/candwax/storage/company-assets/;
+        add_header X-Content-Type-Options nosniff always;
+        expires 7d;
+    }
+
+    location ^~ /uploads/payment-receipts/ {
+        return 404;
+    }
+
+    # Vite emits content-hashed assets, so they can be cached immutably.
+    location ^~ /assets/ {
+        try_files $uri =404;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header X-Content-Type-Options nosniff always;
+    }
+
+    location = /index.html {
+        try_files $uri =404;
+        add_header Cache-Control "no-store";
+        add_header X-Content-Type-Options nosniff always;
+    }
+
+    # React Router fallback. CSP permits the external fonts, catalogue images
+    # and OpenStreetMap frame currently used by the application.
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://images.unsplash.com; media-src 'self'; connect-src 'self'; frame-src https://www.openstreetmap.org; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests" always;
+    }
+}

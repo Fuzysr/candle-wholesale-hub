@@ -277,8 +277,8 @@ const UserMenu = ({ triggerClassName, alwaysVisible = false }: UserMenuProps) =>
         <div className="border-t border-border/70 bg-muted/30 p-1.5">
           <DropdownMenuItem
             onClick={async () => {
-              await signOut();
               navigate("/");
+              await signOut();
             }}
             className="group/item flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-destructive transition-colors focus:bg-destructive/10 focus:text-destructive"
           >

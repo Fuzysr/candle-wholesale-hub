@@ -47,6 +47,8 @@ class User(Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"))
     email_verified_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+    mfa_secret_encrypted: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         TZDateTime, server_default=func.now(), nullable=False

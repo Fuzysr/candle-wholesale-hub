@@ -42,6 +42,13 @@ _requires_row_locks = pytest.mark.skipif(
 )
 
 
+def _auth_post(client, path: str, *, json: dict[str, str]):
+    """Send the same double-submit CSRF header as the browser client."""
+    csrf = client.cookies.get("cwh_csrf")
+    headers = {"X-CSRF-Token": csrf} if csrf else {}
+    return client.post(path, json=json, headers=headers)
+
+
 async def _register(client, email: str = "rot@example.com") -> dict:
     resp = await client.post(
         "/auth/register",
@@ -65,14 +72,14 @@ async def test_refresh_rotates_token_old_no_longer_works(client):
     creds = await _register(client)
     old_refresh = creds["refresh"]
 
-    first = await client.post("/auth/refresh", json={"refresh": old_refresh})
+    first = await _auth_post(client, "/auth/refresh", json={"refresh": old_refresh})
     assert first.status_code == 200, first.text
     new_refresh = first.cookies.get("cwh_refresh")
     assert new_refresh, "/refresh должен вернуть новый refresh-токен"
     assert new_refresh != old_refresh, "rotation обязан выдавать новый токен"
 
     # Старый refresh теперь не валиден.
-    replay = await client.post("/auth/refresh", json={"refresh": old_refresh})
+    replay = await _auth_post(client, "/auth/refresh", json={"refresh": old_refresh})
     assert replay.status_code == 401
 
 
@@ -81,16 +88,16 @@ async def test_immediate_refresh_retry_does_not_revoke_rotated_token(client):
     creds = await _register(client, email="rotation-retry@example.com")
     old_refresh = creds["refresh"]
 
-    rotated = await client.post("/auth/refresh", json={"refresh": old_refresh})
+    rotated = await _auth_post(client, "/auth/refresh", json={"refresh": old_refresh})
     assert rotated.status_code == 200, rotated.text
 
-    retry = await client.post("/auth/refresh", json={"refresh": old_refresh})
+    retry = await _auth_post(client, "/auth/refresh", json={"refresh": old_refresh})
     assert retry.status_code == 401
     assert retry.json()["detail"] == "refresh already used"
 
     rotated_refresh = rotated.cookies.get("cwh_refresh")
     assert rotated_refresh
-    winner = await client.post("/auth/refresh", json={"refresh": rotated_refresh})
+    winner = await _auth_post(client, "/auth/refresh", json={"refresh": rotated_refresh})
     assert winner.status_code == 200, winner.text
 
 
@@ -101,8 +108,8 @@ async def test_concurrent_refresh_creates_exactly_one_child(client, session):
     old_refresh = creds["refresh"]
 
     first, second = await asyncio.gather(
-        client.post("/auth/refresh", json={"refresh": old_refresh}),
-        client.post("/auth/refresh", json={"refresh": old_refresh}),
+        _auth_post(client, "/auth/refresh", json={"refresh": old_refresh}),
+        _auth_post(client, "/auth/refresh", json={"refresh": old_refresh}),
     )
 
     assert sorted((first.status_code, second.status_code)) == [200, 401]
@@ -126,7 +133,7 @@ async def test_refresh_chain_works_repeatedly(client):
 
     seen = {current}
     for _ in range(3):
-        resp = await client.post("/auth/refresh", json={"refresh": current})
+        resp = await _auth_post(client, "/auth/refresh", json={"refresh": current})
         assert resp.status_code == 200, resp.text
         current = resp.cookies.get("cwh_refresh")
         assert current
@@ -138,7 +145,7 @@ async def test_refresh_response_includes_access_and_refresh(client):
     """После rotation в ответе есть и access, и refresh."""
     creds = await _register(client, email="pair@example.com")
 
-    resp = await client.post("/auth/refresh", json={"refresh": creds["refresh"]})
+    resp = await _auth_post(client, "/auth/refresh", json={"refresh": creds["refresh"]})
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
     assert resp.cookies.get("cwh_access")
@@ -156,7 +163,7 @@ async def test_refresh_reuse_revokes_entire_family(client, session):
     first_refresh = creds["refresh"]
 
     # Легитимный клиент рутинно делает refresh.
-    rotated = await client.post("/auth/refresh", json={"refresh": first_refresh})
+    rotated = await _auth_post(client, "/auth/refresh", json={"refresh": first_refresh})
     assert rotated.status_code == 200
     second_refresh = rotated.cookies.get("cwh_refresh")
     assert second_refresh
@@ -174,13 +181,13 @@ async def test_refresh_reuse_revokes_entire_family(client, session):
     await session.commit()
 
     # «Злоумышленник» предъявляет уже использованный токен — это reuse.
-    attacker = await client.post("/auth/refresh", json={"refresh": first_refresh})
+    attacker = await _auth_post(client, "/auth/refresh", json={"refresh": first_refresh})
     assert attacker.status_code == 401
     assert "reuse" in attacker.json()["detail"].lower()
 
     # Теперь даже легитимный second_refresh должен быть отозван:
     # семья объявлена скомпрометированной целиком.
-    legit = await client.post("/auth/refresh", json={"refresh": second_refresh})
+    legit = await _auth_post(client, "/auth/refresh", json={"refresh": second_refresh})
     assert legit.status_code == 401
 
     # Проверим инвариант на уровне БД: ни одного не-отозванного токена
@@ -201,11 +208,11 @@ async def test_logout_revokes_refresh(client):
     creds = await _register(client, email="logout@example.com")
     rt = creds["refresh"]
 
-    out = await client.post("/auth/logout", json={"refresh": rt})
+    out = await _auth_post(client, "/auth/logout", json={"refresh": rt})
     assert out.status_code == 204
 
     # Использовать после logout нельзя.
-    resp = await client.post("/auth/refresh", json={"refresh": rt})
+    resp = await _auth_post(client, "/auth/refresh", json={"refresh": rt})
     assert resp.status_code == 401
 
 
@@ -214,15 +221,15 @@ async def test_logout_is_idempotent(client):
     creds = await _register(client, email="idem@example.com")
     rt = creds["refresh"]
 
-    first = await client.post("/auth/logout", json={"refresh": rt})
-    second = await client.post("/auth/logout", json={"refresh": rt})
+    first = await _auth_post(client, "/auth/logout", json={"refresh": rt})
+    second = await _auth_post(client, "/auth/logout", json={"refresh": rt})
     assert first.status_code == 204
     assert second.status_code == 204
 
 
 async def test_logout_garbage_token_returns_204(client):
     """Logout не выдаёт оракул «знаешь ли ты валидный jti»."""
-    out = await client.post("/auth/logout", json={"refresh": "this.is.not.a.jwt"})
+    out = await _auth_post(client, "/auth/logout", json={"refresh": "this.is.not.a.jwt"})
     assert out.status_code == 204
 
 
@@ -252,11 +259,11 @@ async def test_logout_does_not_revoke_sibling_session(client, session):
     assert refresh_a != refresh_b
 
     # Logout одного устройства.
-    out = await client.post("/auth/logout", json={"refresh": refresh_a})
+    out = await _auth_post(client, "/auth/logout", json={"refresh": refresh_a})
     assert out.status_code == 204
 
     # Refresh со второго устройства всё ещё работает.
-    still = await client.post("/auth/refresh", json={"refresh": refresh_b})
+    still = await _auth_post(client, "/auth/refresh", json={"refresh": refresh_b})
     assert still.status_code == 200
 
 
@@ -270,7 +277,7 @@ async def test_unknown_jti_is_rejected(client):
     # `create_refresh_token` использует наш JWT_SECRET — подпись валидна,
     # но мы НЕ регистрируем его в БД (это «orphan» токен).
     orphan = create_refresh_token("00000000-0000-0000-0000-000000000000")
-    resp = await client.post("/auth/refresh", json={"refresh": orphan})
+    resp = await _auth_post(client, "/auth/refresh", json={"refresh": orphan})
     assert resp.status_code == 401
 
 
@@ -287,7 +294,7 @@ async def test_jti_user_mismatch_is_rejected(client, session):
     forged_payload["sub"] = "00000000-0000-0000-0000-000000000000"
     forged = jwt.encode(forged_payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
-    resp = await client.post("/auth/refresh", json={"refresh": forged})
+    resp = await _auth_post(client, "/auth/refresh", json={"refresh": forged})
     assert resp.status_code == 401
 
     # Семья при таком 401 НЕ должна быть отозвана: жертва — не она,
@@ -312,7 +319,7 @@ async def test_db_expiry_rejects_when_jwt_still_valid(client, session):
     record.expires_at = datetime.now(UTC) - timedelta(seconds=1)
     await session.commit()
 
-    resp = await client.post("/auth/refresh", json={"refresh": legit})
+    resp = await _auth_post(client, "/auth/refresh", json={"refresh": legit})
     assert resp.status_code == 401
     assert "expired" in resp.json()["detail"].lower()
 
@@ -321,7 +328,7 @@ async def test_jwt_invalid_signature_rejected_before_db(client):
     """Неверная подпись = 401, без обращения к реестру."""
     bogus = jwt.encode(
         {"sub": "x", "type": "refresh", "jti": "deadbeef" * 4, "exp": 9999999999},
-        "wrong-secret",
+        "wrong-secret-that-is-deliberately-at-least-32-bytes",
         algorithm=settings.jwt_algorithm,
     )
     resp = await client.post("/auth/refresh", json={"refresh": bogus})
@@ -386,7 +393,7 @@ async def test_rotation_chain_links_records(client, session):
         algorithms=[settings.jwt_algorithm],
     )
 
-    rotated = await client.post("/auth/refresh", json={"refresh": creds["refresh"]})
+    rotated = await _auth_post(client, "/auth/refresh", json={"refresh": creds["refresh"]})
     assert rotated.status_code == 200
     decoded_new = jwt.decode(
         rotated.cookies.get("cwh_refresh"),
@@ -425,7 +432,7 @@ async def test_disabled_user_cannot_refresh(client, session):
     user.is_active = False
     await session.commit()
 
-    resp = await client.post("/auth/refresh", json={"refresh": refresh_token})
+    resp = await _auth_post(client, "/auth/refresh", json={"refresh": refresh_token})
     assert resp.status_code == 401
 
 
@@ -478,7 +485,7 @@ async def test_password_reset_revokes_all_refresh_tokens(client, session):
 
     # Оба refresh-токена должны быть отозваны.
     for rt in (rt_a, rt_b):
-        resp = await client.post("/auth/refresh", json={"refresh": rt})
+        resp = await _auth_post(client, "/auth/refresh", json={"refresh": rt})
         assert resp.status_code == 401, "после смены пароля старые refresh-ы должны быть невалидны"
 
     # И в БД оба revoked.

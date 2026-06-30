@@ -10,11 +10,14 @@ Why a hand-rolled middleware instead of `secure-headers` / `secure`?
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
+
+logger = logging.getLogger(__name__)
 
 # Headers that are unconditional — always safe and useful regardless of
 # environment (dev, test, prod).
@@ -48,7 +51,61 @@ _UNCONDITIONAL_HEADERS: dict[str, str] = {
         "base-uri 'none'; "
         "form-action 'none'"
     ),
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "X-Permitted-Cross-Domain-Policies": "none",
 }
+
+
+class UnhandledExceptionMiddleware(BaseHTTPMiddleware):
+    """Turn unexpected application errors into a stable JSON response.
+
+    This middleware is deliberately installed immediately inside CORS.  An
+    exception that reaches Starlette's outer ``ServerErrorMiddleware`` would
+    otherwise bypass CORS completely, causing browsers to hide the real HTTP
+    500 behind a misleading ``Network Error``.
+    """
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        try:
+            return await call_next(request)
+        except Exception:
+            logger.exception(
+                "Unhandled request error: %s %s",
+                request.method,
+                request.url.path,
+            )
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "internal server error"},
+            )
+
+
+class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
+    """Reject oversized requests before parsers allocate their full body."""
+
+    def __init__(self, app, *, max_bytes: int) -> None:
+        super().__init__(app)
+        self._max_bytes = max_bytes
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length) > self._max_bytes:
+                    return JSONResponse(
+                        status_code=413,
+                        content={"detail": "request body too large"},
+                    )
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "invalid Content-Length"},
+                )
+        return await call_next(request)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -82,5 +139,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "Strict-Transport-Security",
                 "max-age=31536000; includeSubDomains",
             )
+
+        if request.url.path.startswith(("/auth", "/admin")):
+            response.headers.setdefault("Cache-Control", "no-store")
 
         return response

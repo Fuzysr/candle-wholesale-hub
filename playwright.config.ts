@@ -20,7 +20,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    command: "npm run dev -- --host 127.0.0.1 --port 8081",
     url: process.env.E2E_BASE_URL || "http://localhost:8081",
     reuseExistingServer: true,
     timeout: 30_000,

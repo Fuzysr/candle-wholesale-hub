@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useQueries, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 import {
   LayoutDashboard, FileText, User as UserIcon, Settings as SettingsIcon,
@@ -1069,6 +1069,7 @@ export const AccountProfileForm = ({ user }: { user: AppUser }) => {
 /* ───────── Settings ───────── */
 
 export const AccountSettings = () => {
+  const navigate = useNavigate();
   /*
     Fire the toast BEFORE tearing down the auth session. `signOut()` clears
     tokens synchronously, which triggers `useAuth` in this tree to flip
@@ -1078,6 +1079,7 @@ export const AccountSettings = () => {
   */
   const handleSignOut = async () => {
     toast.success("Вы успешно вышли из аккаунта");
+    navigate("/");
     await signOut();
   };
 

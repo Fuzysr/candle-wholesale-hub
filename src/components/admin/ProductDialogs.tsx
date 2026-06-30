@@ -98,10 +98,11 @@ export function ProductDialogs({
 
       {/* PRODUCT DIALOG */}
       <Dialog open={!!editingProduct} onOpenChange={(o) => { if (!o) { setEditingProduct(null); setProductGallery([]); } }}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editingProduct?.id ? "Редактировать товар" : "Новый товар"}</DialogTitle></DialogHeader>
-          {editingProduct && (
-            <div className="grid gap-4 md:grid-cols-2">
+        <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:max-h-[calc(100dvh-2rem)]">
+          <DialogHeader className="shrink-0 border-b border-border px-4 py-4 pr-12 sm:px-6"><DialogTitle>{editingProduct?.id ? "Редактировать товар" : "Новый товар"}</DialogTitle></DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+            {editingProduct && (
+            <div className="grid gap-3 md:grid-cols-2">
               <Field label="Slug *" value={editingProduct.slug ?? ""} onChange={(e) => setEditingProduct({ ...editingProduct, slug: e.target.value })} />
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Категория</span>
@@ -156,8 +157,9 @@ export function ProductDialogs({
                 Опубликован
               </label>
             </div>
-          )}
-          <DialogFooter>
+            )}
+          </div>
+          <DialogFooter className="shrink-0 gap-2 border-t border-border bg-background px-4 py-3 sm:px-6">
             <Button variant="outline" onClick={() => { setEditingProduct(null); setProductGallery([]); }}>Отмена</Button>
             <Button onClick={saveProduct}>Сохранить</Button>
           </DialogFooter>
@@ -166,10 +168,11 @@ export function ProductDialogs({
 
       {/* VARIANT DIALOG */}
       <Dialog open={!!editingVariant} onOpenChange={(o) => { if (!o) { setEditingVariant(null); setVariantDiscounts([]); setVariantImages([]); } }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>{editingVariant?.id ? "Редактировать вариацию" : "Новая вариация"}</DialogTitle></DialogHeader>
-          {editingVariant && (
-            <div className="grid gap-4 md:grid-cols-2">
+        <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:max-h-[calc(100dvh-2rem)]">
+          <DialogHeader className="shrink-0 border-b border-border px-4 py-4 pr-12 sm:px-6"><DialogTitle>{editingVariant?.id ? "Редактировать вариацию" : "Новая вариация"}</DialogTitle></DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+            {editingVariant && (
+            <div className="grid gap-3 md:grid-cols-2">
               <Field label="SKU *" value={editingVariant.sku ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, sku: e.target.value })} />
               <Field label="Внешний ID (1С/МойСклад)" value={editingVariant.external_id ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, external_id: e.target.value })} />
               <Field label="Размер" value={editingVariant.size ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, size: e.target.value })} />
@@ -334,8 +337,9 @@ export function ProductDialogs({
                 )}
               </div>
             </div>
-          )}
-          <DialogFooter>
+            )}
+          </div>
+          <DialogFooter className="shrink-0 gap-2 border-t border-border bg-background px-4 py-3 sm:px-6">
             <Button variant="outline" onClick={() => { setEditingVariant(null); setVariantDiscounts([]); setVariantImages([]); }}>Отмена</Button>
             <Button onClick={saveVariant}>Сохранить</Button>
           </DialogFooter>

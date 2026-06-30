@@ -9,7 +9,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,16 +39,14 @@ class ContactOut(BaseModel):
 
 
 class ContactMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     phone: str | None
     message: str
     is_read: bool
     created_at: str
-
-    class Config:
-        from_attributes = True
-
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
 

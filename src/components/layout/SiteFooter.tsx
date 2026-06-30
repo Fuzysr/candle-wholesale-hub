@@ -14,13 +14,13 @@ type FooterLink = { label: string; to: string };
 
 const catalogLinks: FooterLink[] = [
 
-  { label: "Ароматические свечи", to: "/catalog/jar" },
+  { label: "Ароматические свечи", to: "/catalog/aromatic" },
 
-  { label: "Декоративные свечи", to: "/catalog/shaped" },
+  { label: "Декоративные свечи", to: "/catalog/decorative" },
 
-  { label: "Столовые свечи", to: "/catalog/pillar" },
+  { label: "Столовые свечи", to: "/catalog/taper" },
 
-  { label: "Чайные свечи", to: "/catalog/tealight" },
+  { label: "Чайные свечи", to: "/catalog/tealights" },
 
 ];
 
@@ -64,7 +64,7 @@ const SiteFooter = () => {
 
   return (
 
-    <footer className="mt-24 border-t border-border bg-surface">
+    <footer className="mt-16 border-t border-border bg-surface">
 
       <div className="container grid gap-8 py-10 sm:grid-cols-2 sm:gap-10 md:py-14 lg:grid-cols-[1.6fr_1fr_1fr_1.1fr]">
 
@@ -82,21 +82,14 @@ const SiteFooter = () => {
 
           >
 
-            <span className="relative grid h-8 w-8 place-items-center overflow-hidden rounded-md bg-foreground text-background text-sm font-bold shadow-sm transition-all duration-300 ease-out group-hover:-rotate-[4deg] group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-md group-hover:shadow-primary/35">
+            <img
+              src="/brand/candwax-monogram.png"
+              alt=""
+              aria-hidden="true"
+              className="h-11 w-11 shrink-0 object-contain opacity-90 transition-transform duration-300 ease-out group-hover:scale-105 dark:invert"
+            />
 
-              <span className="relative z-10">CW</span>
-
-              <span
-
-                aria-hidden
-
-                className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-500 ease-out group-hover:translate-x-full"
-
-              />
-
-            </span>
-
-            <span className="font-semibold tracking-tight text-foreground transition-colors duration-300 group-hover:text-primary">
+            <span className="font-brand text-2xl font-medium tracking-[-0.075em] text-foreground transition-colors duration-300 group-hover:text-primary">
 
               CANDWAX
 

@@ -64,7 +64,9 @@ test.describe("Защищённые маршруты", () => {
 
     const url = page.url();
     const hasAuth = url.includes("/auth");
-    const forbidden = page.getByText(/доступ|запрещ|forbidden|войти|вход/i);
+    const forbidden = page.getByText(
+      /404|не найден|not found|доступ|запрещ|forbidden|войти|вход/i,
+    );
 
     expect(hasAuth || (await forbidden.count()) > 0).toBeTruthy();
   });

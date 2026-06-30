@@ -20,13 +20,11 @@ import ThemeToggle from "@/components/theme-toggle";
 
 const nav = [
 
-  { label: "Каталог", to: "/catalog" },
-
   { label: "Условия опта", to: "/wholesale-terms" },
 
   { label: "Галерея", to: "/gallery" },
 
-  { label: "Контакты", to: "/contacts" },
+  { label: "О компании", to: "/contacts" },
 
 ];
 
@@ -66,7 +64,7 @@ const SiteHeader = () => {
 
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/85 shadow-[0_2px_12px_-3px_rgba(0,0,0,0.12)] backdrop-blur supports-[backdrop-filter]:bg-background/70 dark:shadow-[0_2px_12px_-3px_rgba(0,0,0,0.4)]">
 
-      <div className="container relative flex h-14 items-center gap-2 sm:h-16 sm:gap-4">
+      <div className="container relative flex h-16 items-center gap-2 sm:h-[72px] sm:gap-4">
 
         <Link
 
@@ -78,32 +76,37 @@ const SiteHeader = () => {
 
         >
 
-          <span className="relative grid h-8 w-8 place-items-center overflow-hidden rounded-md bg-foreground text-background text-sm font-bold shadow-sm transition-all duration-300 ease-out group-hover:-rotate-[4deg] group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-md group-hover:shadow-primary/35 group-active:scale-95">
+          <img
+            src="/brand/candwax-monogram.png"
+            alt=""
+            aria-hidden="true"
+            className="h-10 w-10 shrink-0 object-contain opacity-90 transition-transform duration-300 ease-out group-hover:scale-105 dark:invert sm:h-11 sm:w-11"
+          />
 
-            <span className="relative z-10">CW</span>
-
-            <span
-
-              aria-hidden
-
-              className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-500 ease-out group-hover:translate-x-full"
-
-            />
-
-          </span>
-
-          <span className="text-xs font-semibold tracking-tight text-foreground transition-colors duration-300 group-hover:text-primary sm:text-base">
-
-            CANDWAX
-
+          <span className="leading-none">
+            <span className="block font-brand text-xl font-medium tracking-[-0.075em] text-foreground transition-colors duration-300 group-hover:text-primary sm:text-[1.65rem]">CANDWAX</span>
+            <span className="mt-1 hidden text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:block">свечи для бизнеса</span>
           </span>
 
         </Link>
 
-
-
-
-
+        <nav className="ml-6 hidden shrink-0 items-center gap-1 xl:flex" aria-label="Основная навигация">
+          <Button asChild className="mr-2 h-11 px-6 text-sm shadow-md shadow-primary/15">
+            <Link to="/catalog">Каталог</Link>
+          </Button>
+          {nav.map((item) => (
+            <RouterNavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) => cn(
+                "rounded-full px-3 py-2 text-sm font-medium transition-colors",
+                isActive ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
+              )}
+            >
+              {item.label}
+            </RouterNavLink>
+          ))}
+        </nav>
 
         <form
 
@@ -111,7 +114,7 @@ const SiteHeader = () => {
 
           autoComplete="off"
 
-          className="ml-auto hidden flex-1 max-w-md lg:block"
+          className="ml-auto hidden flex-1 max-w-sm lg:block"
 
         >
 
@@ -173,6 +176,10 @@ const SiteHeader = () => {
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
 
+          <Button asChild className="h-10 px-4 text-sm xl:hidden sm:px-5">
+            <Link to="/catalog">Каталог</Link>
+          </Button>
+
           {/* Cart */}
 
           <Button asChild variant="outline" className="relative hidden gap-2 md:inline-flex">
@@ -200,6 +207,8 @@ const SiteHeader = () => {
               Единый компонент UserMenu для публичного хедера и админки,
 
               чтобы UX/верстка не расходились между страницами. */}
+
+          <ThemeToggle className="hidden lg:grid" />
 
           <UserMenu alwaysVisible />
 
@@ -325,6 +334,14 @@ const SiteHeader = () => {
 
 
               <nav className="mt-6 flex flex-col gap-1">
+
+                <RouterNavLink
+                  to="/catalog"
+                  onClick={() => setMobileOpen(false)}
+                  className="mb-2 flex h-12 items-center justify-center rounded-xl bg-primary px-4 text-base font-semibold text-primary-foreground"
+                >
+                  Перейти в каталог
+                </RouterNavLink>
 
                 {nav.map((item) => (
 

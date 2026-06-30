@@ -13,6 +13,7 @@ export type RegisterPayload = {
 export type LoginPayload = {
   email: string;
   password: string;
+  mfa_code?: string;
 };
 
 const completeLogin = (data: LoginOut): LoginOut => {

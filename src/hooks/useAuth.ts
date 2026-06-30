@@ -52,12 +52,15 @@ export const useAuth = () => {
       if (authenticated) {
         queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY });
       } else {
-        queryClient.removeQueries({ queryKey: AUTH_ME_KEY });
+        // Keep the observer in a settled state. Removing an in-flight `/me`
+        // query makes `useQuery` immediately create another pending query,
+        // which can leave anonymous pages stuck on their auth skeleton.
+        queryClient.setQueryData(AUTH_ME_KEY, null);
       }
     });
   }, [queryClient]);
 
-  const query = useQuery({
+  const query = useQuery<UserOut | null>({
     queryKey: AUTH_ME_KEY,
     queryFn: () => authApi.me(),
     retry: false,

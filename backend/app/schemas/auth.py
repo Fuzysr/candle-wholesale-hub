@@ -32,6 +32,20 @@ class RegisterIn(BaseModel):
 class LoginIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+    mfa_code: str | None = Field(default=None, pattern=r"^\d{6}$")
+
+
+class MfaCodeIn(BaseModel):
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class MfaSetupOut(BaseModel):
+    secret: str
+    provisioning_uri: str
+
+
+class MfaStatusOut(BaseModel):
+    enabled: bool
 
 
 class RefreshIn(BaseModel):

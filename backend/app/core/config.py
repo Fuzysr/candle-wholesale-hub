@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import Annotated, Literal
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -35,6 +36,13 @@ class Settings(BaseSettings):
     app_env: Literal["development", "production", "test"] = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
+    trusted_hosts: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1", "testserver"]
+    )
+    trusted_proxy_ips: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["127.0.0.1", "::1"]
+    )
+    max_request_body_bytes: int = 10 * 1024 * 1024
 
     # Database
     database_url: str = Field(
@@ -49,6 +57,8 @@ class Settings(BaseSettings):
     # JWT
     jwt_secret: str = "change-me"
     jwt_algorithm: str = "HS256"
+    mfa_encryption_key: str = ""
+    admin_mfa_required: bool = True
     access_token_ttl_min: int = 30
     refresh_token_ttl_days: int = 30
     password_reset_ttl_min: int = 60
@@ -66,7 +76,12 @@ class Settings(BaseSettings):
     # in .env would be fed through `json.loads(...)` before hitting the
     # validator below and blow up with "Expecting value: line 1 column 1".
     cors_origins: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["http://localhost:5173", "http://localhost:8080"]
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "http://localhost:8080",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:8080",
+        ]
     )
 
     # Storage (local filesystem)
@@ -110,6 +125,7 @@ class Settings(BaseSettings):
     # the env var to avoid bursts of `client.post("/auth/login", ...)`
     # in unrelated test cases tripping the limiter.
     rate_limit_enabled: bool = True
+    rate_limit_storage_uri: str = "memory://"
 
     # SMTP (for sending emails to customers)
     smtp_host: str = ""
@@ -130,7 +146,7 @@ class Settings(BaseSettings):
     # подставляется домен витрины через переменную окружения.
     web_app_url: str = "http://localhost:8080"
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "trusted_hosts", "trusted_proxy_ips", mode="before")
     @classmethod
     def _split_cors_origins(cls, v: object) -> object:
         if isinstance(v, str):
@@ -158,6 +174,8 @@ class Settings(BaseSettings):
             # 32 bytes ≈ 256 bits — the minimum for HS256/HS512 to give
             # the algorithm its full strength.
             problems.append("JWT_SECRET must be at least 32 characters long")
+        if self.mfa_encryption_key.strip().lower() in _WEAK_SECRETS:
+            problems.append("MFA_ENCRYPTION_KEY must be a strong Fernet key")
 
         if self.inventory_webhook_secret.strip().lower() in _WEAK_SECRETS:
             problems.append("INVENTORY_WEBHOOK_SECRET is a placeholder/weak value")
@@ -166,6 +184,22 @@ class Settings(BaseSettings):
             problems.append("CORS_ORIGINS must not contain '*' in production")
         if not self.cors_origins:
             problems.append("CORS_ORIGINS must list at least one origin in production")
+        if not self.trusted_hosts or "*" in self.trusted_hosts:
+            problems.append("TRUSTED_HOSTS must contain exact public hostnames in production")
+        if self.rate_limit_storage_uri == "memory://":
+            problems.append("RATE_LIMIT_STORAGE_URI must use shared storage in production")
+
+        for name, raw_url in (
+            ("PUBLIC_UPLOAD_URL_BASE", self.public_upload_url_base),
+            ("BACKEND_BASE_URL", self.backend_base_url),
+            ("WEB_APP_URL", self.web_app_url),
+        ):
+            parsed = urlparse(raw_url)
+            if parsed.scheme != "https" or not parsed.hostname:
+                problems.append(f"{name} must be an absolute HTTPS URL in production")
+
+        if self.smtp_host and not self.smtp_use_tls:
+            problems.append("SMTP_USE_TLS must be enabled when SMTP is configured")
         if self.auth_cookie_samesite == "none" and self.app_env != "production":
             problems.append("AUTH_COOKIE_SAMESITE=none requires secure production cookies")
 
