@@ -2,8 +2,12 @@
  * Full-screen branded loader shown while lazy-loaded page chunks
  * are being fetched. Mirrors the site logo and brand identity.
  */
-const PageLoader = () => (
-  <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background">
+const PageLoader = ({ status = "Загружаем данные…" }: { status?: string }) => (
+  <div
+    className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background"
+    role="status"
+    aria-live="polite"
+  >
     {/* Logo + brand name */}
     <div className="flex items-center gap-3">
       <span className="grid h-10 w-10 place-items-center rounded-lg bg-foreground text-lg font-bold text-background shadow-sm">
@@ -20,7 +24,7 @@ const PageLoader = () => (
     </div>
 
     {/* Status text */}
-    <p className="mt-4 text-sm text-muted-foreground">Загружаем данные…</p>
+    <p className="mt-4 text-sm text-muted-foreground">{status}</p>
   </div>
 );
 

@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Sparkles } from "lucide-react";
 import PublicLayout from "@/components/layout/PublicLayout";
 import Reveal from "@/components/ui/reveal";
 import { cn } from "@/lib/utils";
@@ -123,10 +122,7 @@ const Gallery = () => {
       {/* ───────── Hero ───────── */}
       <section className="container max-w-5xl pt-8 pb-6 text-center sm:pt-12 sm:pb-8 md:pt-16">
         <Reveal delay={0} y={20}>
-          <div className="eyebrow mb-3 inline-flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Наши работы
-          </div>
+          <div className="eyebrow mb-3 inline-flex items-center">Наши работы</div>
         </Reveal>
 
         <Reveal delay={80} y={20}>

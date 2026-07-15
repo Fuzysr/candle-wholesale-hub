@@ -47,6 +47,11 @@ htmlcov/
 *.sqlite
 *.sqlite3
 
+# Local visual QA screenshots
+/footer-alignment.png
+/footer-pixels.png
+/footer-pixels-final.png
+
 # Temp / local clones
 my-clone/
 .tmp-*

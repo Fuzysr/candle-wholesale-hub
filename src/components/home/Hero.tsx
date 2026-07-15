@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Check, Clock3, MapPin, PackageCheck, Percent } from "lucide-react";
@@ -12,9 +13,16 @@ const terms = [
   { icon: Clock3, value: "1–2 дня", label: "срок отгрузки" },
 ];
 
+const notifyHeroReady = () => {
+  (window as Window & { __candwaxHeroReady?: boolean }).__candwaxHeroReady = true;
+  window.dispatchEvent(new Event("candwax:home-hero-ready"));
+};
+
 const Hero = () => {
   const reduceMotion = useReducedMotion();
   const isMobile = useIsMobile();
+  const [videoFailed, setVideoFailed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const connection = (
     navigator as Navigator & {
       connection?: { saveData?: boolean; effectiveType?: string };
@@ -24,7 +32,40 @@ const Hero = () => {
     connection?.saveData === true ||
     connection?.effectiveType === "slow-2g" ||
     connection?.effectiveType === "2g";
-  const showVideo = !reduceMotion && !isMobile && !constrainedConnection;
+  const showVideo = !reduceMotion && !isMobile && !constrainedConnection && !videoFailed;
+
+  useEffect(() => {
+    if (!showVideo) notifyHeroReady();
+  }, [showVideo]);
+
+  useEffect(() => {
+    if (!showVideo) return;
+
+    const resumeVideo = () => {
+      const video = videoRef.current;
+      if (!video || document.visibilityState !== "visible" || !video.paused) return;
+      void video.play().catch(() => {
+        // Autoplay may be temporarily blocked by the browser. Keep the video
+        // mounted so it can resume on the next focus/visibility event.
+      });
+    };
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) resumeVideo();
+      },
+      { threshold: 0.15 },
+    );
+    const video = videoRef.current;
+    if (video) observer.observe(video);
+    document.addEventListener("visibilitychange", resumeVideo);
+    window.addEventListener("focus", resumeVideo);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", resumeVideo);
+      window.removeEventListener("focus", resumeVideo);
+    };
+  }, [showVideo]);
   const enter = (delay = 0) => ({
     initial: reduceMotion ? false : { opacity: 0, y: 22 },
     animate: { opacity: 1, y: 0 },
@@ -38,14 +79,20 @@ const Hero = () => {
           <img src={heroImage} alt="" className="h-full w-full object-cover" />
         ) : (
           <video
+            ref={videoRef}
             className="h-[calc(100%+36px)] w-full object-cover object-top"
             autoPlay
             muted
             loop
             playsInline
-            preload="metadata"
+            preload="auto"
             poster={heroImage}
             aria-hidden="true"
+            onCanPlay={notifyHeroReady}
+            onError={() => {
+              setVideoFailed(true);
+              notifyHeroReady();
+            }}
           >
             <source src="/media/hero-candle-shop-a5e9bfc1.mp4" type="video/mp4" />
           </video>
@@ -72,7 +119,7 @@ const Hero = () => {
             <Button asChild size="lg" className="group h-14 min-w-[220px] px-8 text-base shadow-xl shadow-black/20 sm:h-16 sm:min-w-[250px] sm:text-lg">
               <Link to="/catalog">Смотреть каталог <ArrowRight className="transition-transform group-hover:translate-x-1" /></Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="h-14 min-w-[220px] border-white/55 bg-white/95 px-8 text-base text-foreground hover:bg-white sm:h-16 sm:min-w-[250px] sm:text-lg">
+            <Button asChild size="lg" variant="outline" className="h-14 min-w-[220px] border-white/55 bg-white/95 px-8 text-base text-[#241b16] hover:bg-white [&_svg]:text-[#241b16] sm:h-16 sm:min-w-[250px] sm:text-lg">
               <Link to="/wholesale-terms">Условия для бизнеса</Link>
             </Button>
           </motion.div>

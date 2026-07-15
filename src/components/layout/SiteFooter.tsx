@@ -1,8 +1,7 @@
 import { Link } from "react-router-dom";
 
-import { Mail, Phone, MapPin, Send, MessageCircle } from "lucide-react";
-
 import { cn } from "@/lib/utils";
+import FlaticonIcon from "@/components/ui/flaticon-icon";
 
 
 
@@ -42,20 +41,6 @@ const companyLinks: FooterLink[] = [
 
 
 
-/** Square VK glyph — lucide-react doesn't ship a VK icon. */
-
-const VkIcon = ({ className }: { className?: string }) => (
-
-  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
-
-    <path d="M13.162 16.5c-4.92 0-7.727-3.373-7.844-8.984h2.465c.081 4.116 1.897 5.86 3.334 6.22V7.516h2.322v3.555c1.42-.153 2.911-1.772 3.415-3.555h2.322c-.387 2.2-2.006 3.82-3.158 4.486 1.152.54 2.996 1.951 3.697 4.498h-2.556c-.548-1.71-1.915-3.032-3.72-3.212V16.5h-.277Z" />
-
-  </svg>
-
-);
-
-
-
 const SiteFooter = () => {
 
   const year = new Date().getFullYear();
@@ -66,7 +51,7 @@ const SiteFooter = () => {
 
     <footer className="mt-16 border-t border-border bg-surface">
 
-      <div className="container grid gap-8 py-10 sm:grid-cols-2 sm:gap-10 md:py-14 lg:grid-cols-[1.6fr_1fr_1fr_1.1fr]">
+      <div className="container grid gap-8 py-10 sm:grid-cols-2 sm:gap-10 md:py-14 lg:flex lg:items-start lg:justify-between lg:gap-8">
 
         {/* Brand + description */}
 
@@ -78,26 +63,20 @@ const SiteFooter = () => {
 
             aria-label="На главную"
 
-            className="group inline-flex items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            className="group inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
 
           >
 
             <img
-              src="/brand/candwax-monogram.png"
+              src="/brand/candwax-wordmark.svg"
               alt=""
               aria-hidden="true"
-              className="h-11 w-11 shrink-0 object-contain opacity-90 transition-transform duration-300 ease-out group-hover:scale-105 dark:invert"
+              className="-ml-2 mt-[3px] h-[38px] w-[175px] max-w-none object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03] dark:invert"
             />
-
-            <span className="font-brand text-2xl font-medium tracking-[-0.075em] text-foreground transition-colors duration-300 group-hover:text-primary">
-
-              CANDWAX
-
-            </span>
 
           </Link>
 
-          <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
+          <p className="mt-5 max-w-xs text-sm leading-relaxed text-muted-foreground">
 
             Оптовый поставщик свечей для декораторов, флористов, отелей и event-агентств.
 
@@ -133,17 +112,17 @@ const SiteFooter = () => {
 
                 href="tel:+78005551234"
 
-                className="group inline-flex items-center gap-2.5 text-muted-foreground transition-colors hover:text-primary"
+                className="group grid min-h-8 grid-cols-[2rem_minmax(0,1fr)] items-center gap-2.5 text-muted-foreground transition-colors hover:text-primary"
 
               >
 
                 <span className="grid h-8 w-8 place-items-center rounded-md bg-accent/60 text-muted-foreground transition-colors group-hover:bg-primary/15 group-hover:text-primary">
 
-                  <Phone className="h-3.5 w-3.5" />
+                  <FlaticonIcon name="phone-call" className="text-xs" />
 
                 </span>
 
-                +7 (800) 555-12-34
+                <span className="leading-8">+7 (800) 555-12-34</span>
 
               </a>
 
@@ -155,31 +134,31 @@ const SiteFooter = () => {
 
                 href="mailto:info@candwax.ru"
 
-                className="group inline-flex items-center gap-2.5 text-muted-foreground transition-colors hover:text-primary"
+                className="group grid min-h-8 grid-cols-[2rem_minmax(0,1fr)] items-center gap-2.5 text-muted-foreground transition-colors hover:text-primary"
 
               >
 
                 <span className="grid h-8 w-8 place-items-center rounded-md bg-accent/60 text-muted-foreground transition-colors group-hover:bg-primary/15 group-hover:text-primary">
 
-                  <Mail className="h-3.5 w-3.5" />
+                  <FlaticonIcon name="envelope" className="text-xs" />
 
                 </span>
 
-                info@candwax.ru
+                <span className="leading-8">info@candwax.ru</span>
 
               </a>
 
             </li>
 
-            <li className="flex items-start gap-2.5 text-muted-foreground">
+            <li className="grid min-h-8 grid-cols-[2rem_minmax(0,1fr)] items-center gap-2.5 text-muted-foreground">
 
-              <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md bg-accent/60 text-muted-foreground">
+              <span className="grid h-8 w-8 place-items-center rounded-md bg-accent/60 text-muted-foreground">
 
-                <MapPin className="h-3.5 w-3.5" />
+                <FlaticonIcon name="marker" className="text-xs" />
 
               </span>
 
-              <span>г. Москва, ул. Свечная, 15</span>
+              <span className="leading-8">г. Москва, ул. Свечная, 15</span>
 
             </li>
 
@@ -193,19 +172,19 @@ const SiteFooter = () => {
 
             <SocialButton href="https://t.me/" label="Telegram">
 
-              <Send className="h-4 w-4" />
+              <FlaticonIcon name="telegram" brand className="translate-y-[0px] text-base" />
 
             </SocialButton>
 
             <SocialButton href="https://vk.com/" label="ВКонтакте">
 
-              <VkIcon className="h-4 w-4" />
+              <FlaticonIcon name="vk" brand className="translate-y-[0px] text-base" />
 
             </SocialButton>
 
             <SocialButton href="https://wa.me/" label="WhatsApp">
 
-              <MessageCircle className="h-4 w-4" />
+              <FlaticonIcon name="whatsapp" brand className="translate-y-[0px] text-base" />
 
             </SocialButton>
 
@@ -269,7 +248,7 @@ const FooterColumn = ({ title, links }: { title: string; links: FooterLink[] }) 
 
   <div>
 
-    <div className="eyebrow mb-4">{title}</div>
+    <div className="eyebrow mb-3">{title}</div>
 
     <ul className="space-y-2.5 text-sm">
 
@@ -359,7 +338,7 @@ const SocialButton = ({
 
   >
 
-    <span className="transition-transform duration-300 group-hover:scale-110">{children}</span>
+    <span className="grid h-full w-full place-items-center leading-none transition-transform duration-300 group-hover:scale-110">{children}</span>
 
   </a>
 

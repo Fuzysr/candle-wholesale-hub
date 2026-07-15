@@ -2,11 +2,10 @@ import { useState } from "react";
 
 import { Link, NavLink as RouterNavLink, useNavigate } from "react-router-dom";
 
-import { Search, ShoppingCart, Menu } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
+import FlaticonIcon from "@/components/ui/flaticon-icon";
 
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 import { useCartStore } from "@/store/cartStore";
 
@@ -19,6 +18,8 @@ import UserMenu from "@/components/layout/UserMenu";
 import ThemeToggle from "@/components/theme-toggle";
 
 const nav = [
+
+  { label: "Каталог", to: "/catalog" },
 
   { label: "Условия опта", to: "/wholesale-terms" },
 
@@ -72,35 +73,35 @@ const SiteHeader = () => {
 
           aria-label="На главную"
 
-          className="group flex shrink-0 items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="group flex shrink-0 items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
 
         >
 
           <img
-            src="/brand/candwax-monogram.png"
+            src="/brand/candwax-monogram.svg"
             alt=""
             aria-hidden="true"
-            className="h-10 w-10 shrink-0 object-contain opacity-90 transition-transform duration-300 ease-out group-hover:scale-105 dark:invert sm:h-11 sm:w-11"
+            className="h-11 w-11 shrink-0 object-contain transition-transform duration-300 ease-out group-hover:scale-105 dark:invert sm:h-12 sm:w-12"
           />
-
-          <span className="leading-none">
-            <span className="block font-brand text-xl font-medium tracking-[-0.075em] text-foreground transition-colors duration-300 group-hover:text-primary sm:text-[1.65rem]">CANDWAX</span>
-            <span className="mt-1 hidden text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:block">свечи для бизнеса</span>
+          <span className="flex flex-col justify-center text-xs font-normal uppercase leading-[1.02] tracking-normal text-foreground transition-colors duration-300 group-hover:text-primary">
+            <span>Свечи</span>
+            <span>для бизнеса</span>
           </span>
 
         </Link>
 
         <nav className="ml-6 hidden shrink-0 items-center gap-1 xl:flex" aria-label="Основная навигация">
-          <Button asChild className="mr-2 h-11 px-6 text-sm shadow-md shadow-primary/15">
-            <Link to="/catalog">Каталог</Link>
-          </Button>
           {nav.map((item) => (
             <RouterNavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) => cn(
-                "rounded-full px-3 py-2 text-sm font-medium transition-colors",
-                isActive ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
+                "inline-flex h-10 items-center rounded-full px-4 text-sm font-medium transition-colors",
+                item.to === "/catalog"
+                  ? "bg-primary text-primary-foreground hover:bg-primary-hover"
+                  : isActive
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
               )}
             >
               {item.label}
@@ -120,11 +121,10 @@ const SiteHeader = () => {
 
           <label className="group relative block">
 
-            <Search
-
+            <FlaticonIcon
+              name="search"
               className={cn(
-
-                "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-all duration-300 ease-out",
+                "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground transition-all duration-300 ease-out",
 
                 "group-focus-within:scale-110 group-focus-within:text-primary",
 
@@ -176,17 +176,13 @@ const SiteHeader = () => {
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
 
-          <Button asChild className="h-10 px-4 text-sm xl:hidden sm:px-5">
-            <Link to="/catalog">Каталог</Link>
-          </Button>
-
           {/* Cart */}
 
           <Button asChild variant="outline" className="relative hidden gap-2 md:inline-flex">
 
             <Link to="/cart">
 
-              <ShoppingCart className="h-4 w-4" />
+              <FlaticonIcon name="shopping-cart" className="text-sm" />
 
               <span className="hidden sm:inline">Корзина</span>
 
@@ -210,7 +206,7 @@ const SiteHeader = () => {
 
           <ThemeToggle className="hidden lg:grid" />
 
-          <UserMenu alwaysVisible />
+          <UserMenu alwaysVisible triggerClassName="h-10" />
 
 
 
@@ -223,7 +219,7 @@ const SiteHeader = () => {
 
               <Button variant="ghost" size="icon" className="h-10 w-10 lg:hidden" aria-label="Меню">
 
-                <Menu className="h-5 w-5" />
+                <FlaticonIcon name="menu-burger" className="text-lg" />
 
               </Button>
 
@@ -260,6 +256,9 @@ const SiteHeader = () => {
               <SheetHeader>
 
                 <SheetTitle>Меню</SheetTitle>
+                <SheetDescription className="sr-only">
+                  Навигация по сайту, поиск и настройка темы
+                </SheetDescription>
 
               </SheetHeader>
 
@@ -283,11 +282,10 @@ const SiteHeader = () => {
 
                 <label className="group relative block">
 
-                  <Search
-
+                  <FlaticonIcon
+                    name="search"
                     className={cn(
-
-                      "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-all duration-300 ease-out",
+                      "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground transition-all duration-300 ease-out",
 
                       "group-focus-within:scale-110 group-focus-within:text-primary",
 
@@ -338,7 +336,7 @@ const SiteHeader = () => {
                 <RouterNavLink
                   to="/catalog"
                   onClick={() => setMobileOpen(false)}
-                  className="mb-2 flex h-12 items-center justify-center rounded-xl bg-primary px-4 text-base font-semibold text-primary-foreground"
+                  className="mb-2 flex h-12 items-center justify-center rounded-xl bg-foreground px-4 text-base font-semibold text-background"
                 >
                   Перейти в каталог
                 </RouterNavLink>
@@ -429,13 +427,13 @@ const SiteHeader = () => {
 
       to="/cart"
 
-      className="fixed right-4 top-[4.25rem] z-30 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform hover:scale-105 active:scale-95 sm:top-[4.75rem] md:hidden"
+      className="fixed right-4 top-20 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform hover:scale-105 active:scale-95 sm:top-[5.5rem] md:hidden"
 
       aria-label="Корзина"
 
     >
 
-      <ShoppingCart className="h-5 w-5" />
+      <FlaticonIcon name="shopping-cart" className="text-lg" />
 
       {cartCount > 0 && (
 

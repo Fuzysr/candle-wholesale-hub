@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Link, useNavigate } from "react-router-dom";
 
-import { Trash2, ShoppingBag } from "lucide-react";
-
 import { useQuery } from "@tanstack/react-query";
 
 import PublicLayout from "@/components/layout/PublicLayout";
@@ -25,6 +23,7 @@ import { computeLineVolumeDiscount } from "@/lib/catalog";
 import { catalogApi } from "@/lib/api";
 
 import { cn } from "@/lib/utils";
+import FlaticonIcon from "@/components/ui/flaticon-icon";
 
 
 
@@ -170,19 +169,17 @@ const Cart = () => {
 
           <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-muted">
 
-            <ShoppingBag className="h-7 w-7 text-muted-foreground" />
+            <FlaticonIcon name="shopping-bag" className="text-2xl text-muted-foreground" />
 
           </div>
 
           <h1 className="mt-4 text-2xl font-semibold">Корзина пуста</h1>
 
-          <p className="mt-2 text-muted-foreground">Добавьте товары из каталога или используйте быстрый заказ.</p>
+          <p className="mt-2 text-muted-foreground">Добавьте товары из каталога.</p>
 
-          <div className="mt-6 flex justify-center gap-3">
+          <div className="mt-6 flex justify-center">
 
             <Button asChild><Link to="/catalog">В каталог</Link></Button>
-
-            <Button asChild variant="outline"><Link to="/quick-order">Быстрый заказ</Link></Button>
 
           </div>
 
@@ -248,7 +245,7 @@ const Cart = () => {
 
                       <button onClick={() => remove(i.variantId)} className="text-muted-foreground hover:text-destructive">
 
-                        <Trash2 className="h-4 w-4" />
+                        <FlaticonIcon name="trash" className="text-sm" />
 
                       </button>
 

@@ -38,6 +38,7 @@ const BASE_URL =
 export const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
+  timeout: 15_000,
 });
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };

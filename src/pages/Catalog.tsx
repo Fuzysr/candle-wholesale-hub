@@ -399,11 +399,11 @@ const Catalog = () => {
 
   const [catQ, matQ, scentQ, shapeQ, colorsQ] = useQueries({
     queries: [
-      { queryKey: ["categories"], queryFn: () => catalogApi.listCategories() },
-      { queryKey: ["attributes", "materials"], queryFn: () => catalogApi.listAttributes("materials") },
-      { queryKey: ["attributes", "scents"], queryFn: () => catalogApi.listAttributes("scents") },
-      { queryKey: ["attributes", "shapes"], queryFn: () => catalogApi.listAttributes("shapes") },
-      { queryKey: ["products", "colors"], queryFn: () => catalogApi.listProductColors() },
+      { queryKey: ["categories"], queryFn: () => catalogApi.listCategories(), retry: 1, retryDelay: 500 },
+      { queryKey: ["attributes", "materials"], queryFn: () => catalogApi.listAttributes("materials"), retry: 1, retryDelay: 500 },
+      { queryKey: ["attributes", "scents"], queryFn: () => catalogApi.listAttributes("scents"), retry: 1, retryDelay: 500 },
+      { queryKey: ["attributes", "shapes"], queryFn: () => catalogApi.listAttributes("shapes"), retry: 1, retryDelay: 500 },
+      { queryKey: ["products", "colors"], queryFn: () => catalogApi.listProductColors(), retry: 1, retryDelay: 500 },
     ],
   });
   const categories = catQ.data ?? EMPTY_CATEGORIES;
@@ -497,9 +497,22 @@ const Catalog = () => {
     queryKey: ["products", "search", productSearchParams],
     queryFn: () => catalogApi.searchProducts(productSearchParams),
     placeholderData: (previous) => previous,
+    retry: 1,
+    retryDelay: 500,
   });
   const products = prodQ.data?.items ?? EMPTY_PRODUCTS;
   const loading = catQ.isPending || prodQ.isPending;
+  const coreLoadFailed = catQ.isError || prodQ.isError;
+  const retryCatalog = () => {
+    void Promise.all([
+      catQ.refetch(),
+      prodQ.refetch(),
+      matQ.refetch(),
+      scentQ.refetch(),
+      shapeQ.refetch(),
+      colorsQ.refetch(),
+    ]);
+  };
 
   const toggleSet = <T,>(set: Set<T>, value: T): Set<T> => {
     const next = new Set(set);
@@ -972,6 +985,18 @@ const Catalog = () => {
             <Skeleton className="h-24 w-full rounded-lg" />
             <Skeleton className="h-20 w-full rounded-lg" />
           </aside>
+        ) : coreLoadFailed ? (
+          <aside className="hidden rounded-lg border border-destructive/25 bg-destructive/5 p-4 lg:sticky lg:top-20 lg:block">
+            <p className="text-sm font-semibold text-foreground">Фильтры недоступны</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {import.meta.env.DEV
+                ? "Локальный API не отвечает на порту 8000."
+                : "Не удалось получить данные каталога."}
+            </p>
+            <Button variant="outline" size="sm" className="mt-3 w-full" onClick={retryCatalog}>
+              Повторить
+            </Button>
+          </aside>
         ) : (
         <aside className="hidden space-y-3 animate-in fade-in duration-500 lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-1">
           <div className="flex items-center justify-between">
@@ -1160,7 +1185,7 @@ const Catalog = () => {
         )}
 
         {/* Mobile filters Sheet — rendered below lg breakpoint */}
-        {!loading && (
+        {!loading && !coreLoadFailed && (
           <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
             <SheetContent side="left" className="w-[300px] overflow-y-auto sm:w-[340px] lg:hidden">
               <SheetHeader>
@@ -1633,6 +1658,21 @@ const Catalog = () => {
           {loading ? (
             <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
               {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-60 sm:h-80" />)}
+            </div>
+          ) : coreLoadFailed ? (
+            <div
+              role="alert"
+              className="rounded-lg border border-destructive/25 bg-destructive/5 px-6 py-12 text-center"
+            >
+              <p className="font-semibold text-foreground">Не удалось загрузить каталог</p>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+                {import.meta.env.DEV
+                  ? "Запустите локальный backend на http://localhost:8000 и повторите запрос."
+                  : "Проверьте подключение и попробуйте ещё раз."}
+              </p>
+              <Button variant="outline" size="sm" className="mt-5" onClick={retryCatalog}>
+                Повторить загрузку
+              </Button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border p-12 text-center animate-in fade-in duration-500">

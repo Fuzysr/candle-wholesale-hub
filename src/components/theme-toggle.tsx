@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import { Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import FlaticonIcon from "@/components/ui/flaticon-icon";
 
 type ViewTransitionDocument = Document & {
   startViewTransition?: (update: () => void) => unknown;
@@ -57,18 +57,20 @@ const ThemeToggle = ({ className }: { className?: string }) => {
       )}
     >
       {/* Sun — visible in dark mode */}
-      <Sun
+      <FlaticonIcon
+        name="sun"
         className={cn(
-          "absolute h-5 w-5 transition-all duration-500 ease-out",
+          "absolute text-lg transition-all duration-500 ease-out",
           isDark
             ? "rotate-0 scale-100 opacity-100"
             : "rotate-90 scale-0 opacity-0",
         )}
       />
       {/* Moon — visible in light mode */}
-      <Moon
+      <FlaticonIcon
+        name="moon"
         className={cn(
-          "absolute h-5 w-5 transition-all duration-500 ease-out",
+          "absolute text-lg transition-all duration-500 ease-out",
           isDark
             ? "-rotate-90 scale-0 opacity-0"
             : "rotate-0 scale-100 opacity-100",

@@ -1,14 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import {
-  User,
-  LogOut,
-  LogIn,
-  LayoutDashboard,
-  Receipt,
-  ChevronRight,
-} from "lucide-react";
-
 import { cn } from "@/lib/utils";
+import FlaticonIcon from "@/components/ui/flaticon-icon";
 import { signOut, useAuth } from "@/hooks/useAuth";
 import {
   DropdownMenu,
@@ -91,7 +83,7 @@ const UserMenu = ({ triggerClassName, alwaysVisible = false }: UserMenuProps) =>
           triggerClassName,
         )}
       >
-        <LogIn className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
+        <FlaticonIcon name="sign-in-alt" className="text-sm transition-transform duration-300 group-hover:scale-110" />
         Войти
       </Link>
     );
@@ -109,7 +101,7 @@ const UserMenu = ({ triggerClassName, alwaysVisible = false }: UserMenuProps) =>
             triggerClassName,
           )}
         >
-          <User className="h-5 w-5 transition-transform duration-300 group-hover:scale-110 group-data-[state=open]:scale-110" />
+          <FlaticonIcon name="user" className="text-lg transition-transform duration-300 group-hover:scale-110 group-data-[state=open]:scale-110" />
           {/* Active-page dot (mirrors the nav underline style) */}
           <span
             aria-hidden
@@ -186,12 +178,13 @@ const UserMenu = ({ triggerClassName, alwaysVisible = false }: UserMenuProps) =>
                     : "bg-muted text-muted-foreground group-hover/item:bg-primary/15 group-hover/item:text-primary",
                 )}
               >
-                <User className="h-4 w-4" />
+                <FlaticonIcon name="user" className="text-sm" />
               </span>
               <span className="flex-1 font-medium">Мой кабинет</span>
-              <ChevronRight
+              <FlaticonIcon
+                name="angle-small-right"
                 className={cn(
-                  "h-3.5 w-3.5 transition-all",
+                  "text-sm transition-all",
                   isAccountActive
                     ? "translate-x-0 text-primary opacity-100"
                     : "-translate-x-1 text-muted-foreground opacity-0 group-hover/item:translate-x-0 group-hover/item:opacity-100",
@@ -221,12 +214,13 @@ const UserMenu = ({ triggerClassName, alwaysVisible = false }: UserMenuProps) =>
                     : "bg-muted text-muted-foreground group-hover/item:bg-primary/15 group-hover/item:text-primary",
                 )}
               >
-                <Receipt className="h-4 w-4" />
+                <FlaticonIcon name="receipt" className="text-sm" />
               </span>
               <span className="flex-1 font-medium">Мои заявки</span>
-              <ChevronRight
+              <FlaticonIcon
+                name="angle-small-right"
                 className={cn(
-                  "h-3.5 w-3.5 transition-all",
+                  "text-sm transition-all",
                   isOrdersActive
                     ? "translate-x-0 text-primary opacity-100"
                     : "-translate-x-1 text-muted-foreground opacity-0 group-hover/item:translate-x-0 group-hover/item:opacity-100",
@@ -257,12 +251,13 @@ const UserMenu = ({ triggerClassName, alwaysVisible = false }: UserMenuProps) =>
                       : "bg-muted text-muted-foreground group-hover/item:bg-primary/15 group-hover/item:text-primary",
                   )}
                 >
-                  <LayoutDashboard className="h-4 w-4" />
+                  <FlaticonIcon name="apps" className="text-sm" />
                 </span>
                 <span className="flex-1 font-medium">Админка</span>
-                <ChevronRight
+                <FlaticonIcon
+                  name="angle-small-right"
                   className={cn(
-                    "h-3.5 w-3.5 transition-all",
+                    "text-sm transition-all",
                     isAdminActive
                       ? "translate-x-0 text-primary opacity-100"
                       : "-translate-x-1 text-muted-foreground opacity-0 group-hover/item:translate-x-0 group-hover/item:opacity-100",
@@ -283,7 +278,7 @@ const UserMenu = ({ triggerClassName, alwaysVisible = false }: UserMenuProps) =>
             className="group/item flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-destructive transition-colors focus:bg-destructive/10 focus:text-destructive"
           >
             <span className="grid h-8 w-8 place-items-center rounded-md bg-destructive/10 text-destructive transition-colors group-hover/item:bg-destructive group-hover/item:text-destructive-foreground">
-              <LogOut className="h-4 w-4" />
+              <FlaticonIcon name="sign-out-alt" className="text-sm" />
             </span>
             <span className="flex-1 font-medium">Выйти</span>
           </DropdownMenuItem>

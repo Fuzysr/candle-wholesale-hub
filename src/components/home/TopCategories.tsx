@@ -49,7 +49,7 @@ const TopCategories = () => {
               <Link to={`/catalog/${category.slug}`} className="group relative block h-full overflow-hidden rounded-3xl bg-muted">
                 <img src={images[index % images.length]} alt="" className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-5"><div><div className="text-xs text-white/65">Категория</div><h3 className="mt-1 font-display text-2xl text-white">{category.name_ru}</h3></div><span className="grid h-10 w-10 place-items-center rounded-full bg-white text-foreground transition-transform group-hover:rotate-[-8deg]"><ArrowRight className="h-4 w-4" /></span></div>
+                <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-5"><div><div className="text-xs text-white/65">Категория</div><h3 className="mt-1 font-display text-2xl text-white">{category.name_ru}</h3></div><span className="grid h-10 w-10 place-items-center rounded-full bg-white text-[#241b16] transition-transform group-hover:rotate-[-8deg]"><ArrowRight className="h-4 w-4" /></span></div>
               </Link>
             </motion.div>
           ))}

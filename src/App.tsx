@@ -1,8 +1,8 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import { ThemeProvider } from "next-themes";
 
@@ -51,6 +51,44 @@ const Account = lazy(() => import("./pages/Account"));
 const Admin = lazy(() => import("./pages/Admin"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
+
+const HOME_HERO_READY_EVENT = "candwax:home-hero-ready";
+
+const HomeHeroLoader = () => {
+  const { pathname } = useLocation();
+  const isHome = pathname === "/";
+  const [ready, setReady] = useState(
+    !isHome || (window as Window & { __candwaxHeroReady?: boolean }).__candwaxHeroReady === true,
+  );
+
+  useEffect(() => {
+    if (!isHome) {
+      setReady(true);
+      return;
+    }
+
+    setReady(false);
+    const handleReady = () => setReady(true);
+    window.addEventListener(HOME_HERO_READY_EVENT, handleReady);
+    if ((window as Window & { __candwaxHeroReady?: boolean }).__candwaxHeroReady) {
+      handleReady();
+    }
+
+    // A slow media request must never trap the visitor behind the loader.
+    // Do not cancel the hero media here: the video can become playable after
+    // the loader is dismissed, and aborting it would replace a working hero
+    // with its static poster during the same visit.
+    const fallback = window.setTimeout(() => {
+      handleReady();
+    }, 12_000);
+    return () => {
+      window.removeEventListener(HOME_HERO_READY_EVENT, handleReady);
+      window.clearTimeout(fallback);
+    };
+  }, [isHome]);
+
+  return isHome && !ready ? <PageLoader status="Готовим витрину…" /> : null;
+};
 
 
 
@@ -143,6 +181,7 @@ const App = () => {
           <ScrollRestoration />
 
           <GlobalLoader />
+          <HomeHeroLoader />
 
           <Suspense fallback={<PageLoader />}>
 

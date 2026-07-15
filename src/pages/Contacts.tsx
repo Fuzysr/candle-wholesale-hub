@@ -748,7 +748,7 @@ const Contacts = () => {
 
 
 
-              <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+              <p className="mt-3 w-full text-[11px] leading-relaxed text-muted-foreground sm:text-justify sm:[text-align-last:justify]">
 
                 Нажимая «Отправить», вы соглашаетесь на обработку персональных данных.
 
