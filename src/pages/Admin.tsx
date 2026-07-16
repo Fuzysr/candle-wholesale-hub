@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FileDown,
   Download,
@@ -108,6 +108,8 @@ const Admin = () => {
   const [editingProduct, setEditingProduct] = useState<Partial<AdminProduct> | null>(null);
   const [productGallery, setProductGallery] = useState<GalleryImage[]>([]);
   const [editingCategory, setEditingCategory] = useState<Partial<AdminCategory> | null>(null);
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const categorySaveInFlight = useRef(false);
   const [editingVariant, setEditingVariant] = useState<(Partial<AdminVariant> & { product_id: string }) | null>(null);
   const [variantDiscounts, setVariantDiscounts] = useState<{ min_boxes: number; discount_percent: number }[]>([]);
   const [variantImages, setVariantImages] = useState<VariantImageOut[]>([]);
@@ -433,7 +435,7 @@ const Admin = () => {
 
   // ======= CATEGORIES =======
   const saveCategory = async () => {
-    if (!editingCategory) return;
+    if (!editingCategory || categorySaveInFlight.current) return;
     const payload = {
       slug: editingCategory.slug || "",
       name_ru: editingCategory.name_ru || "",
@@ -446,6 +448,8 @@ const Admin = () => {
     };
     if (!payload.slug || !payload.name_ru) return toast.error("Заполните slug и название");
 
+    categorySaveInFlight.current = true;
+    setIsSavingCategory(true);
     try {
       if (editingCategory.id) {
         await catalogApi.updateCategory(editingCategory.id, payload);
@@ -457,6 +461,9 @@ const Admin = () => {
       reloadCategories();
     } catch (err) {
       toast.error(apiErrorMessage(err, "Не удалось сохранить категорию"));
+    } finally {
+      categorySaveInFlight.current = false;
+      setIsSavingCategory(false);
     }
   };
 
@@ -1341,6 +1348,7 @@ const Admin = () => {
         editingDiscount={editingDiscount}
         categories={categories}
         setEditingCategory={setEditingCategory}
+        isSavingCategory={isSavingCategory}
         setEditingLookup={setEditingLookup}
         setEditingDiscount={setEditingDiscount}
         onSaveCategory={saveCategory}

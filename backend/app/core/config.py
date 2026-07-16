@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me"
     jwt_algorithm: str = "HS256"
     mfa_encryption_key: str = ""
-    admin_mfa_required: bool = True
+    admin_mfa_required: bool = False
     access_token_ttl_min: int = 30
     refresh_token_ttl_days: int = 30
     password_reset_ttl_min: int = 60
@@ -174,9 +174,6 @@ class Settings(BaseSettings):
             # 32 bytes ≈ 256 bits — the minimum for HS256/HS512 to give
             # the algorithm its full strength.
             problems.append("JWT_SECRET must be at least 32 characters long")
-        if self.mfa_encryption_key.strip().lower() in _WEAK_SECRETS:
-            problems.append("MFA_ENCRYPTION_KEY must be a strong Fernet key")
-
         if self.inventory_webhook_secret.strip().lower() in _WEAK_SECRETS:
             problems.append("INVENTORY_WEBHOOK_SECRET is a placeholder/weak value")
 

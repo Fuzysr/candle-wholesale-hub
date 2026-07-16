@@ -206,9 +206,9 @@ const Auth = () => {
           </div>
 
           {/*
-            Legal footer — small muted links with a subtle hover. Both
-            currently point at the wholesale terms page; once a dedicated
-            privacy policy route exists swap the second link's target.
+            Legal footer — small muted links with a subtle hover. The data
+            processing policy uses the same placeholder route as the privacy
+            policy until its dedicated page is published.
           */}
           <div className="mt-6 flex items-center justify-center gap-3 text-[11px] text-muted-foreground/70">
             <Link
@@ -219,7 +219,7 @@ const Auth = () => {
             </Link>
             <span className="text-muted-foreground/40">·</span>
             <Link
-              to="/wholesale-terms"
+              to="/privacy"
               className="transition-colors hover:text-foreground hover:underline"
             >
               Политика обработки данных

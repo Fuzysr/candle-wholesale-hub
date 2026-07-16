@@ -211,7 +211,7 @@ export const ProductCard = ({
           src={getProductImage(cover)}
           alt={productName(p, lang)}
           loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
+          className="h-full w-full bg-muted object-contain p-2 transition-transform duration-500 group-hover:scale-[1.03]"
         />
         {inCart && !selectMode && (
           <span className="absolute right-3 top-3 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground shadow-md">
@@ -401,7 +401,7 @@ export const MobileListRow = ({
           src={getProductImage(cover)}
           alt={productName(p, lang)}
           loading="lazy"
-          className="h-full w-full object-cover"
+          className="h-full w-full bg-muted object-contain p-1"
         />
       </Link>
 
@@ -540,7 +540,7 @@ export const TableRow = ({
           src={getProductImage(cover)}
           alt={productName(p, lang)}
           loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-300 hover:scale-110"
+          className="h-full w-full bg-muted object-contain p-1 transition-transform duration-300 hover:scale-[1.04]"
         />
       </Link>
 
@@ -605,4 +605,3 @@ export const TableRow = ({
     </div>
   );
 };
-

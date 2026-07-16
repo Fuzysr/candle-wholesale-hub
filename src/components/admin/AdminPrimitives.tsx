@@ -126,6 +126,7 @@ export type SortableCatRowProps = {
   cat: CategoryOut;
   allCats: CategoryOut[];
   productCount: number;
+  depth?: number;
   onEdit: (category: CategoryOut) => void;
   onDelete: (id: string) => void;
 };
@@ -134,6 +135,7 @@ export const SortableCatRow = ({
   cat,
   allCats,
   productCount,
+  depth = 0,
   onEdit,
   onDelete,
 }: SortableCatRowProps) => {
@@ -149,7 +151,10 @@ export const SortableCatRow = ({
         transition,
         opacity: isDragging ? 0.4 : 1,
       }}
-      className="grid grid-cols-[28px_1fr_140px_100px_60px_80px] items-center gap-2 border-t border-border px-3 py-2.5 text-sm"
+      className={cn(
+        "grid grid-cols-[28px_1fr_140px_100px_60px_80px] items-center gap-2 border-t border-border px-3 py-2.5 text-sm",
+        depth > 0 && "bg-muted/15",
+      )}
     >
       <button
         type="button"
@@ -160,7 +165,10 @@ export const SortableCatRow = ({
       >
         <GripVertical className="h-4 w-4" />
       </button>
-      <div className="font-medium">
+      <div
+        className={cn("min-w-0", depth === 0 ? "font-semibold" : "font-medium")}
+        style={{ paddingInlineStart: `${depth * 24}px` }}
+      >
         {cat.parent_id && <span className="text-muted-foreground">↳ </span>}
         {cat.name_ru}
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -28,6 +28,40 @@ type CategoriesTabProps = {
   onChanged: () => void;
 };
 
+type CategoryTreeRow = { category: CategoryOut; depth: number };
+
+const buildCategoryTree = (categories: CategoryOut[]): CategoryTreeRow[] => {
+  const byId = new Map(categories.map((category) => [category.id, category]));
+  const children = new Map<string, CategoryOut[]>();
+  const roots: CategoryOut[] = [];
+  const compare = (a: CategoryOut, b: CategoryOut) =>
+    (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name_ru.localeCompare(b.name_ru, "ru");
+
+  for (const category of categories) {
+    if (category.parent_id && byId.has(category.parent_id)) {
+      const siblings = children.get(category.parent_id) ?? [];
+      siblings.push(category);
+      children.set(category.parent_id, siblings);
+    } else {
+      roots.push(category);
+    }
+  }
+
+  const rows: CategoryTreeRow[] = [];
+  const visited = new Set<string>();
+  const visit = (category: CategoryOut, depth: number) => {
+    if (visited.has(category.id)) return;
+    visited.add(category.id);
+    rows.push({ category, depth });
+    for (const child of (children.get(category.id) ?? []).sort(compare)) visit(child, depth + 1);
+  };
+
+  for (const root of roots.sort(compare)) visit(root, 0);
+  // A corrupted cyclic relationship must not hide categories from the admin.
+  for (const category of [...categories].sort(compare)) visit(category, 0);
+  return rows;
+};
+
 export const CategoriesTab = ({
   categories,
   products,
@@ -47,19 +81,38 @@ export const CategoriesTab = ({
     );
   }, [categories]);
 
+  const treeRows = useMemo(() => buildCategoryTree(orderedCategories), [orderedCategories]);
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = orderedCategories.findIndex((category) => category.id === active.id);
-    const newIndex = orderedCategories.findIndex((category) => category.id === over.id);
+    const activeCategory = orderedCategories.find((category) => category.id === active.id);
+    const overCategory = orderedCategories.find((category) => category.id === over.id);
+    if (!activeCategory || !overCategory) return;
+    if (activeCategory.parent_id !== overCategory.parent_id) {
+      toast.error("Порядок можно менять только внутри одной родительской категории");
+      return;
+    }
+
+    const siblings = treeRows
+      .filter((row) => row.category.parent_id === activeCategory.parent_id)
+      .map((row) => row.category);
+    const oldIndex = siblings.findIndex((category) => category.id === active.id);
+    const newIndex = siblings.findIndex((category) => category.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
 
-    const reordered = arrayMove(orderedCategories, oldIndex, newIndex);
-    setOrderedCategories(reordered);
+    const reorderedSiblings = arrayMove(siblings, oldIndex, newIndex);
+    const newSortOrders = new Map(reorderedSiblings.map((category, index) => [category.id, index]));
+    const nextCategories = orderedCategories.map((category) =>
+      newSortOrders.has(category.id)
+        ? { ...category, sort_order: newSortOrders.get(category.id)! }
+        : category,
+    );
+    setOrderedCategories(nextCategories);
     try {
       await Promise.all(
-        reordered.map((category, index) =>
+        reorderedSiblings.map((category, index) =>
           category.sort_order === index
             ? Promise.resolve()
             : catalogApi.updateCategory(category.id, { sort_order: index }),
@@ -94,14 +147,15 @@ export const CategoriesTab = ({
         </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
-            items={orderedCategories.map((category) => category.id)}
+            items={treeRows.map((row) => row.category.id)}
             strategy={verticalListSortingStrategy}
           >
-            {orderedCategories.map((category) => (
+            {treeRows.map(({ category, depth }) => (
               <SortableCatRow
                 key={category.id}
                 cat={category}
                 allCats={orderedCategories}
+                depth={depth}
                 productCount={products.filter(
                   (product) => product.category_id === category.id,
                 ).length}

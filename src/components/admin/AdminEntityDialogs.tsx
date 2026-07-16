@@ -21,6 +21,7 @@ interface AdminEntityDialogsProps {
   setEditingCategory: Dispatch<SetStateAction<Partial<CategoryOut> | null>>;
   setEditingLookup: Dispatch<SetStateAction<LookupEditor | null>>;
   setEditingDiscount: Dispatch<SetStateAction<Partial<DiscountTierOut> | null>>;
+  isSavingCategory: boolean;
   onSaveCategory: () => void;
   onSaveLookup: () => void;
   onSaveDiscount: () => void;
@@ -34,10 +35,27 @@ export function AdminEntityDialogs({
   setEditingCategory,
   setEditingLookup,
   setEditingDiscount,
+  isSavingCategory,
   onSaveCategory: saveCategory,
   onSaveLookup: saveLookup,
   onSaveDiscount: saveDiscount,
 }: AdminEntityDialogsProps) {
+  const excludedParentIds = new Set<string>();
+  if (editingCategory?.id) {
+    excludedParentIds.add(editingCategory.id);
+    const pending = [editingCategory.id];
+    while (pending.length) {
+      const parentId = pending.pop()!;
+      for (const category of categories) {
+        if (category.parent_id === parentId && !excludedParentIds.has(category.id)) {
+          excludedParentIds.add(category.id);
+          pending.push(category.id);
+        }
+      }
+    }
+  }
+  const parentOptions = categories.filter((category) => !excludedParentIds.has(category.id));
+
   return (
     <>
       {/* CATEGORY DIALOG */}
@@ -52,7 +70,7 @@ export function AdminEntityDialogs({
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Родительская категория</span>
                 <select value={editingCategory.parent_id ?? ""} onChange={(e) => setEditingCategory({ ...editingCategory, parent_id: e.target.value || null })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
                   <option value="">— корневая —</option>
-                  {categories.filter((c) => c.id !== editingCategory.id && !c.parent_id).map((c) => (
+                  {parentOptions.map((c) => (
                     <option key={c.id} value={c.id}>{c.name_ru}</option>
                   ))}
                 </select>
@@ -90,8 +108,10 @@ export function AdminEntityDialogs({
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingCategory(null)}>Отмена</Button>
-            <Button onClick={saveCategory}>Сохранить</Button>
+            <Button variant="outline" onClick={() => setEditingCategory(null)} disabled={isSavingCategory}>Отмена</Button>
+            <Button onClick={saveCategory} disabled={isSavingCategory}>
+              {isSavingCategory ? "Сохранение…" : "Сохранить"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
