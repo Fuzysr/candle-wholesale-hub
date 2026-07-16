@@ -1,3 +1,4 @@
+import { useEffect, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
@@ -44,12 +45,29 @@ const companyLinks: FooterLink[] = [
 const SiteFooter = () => {
 
   const year = new Date().getFullYear();
+  const [hairline, setHairline] = useState(() =>
+    typeof window === "undefined" ? 1 : 1 / Math.max(window.devicePixelRatio || 1, 1),
+  );
+
+  useEffect(() => {
+    const updateHairline = () => {
+      setHairline(1 / Math.max(window.devicePixelRatio || 1, 1));
+    };
+
+    updateHairline();
+    // Browser zoom and moving a window between monitors can change DPR.
+    window.addEventListener("resize", updateHairline);
+    return () => window.removeEventListener("resize", updateHairline);
+  }, []);
 
 
 
   return (
 
-    <footer className="mt-16 border-t border-border bg-surface">
+    <footer
+      className="mt-16 border-t border-border bg-surface"
+      style={{ "--footer-hairline": `${hairline}px` } as CSSProperties}
+    >
 
       <div className="container grid gap-8 py-10 sm:grid-cols-2 sm:gap-10 md:py-14 lg:flex lg:items-start lg:justify-between lg:gap-8">
 
@@ -268,7 +286,7 @@ const FooterColumn = ({ title, links }: { title: string; links: FooterLink[] }) 
 
               aria-hidden
 
-              className="mr-0 h-px w-0 bg-primary transition-all duration-300 ease-out group-hover:mr-2 group-hover:w-4"
+              className="mr-0 block h-[var(--footer-hairline)] w-0 shrink-0 self-center bg-primary transition-[width,margin] duration-300 ease-out group-hover:mr-2 group-hover:w-4"
 
             />
 
