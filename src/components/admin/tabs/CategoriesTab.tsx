@@ -127,22 +127,27 @@ export const CategoriesTab = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
+      <div className="flex items-center justify-between gap-3">
+        <p className="max-w-[13rem] text-xs leading-snug text-muted-foreground sm:max-w-none">
           Перетащите строку за иконку <GripVertical className="inline h-3.5 w-3.5" />,
           чтобы изменить порядок
         </p>
-        <Button onClick={onCreate}>
+        <Button onClick={onCreate} className="shrink-0">
           <Plus className="h-4 w-4" /> Новая категория
         </Button>
       </div>
       <div className="overflow-hidden rounded-lg border border-border bg-surface">
-        <div className="grid grid-cols-[28px_1fr_140px_100px_60px_80px] items-center gap-2 border-b border-border bg-muted/60 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="hidden grid-cols-[28px_1fr_140px_100px_60px_80px] items-center gap-2 border-b border-border bg-muted/60 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground md:grid">
           <div />
           <div>Название</div>
           <div>Slug</div>
           <div>Родитель</div>
           <div className="text-right">Товары</div>
+          <div />
+        </div>
+        <div className="grid grid-cols-[24px_minmax(0,1fr)_72px] items-center gap-2 border-b border-border bg-muted/60 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground md:hidden">
+          <div />
+          <div>Название</div>
           <div />
         </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

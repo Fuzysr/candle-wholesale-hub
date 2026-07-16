@@ -152,7 +152,7 @@ export const SortableCatRow = ({
         opacity: isDragging ? 0.4 : 1,
       }}
       className={cn(
-        "grid grid-cols-[28px_1fr_140px_100px_60px_80px] items-center gap-2 border-t border-border px-3 py-2.5 text-sm",
+        "grid grid-cols-[24px_minmax(0,1fr)_72px] items-center gap-2 border-t border-border px-3 py-2.5 text-sm md:grid-cols-[28px_1fr_140px_100px_60px_80px]",
         depth > 0 && "bg-muted/15",
       )}
     >
@@ -166,26 +166,30 @@ export const SortableCatRow = ({
         <GripVertical className="h-4 w-4" />
       </button>
       <div
-        className={cn("min-w-0", depth === 0 ? "font-semibold" : "font-medium")}
-        style={{ paddingInlineStart: `${depth * 24}px` }}
+        className={cn("min-w-0 leading-tight", depth === 0 ? "font-semibold" : "font-medium")}
+        style={{ paddingInlineStart: `${depth * 14}px` }}
       >
         {cat.parent_id && <span className="text-muted-foreground">↳ </span>}
-        {cat.name_ru}
+        <span className="break-words">{cat.name_ru}</span>
+        <div className="mt-1 truncate font-normal text-[11px] text-muted-foreground md:hidden">
+          {cat.slug}
+          {cat.parent_id && ` · ${allCats.find((parent) => parent.id === cat.parent_id)?.name_ru ?? "Без родителя"}`}
+        </div>
       </div>
-      <div className="num text-xs text-muted-foreground">{cat.slug}</div>
-      <div className="text-xs text-muted-foreground">
+      <div className="num hidden text-xs text-muted-foreground md:block">{cat.slug}</div>
+      <div className="hidden text-xs text-muted-foreground md:block">
         {allCats.find((parent) => parent.id === cat.parent_id)?.name_ru ?? "—"}
       </div>
-      <div className="num text-right text-muted-foreground">{productCount}</div>
-      <div className="flex justify-end gap-1">
-        <Button size="sm" variant="ghost" onClick={() => onEdit(cat)}>
+      <div className="num hidden text-right text-muted-foreground md:block">{productCount}</div>
+      <div className="flex justify-end gap-0.5 md:gap-1">
+        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => onEdit(cat)}>
           <Pencil className="h-3.5 w-3.5" />
         </Button>
         <Button
           size="sm"
           variant="ghost"
+          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
           onClick={() => onDelete(cat.id)}
-          className="text-destructive hover:text-destructive"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
