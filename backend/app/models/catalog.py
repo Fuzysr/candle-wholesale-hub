@@ -36,6 +36,8 @@ class Category(Base):
         nullable=True,
     )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    show_on_home: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+    home_image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZDateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         TZDateTime, server_default=func.now(), onupdate=func.now(), nullable=False

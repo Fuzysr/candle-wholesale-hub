@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/admin/AdminPrimitives";
+import ImageUpload from "@/components/admin/ImageUpload";
 import type { AttributeKind, AttributeOut, CategoryOut, DiscountTierOut } from "@/lib/api";
 
 type LookupEditor = { kind: AttributeKind; data: Partial<AttributeOut> };
@@ -41,10 +42,10 @@ export function AdminEntityDialogs({
     <>
       {/* CATEGORY DIALOG */}
       <Dialog open={!!editingCategory} onOpenChange={(o) => !o && setEditingCategory(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="min-w-0 max-w-md">
           <DialogHeader><DialogTitle>{editingCategory?.id ? "Редактировать категорию" : "Новая категория"}</DialogTitle></DialogHeader>
           {editingCategory && (
-            <div className="grid gap-4">
+            <div className="grid min-w-0 grid-cols-1 gap-4">
               <Field label="Название *" value={editingCategory.name_ru ?? ""} onChange={(e) => setEditingCategory({ ...editingCategory, name_ru: e.target.value })} />
               <Field label="Slug *" value={editingCategory.slug ?? ""} onChange={(e) => setEditingCategory({ ...editingCategory, slug: e.target.value })} />
               <label className="block">
@@ -56,6 +57,35 @@ export function AdminEntityDialogs({
                   ))}
                 </select>
               </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-input bg-muted/20 p-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editingCategory.show_on_home === true}
+                  onChange={(e) =>
+                    setEditingCategory({ ...editingCategory, show_on_home: e.target.checked })
+                  }
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                />
+                <span>
+                  <span className="block font-medium text-foreground">Показывать на главной</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    На главной отображаются максимум пять отмеченных категорий.
+                  </span>
+                </span>
+              </label>
+              {editingCategory.show_on_home && (
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Обложка для главной
+                  </div>
+                  <ImageUpload
+                    value={editingCategory.home_image_url ?? null}
+                    onChange={(home_image_url) =>
+                      setEditingCategory({ ...editingCategory, home_image_url })
+                    }
+                  />
+                </div>
+              )}
 
             </div>
           )}

@@ -56,7 +56,7 @@ const ImageUpload = ({ value, onChange, kind = "product" }: Props) => {
   };
 
   return (
-    <div className="space-y-2">
+    <div className="w-full min-w-0 max-w-full overflow-hidden space-y-2">
       <span className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         Изображение товара
       </span>
@@ -75,7 +75,7 @@ const ImageUpload = ({ value, onChange, kind = "product" }: Props) => {
             </div>
           )}
         </div>
-        <div className="flex flex-1 flex-col gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
           <input
             ref={inputRef}
             type="file"
@@ -114,7 +114,7 @@ const ImageUpload = ({ value, onChange, kind = "product" }: Props) => {
             JPG / PNG / WebP, до 5 МБ. Квадрат 1:1 рекомендуется.
           </p>
           {value && (
-            <p className="truncate text-[11px] text-muted-foreground" title={value}>
+            <p className="w-full truncate text-[11px] text-muted-foreground" title={value}>
               {value}
             </p>
           )}

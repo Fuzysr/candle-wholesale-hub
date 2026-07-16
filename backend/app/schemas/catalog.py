@@ -45,6 +45,8 @@ class CategoryOut(_ORM):
     icon: str | None = None
     parent_id: UUID | None
     sort_order: int
+    show_on_home: bool = False
+    home_image_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -56,6 +58,8 @@ class CategoryCreate(BaseModel):
     icon: str | None = Field(default=None, max_length=64)
     parent_id: UUID | None = None
     sort_order: int = 0
+    show_on_home: bool = False
+    home_image_url: str | None = None
 
 
 class CategoryUpdate(BaseModel):
@@ -65,6 +69,8 @@ class CategoryUpdate(BaseModel):
     icon: str | None = Field(default=None, max_length=64)
     parent_id: UUID | None = None
     sort_order: int | None = None
+    show_on_home: bool | None = None
+    home_image_url: str | None = None
 
 
 class CategoryRef(_ORM):

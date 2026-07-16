@@ -3,25 +3,16 @@ import { ArrowRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "framer-motion";
 import { catalogApi } from "@/lib/api/catalog";
-import jar from "@/assets/products/jar-amber.jpg";
-import pillar from "@/assets/products/pillar-ivory.jpg";
-import taper from "@/assets/products/taper-white.jpg";
-import sphere from "@/assets/products/sphere.jpg";
-import tealight from "@/assets/products/tealight.jpg";
-
-const images = [jar, pillar, taper, sphere, tealight];
-const fallbackCategories = [
-  { id: "aromatic", slug: "aromatic", name_ru: "Ароматические" },
-  { id: "pillar", slug: "pillar", name_ru: "Столбовые" },
-  { id: "taper", slug: "taper", name_ru: "Столовые" },
-  { id: "decorative", slug: "decorative", name_ru: "Декоративные" },
-  { id: "tealights", slug: "tealights", name_ru: "Чайные" },
-];
 
 const TopCategories = () => {
   const reduceMotion = useReducedMotion();
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: () => catalogApi.listCategories() });
-  const visible = categories.length ? categories.slice(0, 5) : fallbackCategories;
+  const visible = categories.filter((category) => category.show_on_home).slice(0, 5);
+
+  // The section is a merchandising surface, not a fallback catalog. Hiding it
+  // until an admin explicitly selects categories prevents stale placeholder
+  // tiles and links from appearing on an empty catalog.
+  if (visible.length === 0) return null;
   return (
     <section className="border-y border-border/70 bg-foreground py-16 text-background md:py-24">
       <div className="container">
@@ -47,7 +38,15 @@ const TopCategories = () => {
               className={index < 2 ? "lg:col-span-3" : "lg:col-span-2"}
             >
               <Link to={`/catalog/${category.slug}`} className="group relative block h-full overflow-hidden rounded-3xl bg-muted">
-                <img src={images[index % images.length]} alt="" className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105" />
+                {category.home_image_url ? (
+                  <img
+                    src={category.home_image_url}
+                    alt=""
+                    className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                  />
+                ) : (
+                  <div aria-hidden className="h-full w-full bg-[radial-gradient(circle_at_72%_20%,hsl(var(--primary)/.55),transparent_32%),linear-gradient(135deg,hsl(var(--muted)),hsl(var(--foreground)))]" />
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
                 <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-5"><div><div className="text-xs text-white/65">Категория</div><h3 className="mt-1 font-display text-2xl text-white">{category.name_ru}</h3></div><span className="grid h-10 w-10 place-items-center rounded-full bg-white text-[#241b16] transition-transform group-hover:rotate-[-8deg]"><ArrowRight className="h-4 w-4" /></span></div>
               </Link>

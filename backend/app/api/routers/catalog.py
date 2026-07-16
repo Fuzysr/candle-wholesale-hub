@@ -345,6 +345,20 @@ async def admin_list_products(
 # ========================================================================
 
 
+async def _ensure_home_category_limit(
+    session: AsyncSession, *, exclude_category_id: UUID | None = None
+) -> None:
+    statement = select(func.count(Category.id)).where(Category.show_on_home.is_(True))
+    if exclude_category_id is not None:
+        statement = statement.where(Category.id != exclude_category_id)
+    featured_count = await session.scalar(statement)
+    if (featured_count or 0) >= 5:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="no more than five categories can be shown on the home page",
+        )
+
+
 @router.post(
     "/admin/categories",
     response_model=CategoryOut,
@@ -352,6 +366,8 @@ async def admin_list_products(
     dependencies=[Depends(require_admin)],
 )
 async def create_category(payload: CategoryCreate, session: AsyncSession = Depends(db_session)) -> Category:
+    if payload.show_on_home:
+        await _ensure_home_category_limit(session)
     category = Category(**payload.model_dump())
     session.add(category)
     try:
@@ -376,7 +392,10 @@ async def update_category(
     category = await session.get(Category, category_id)
     if category is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="category not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    if changes.get("show_on_home") is True and not category.show_on_home:
+        await _ensure_home_category_limit(session, exclude_category_id=category.id)
+    for k, v in changes.items():
         setattr(category, k, v)
     try:
         await session.commit()

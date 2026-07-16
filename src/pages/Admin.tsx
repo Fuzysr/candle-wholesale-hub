@@ -441,6 +441,8 @@ const Admin = () => {
       icon: editingCategory.icon || null,
       sort_order: Number(editingCategory.sort_order) || 0,
       parent_id: editingCategory.parent_id || null,
+      show_on_home: editingCategory.show_on_home === true,
+      home_image_url: editingCategory.home_image_url || null,
     };
     if (!payload.slug || !payload.name_ru) return toast.error("Заполните slug и название");
 

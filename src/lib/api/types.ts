@@ -45,6 +45,8 @@ export type CategoryOut = {
   icon: string | null;
   parent_id: string | null;
   sort_order: number;
+  show_on_home: boolean;
+  home_image_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -167,6 +169,8 @@ export type CategoryCreate = {
   icon?: string | null;
   parent_id?: string | null;
   sort_order?: number;
+  show_on_home?: boolean;
+  home_image_url?: string | null;
 };
 
 export type CategoryUpdate = Partial<CategoryCreate>;

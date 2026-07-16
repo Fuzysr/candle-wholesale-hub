@@ -223,6 +223,37 @@ async def test_non_admin_cannot_write_catalog(client, client_token, auth_headers
     assert r.status_code == 403
 
 
+async def test_only_five_categories_can_be_shown_on_home(
+    client, admin_token, auth_headers
+):
+    headers = auth_headers(admin_token)
+    for index in range(5):
+        response = await client.post(
+            "/admin/categories",
+            json={
+                "slug": f"home-category-{index}",
+                "name_ru": f"Home category {index}",
+                "name_en": f"Home category {index}",
+                "show_on_home": True,
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+
+    rejected = await client.post(
+        "/admin/categories",
+        json={
+            "slug": "home-category-six",
+            "name_ru": "Home category six",
+            "name_en": "Home category six",
+            "show_on_home": True,
+        },
+        headers=headers,
+    )
+    assert rejected.status_code == 422
+    assert "five" in rejected.json()["detail"]
+
+
 async def test_discount_tiers_listable_and_admin_crud(
     client, admin_token, auth_headers
 ):
