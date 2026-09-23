@@ -108,7 +108,7 @@ const Hero = () => {
           </motion.div>
 
           <motion.h1 {...enter(0.06)} className="hero-title mt-7 max-w-4xl font-display tracking-[-0.05em] text-white">
-            Свечи, которые <span className="italic text-[#efa06d]">хочется</span> поставить на полку
+            Ваш бизнес в <span className="italic text-[#efa06d]">выгодном свете</span>
           </motion.h1>
 
           <motion.p {...enter(0.12)} className="mt-7 max-w-2xl text-base leading-relaxed text-white/75 sm:text-lg">

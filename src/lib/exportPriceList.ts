@@ -47,7 +47,7 @@ const COLUMNS: Column[] = [
   { key: "size", header: "Размер", width: 10, align: "center" },
   { key: "color", header: "Цвет", width: 12, align: "left" },
   { key: "lengthMm", header: "Длина, мм", width: 10, numFmt: "0", align: "right" },
-  { key: "widthMm", header: "Ширина, мм", width: 10, numFmt: "0", align: "right" },
+  { key: "widthMm", header: "Диаметр, мм", width: 10, numFmt: "0", align: "right" },
   { key: "heightMm", header: "Высота, мм", width: 10, numFmt: "0", align: "right" },
   { key: "weightGr", header: "Вес, г", width: 9, numFmt: "0", align: "right" },
   { key: "burnHours", header: "Горение, ч", width: 10, numFmt: "0", align: "right" },

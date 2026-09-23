@@ -25,7 +25,7 @@ const RecentlyViewed = ({ excludeId, title = "Вы недавно смотрел
               to={`/product/${p.slug}`}
               className="group overflow-hidden rounded-lg border border-border bg-background transition-shadow hover:shadow-md"
             >
-              <div className="aspect-square overflow-hidden bg-muted">
+              <div className="aspect-[3/4] overflow-hidden bg-muted">
                 <img
                   src={getProductImage(p.image_url)}
                   alt={lang === "ru" ? p.name_ru : p.name_en}

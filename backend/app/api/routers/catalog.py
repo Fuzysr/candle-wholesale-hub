@@ -93,6 +93,8 @@ def _apply_product_filters(
     scent_ids: list[UUID],
     shape_ids: list[UUID],
     colors: list[str],
+    manufacturing_methods: list[str],
+    has_scent: bool | None,
     q: str | None,
     in_stock: bool | None,
     price_min: Decimal | None,
@@ -103,6 +105,8 @@ def _apply_product_filters(
     width_max: Decimal | None,
     height_min: Decimal | None,
     height_max: Decimal | None,
+    burn_time_min: Decimal | None,
+    burn_time_max: Decimal | None,
     currency: CatalogCurrency,
 ):
     if category_ids:
@@ -129,6 +133,10 @@ def _apply_product_filters(
         variant_filters.append(ProductVariant.stock_boxes > ProductVariant.reserved_boxes)
     if colors:
         variant_filters.append(ProductVariant.color.in_(colors))
+    if manufacturing_methods:
+        variant_filters.append(ProductVariant.manufacturing_method.in_(manufacturing_methods))
+    if has_scent is not None:
+        variant_filters.append(ProductVariant.has_scent.is_(has_scent))
     price = (
         ProductVariant.price_per_piece_rub
         if currency == "RUB"
@@ -142,6 +150,7 @@ def _apply_product_filters(
         (ProductVariant.length_mm, length_min, length_max),
         (ProductVariant.width_mm, width_min, width_max),
         (ProductVariant.height_mm, height_min, height_max),
+        (ProductVariant.burn_time_hours, burn_time_min, burn_time_max),
     ):
         if minimum is not None:
             variant_filters.append(column >= minimum)
@@ -240,6 +249,8 @@ async def search_products(
     scent_ids: list[UUID] = Query(default=[]),
     shape_ids: list[UUID] = Query(default=[]),
     colors: list[str] = Query(default=[]),
+    manufacturing_methods: list[str] = Query(default=[]),
+    has_scent: bool | None = None,
     q: str | None = Query(None, max_length=200),
     in_stock: bool | None = None,
     price_min: Decimal | None = Query(None, ge=0),
@@ -250,6 +261,8 @@ async def search_products(
     width_max: Decimal | None = Query(None, ge=0),
     height_min: Decimal | None = Query(None, ge=0),
     height_max: Decimal | None = Query(None, ge=0),
+    burn_time_min: Decimal | None = Query(None, ge=0),
+    burn_time_max: Decimal | None = Query(None, ge=0),
     sort: ProductSort = "newest",
     language: CatalogLanguage = "ru",
     currency: CatalogCurrency = "RUB",
@@ -262,6 +275,8 @@ async def search_products(
         "scent_ids": scent_ids,
         "shape_ids": shape_ids,
         "colors": colors,
+        "manufacturing_methods": manufacturing_methods,
+        "has_scent": has_scent,
         "q": q,
         "in_stock": in_stock,
         "price_min": price_min,
@@ -272,6 +287,8 @@ async def search_products(
         "width_max": width_max,
         "height_min": height_min,
         "height_max": height_max,
+        "burn_time_min": burn_time_min,
+        "burn_time_max": burn_time_max,
         "currency": currency,
     }
     base = _apply_product_filters(

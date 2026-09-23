@@ -26,7 +26,7 @@ from scripts._seed_utils import upsert
 
 CATEGORIES = [
     {"slug": "tea-lights", "name_ru": "Чайные свечи", "name_en": "Tea lights", "sort_order": 10},
-    {"slug": "pillar", "name_ru": "Столбовые свечи", "name_en": "Pillar candles", "sort_order": 20},
+    {"slug": "pillar", "name_ru": "Цилиндры", "name_en": "Cylinder candles", "sort_order": 20},
     {"slug": "taper", "name_ru": "Столовые свечи", "name_en": "Taper candles", "sort_order": 30},
     {"slug": "decorative", "name_ru": "Декоративные", "name_en": "Decorative", "sort_order": 40},
 ]
@@ -205,7 +205,7 @@ async def main() -> None:
     print(f" Email:     {email}")
     print(f" Password:  {password}")
     print(f" User ID:   {user_id}")
-    print(f" Login at:  http://localhost:5173/auth  (mode: Вход)")
+    print(" Login at:  http://localhost:5173/auth  (mode: Вход)")
     print(banner)
 
 

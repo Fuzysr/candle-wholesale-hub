@@ -70,7 +70,7 @@ const ProductPage = () => {
         <div className="container py-10">
           <Skeleton className="mb-4 h-4 w-40" />
           <div className="grid gap-8 md:grid-cols-2">
-            <Skeleton className="aspect-square w-full rounded-lg" />
+            <Skeleton className="aspect-[3/4] w-full rounded-lg" />
             <div className="space-y-4">
               <Skeleton className="h-8 w-3/4" />
               <Skeleton className="h-4 w-1/2" />
@@ -171,7 +171,7 @@ const ProductPage = () => {
           {variant && (() => {
             const specs: { label: string; value: string }[] = [];
             if (variant.length_mm) specs.push({ label: "Длина", value: `${variant.length_mm} мм` });
-            if (variant.width_mm) specs.push({ label: "Ширина", value: `${variant.width_mm} мм` });
+            if (variant.width_mm) specs.push({ label: "Диаметр", value: `${variant.width_mm} мм` });
             if (variant.height_mm) specs.push({ label: "Высота", value: `${variant.height_mm} мм` });
             if (variant.weight_gr) specs.push({ label: "Вес", value: `${variant.weight_gr} г` });
             if (variant.burn_time_hours) specs.push({ label: "Время горения", value: `${variant.burn_time_hours} ч` });

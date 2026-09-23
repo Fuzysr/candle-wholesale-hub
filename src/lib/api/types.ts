@@ -68,6 +68,8 @@ export type AttributeOut = {
 
 export type AttributeKind = "materials" | "scents" | "shapes";
 
+export type ManufacturingMethod = "Пресованные" | "Экструзионные" | "Литые";
+
 export type VolumeDiscountOut = {
   id: string;
   variant_id: string;
@@ -103,6 +105,8 @@ export type ProductVariantOut = {
   size: string | null;
   color: string | null;
   shape: string | null;
+  manufacturing_method: ManufacturingMethod | null;
+  has_scent: boolean;
   pieces_per_box: number;
   price_per_piece_rub: number;
   price_per_piece_usd: number;
@@ -205,6 +209,8 @@ export type ProductVariantCreate = {
   size?: string | null;
   color?: string | null;
   shape?: string | null;
+  manufacturing_method?: ManufacturingMethod | null;
+  has_scent?: boolean;
   pieces_per_box: number;
   price_per_piece_rub: number;
   price_per_piece_usd: number;
@@ -263,6 +269,8 @@ export type ProductListParams = {
   scent_ids?: string[];
   shape_ids?: string[];
   colors?: string[];
+  manufacturing_methods?: ManufacturingMethod[];
+  has_scent?: boolean;
   q?: string;
   in_stock?: boolean;
   price_min?: number;
@@ -273,6 +281,8 @@ export type ProductListParams = {
   width_max?: number;
   height_min?: number;
   height_max?: number;
+  burn_time_min?: number;
+  burn_time_max?: number;
   sort?: ProductSort;
   language?: "ru" | "en";
   currency?: Currency;

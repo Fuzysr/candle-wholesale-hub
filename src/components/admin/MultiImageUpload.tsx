@@ -1,7 +1,12 @@
 import { useRef, useState } from "react";
 import { Upload, X, Loader2, ArrowUp, ArrowDown, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { apiErrorMessage, uploadsApi } from "@/lib/api";
+import { uploadsApi } from "@/lib/api";
+import {
+  ALLOWED_IMAGE_TYPES,
+  imageUploadErrorMessage,
+  validateImageFile,
+} from "@/lib/imageUploadErrors";
 import { toast } from "sonner";
 
 export type GalleryImage = {
@@ -22,9 +27,6 @@ type Props = {
   mainImageUrl?: string | null;
 };
 
-const MAX_SIZE = 5 * 1024 * 1024;
-const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/avif"];
-
 const MultiImageUpload = ({ value, onChange, mainImageUrl }: Props) => {
   const hasMainImage = !!mainImageUrl;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -40,13 +42,13 @@ const MultiImageUpload = ({ value, onChange, mainImageUrl }: Props) => {
     try {
       const uploaded: GalleryImage[] = [];
       for (const file of Array.from(files)) {
-        if (!ALLOWED.includes(file.type)) { toast.error(`${file.name}: неверный формат`); continue; }
-        if (file.size > MAX_SIZE) { toast.error(`${file.name}: больше 5 МБ`); continue; }
+        const validationError = validateImageFile(file);
+        if (validationError) { toast.error(`${file.name}: ${validationError}`); continue; }
         try {
           const { url } = await uploadsApi.uploadProductImage(file);
           uploaded.push({ url, sort_order: 0 });
         } catch (err) {
-          toast.error(apiErrorMessage(err, `${file.name}: ошибка загрузки`));
+          toast.error(imageUploadErrorMessage(err, file.name));
         }
       }
       if (uploaded.length) {
@@ -94,7 +96,7 @@ const MultiImageUpload = ({ value, onChange, mainImageUrl }: Props) => {
         ref={inputRef}
         type="file"
         multiple
-        accept={ALLOWED.join(",")}
+        accept={ALLOWED_IMAGE_TYPES.join(",")}
         className="hidden"
         onChange={(e) => e.target.files && e.target.files.length && handleFiles(e.target.files)}
       />
@@ -106,7 +108,7 @@ const MultiImageUpload = ({ value, onChange, mainImageUrl }: Props) => {
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
           {sorted.map((img, i) => (
             <div key={img.id ?? img.url} className="group relative overflow-hidden rounded-md border border-border bg-muted">
-              <img src={img.url} alt="" className="aspect-square w-full object-cover" />
+              <img src={img.url} alt="" className="aspect-[3/4] w-full object-cover" />
               {i === 0 && !hasMainImage && (
                 <span className="absolute left-1 top-1 inline-flex items-center gap-0.5 rounded-sm bg-primary px-1.5 py-0.5 text-[9px] font-semibold uppercase text-primary-foreground">
                   <Star className="h-2.5 w-2.5" /> главное

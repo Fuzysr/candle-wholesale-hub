@@ -1,7 +1,12 @@
 import { useRef, useState } from "react";
 import { Upload, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { apiErrorMessage, uploadsApi } from "@/lib/api";
+import { uploadsApi } from "@/lib/api";
+import {
+  ALLOWED_IMAGE_TYPES,
+  imageUploadErrorMessage,
+  validateImageFile,
+} from "@/lib/imageUploadErrors";
 import { getProductImage } from "@/lib/productImages";
 import { toast } from "sonner";
 
@@ -11,9 +16,6 @@ type Props = {
   /** Which bucket to upload into. Defaults to product images. */
   kind?: "product" | "company";
 };
-
-const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
-const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
 const ImageUpload = ({ value, onChange, kind = "product" }: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -25,19 +27,15 @@ const ImageUpload = ({ value, onChange, kind = "product" }: Props) => {
     kind === "company" ? uploadsApi.uploadCompanyAsset(file) : uploadsApi.uploadProductImage(file);
 
   const handleFile = async (file: File) => {
-    if (!ALLOWED.includes(file.type)) {
-      return toast.error("Только JPG, PNG, WebP или AVIF");
-    }
-    if (file.size > MAX_SIZE) {
-      return toast.error("Максимум 5 МБ");
-    }
+    const validationError = validateImageFile(file);
+    if (validationError) return toast.error(validationError);
     setUploading(true);
     try {
       const { url } = await upload(file);
       onChange(url);
       toast.success("Изображение загружено");
     } catch (err) {
-      toast.error(apiErrorMessage(err, "Ошибка загрузки"));
+      toast.error(imageUploadErrorMessage(err, file.name));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -79,7 +77,7 @@ const ImageUpload = ({ value, onChange, kind = "product" }: Props) => {
           <input
             ref={inputRef}
             type="file"
-            accept={ALLOWED.join(",")}
+            accept={ALLOWED_IMAGE_TYPES.join(",")}
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];

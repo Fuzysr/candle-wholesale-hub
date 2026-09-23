@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -6,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class _ORM(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+
+ManufacturingMethod = Literal["Пресованные", "Экструзионные", "Литые"]
 
 
 # ---------- Attribute lookups (materials / scents / shapes) ----------
@@ -110,6 +114,8 @@ class ProductVariantOut(_ORM):
     size: str | None
     color: str | None
     shape: str | None
+    manufacturing_method: ManufacturingMethod | None = None
+    has_scent: bool = False
     pieces_per_box: int
     price_per_piece_rub: float
     price_per_piece_usd: float
@@ -142,6 +148,8 @@ class ProductVariantCreate(BaseModel):
     size: str | None = None
     color: str | None = None
     shape: str | None = None
+    manufacturing_method: ManufacturingMethod | None = None
+    has_scent: bool = False
     pieces_per_box: int = Field(ge=1, default=1)
     price_per_piece_rub: float = Field(ge=0)
     price_per_piece_usd: float = Field(ge=0)
@@ -165,6 +173,8 @@ class ProductVariantUpdate(BaseModel):
     size: str | None = None
     color: str | None = None
     shape: str | None = None
+    manufacturing_method: ManufacturingMethod | None = None
+    has_scent: bool | None = None
     pieces_per_box: int | None = Field(default=None, ge=1)
     price_per_piece_rub: float | None = Field(default=None, ge=0)
     price_per_piece_usd: float | None = Field(default=None, ge=0)

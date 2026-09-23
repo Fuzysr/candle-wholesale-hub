@@ -137,6 +137,8 @@ class ProductVariant(Base):
     size: Mapped[str | None] = mapped_column(String(100), nullable=True)
     color: Mapped[str | None] = mapped_column(String(100), nullable=True)
     shape: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    manufacturing_method: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    has_scent: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
     pieces_per_box: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     price_per_piece_rub: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     price_per_piece_usd: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)

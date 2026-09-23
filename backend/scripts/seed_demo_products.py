@@ -39,7 +39,7 @@ from scripts._seed_utils import upsert
 
 CATEGORIES = [
     {"slug": "aromatic", "name_ru": "Ароматические", "name_en": "Aromatic", "sort_order": 50},
-    {"slug": "pillar", "name_ru": "Столбовые", "name_en": "Pillar", "sort_order": 20},
+    {"slug": "pillar", "name_ru": "Цилиндры", "name_en": "Cylinders", "sort_order": 20},
     {"slug": "decorative", "name_ru": "Декоративные", "name_en": "Decorative", "sort_order": 40},
     {"slug": "tealights", "name_ru": "Чайные", "name_en": "Tealights", "sort_order": 10},
     {"slug": "taper", "name_ru": "Столовые", "name_en": "Taper", "sort_order": 30},

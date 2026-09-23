@@ -267,7 +267,7 @@ const ProductGallery = ({ images, alt }: Props) => {
         <img
           src={getProductImage(current)}
           alt={alt}
-          className="aspect-[4/3] w-full bg-muted object-contain"
+          className="aspect-[3/4] w-full bg-muted object-cover"
           draggable={false}
           style={{
             transform: mainImgTransform,
@@ -282,7 +282,7 @@ const ProductGallery = ({ images, alt }: Props) => {
           <img
             src={getProductImage(list[slide.nextIndex])}
             alt={alt}
-            className="absolute inset-0 h-full w-full bg-muted object-contain"
+            className="absolute inset-0 h-full w-full bg-muted object-cover"
             draggable={false}
             style={{
               transform: nextTransform,
@@ -366,7 +366,7 @@ const ProductGallery = ({ images, alt }: Props) => {
               <img
                 src={getProductImage(src)}
                 alt=""
-                className="aspect-square w-full object-cover"
+                className="aspect-[3/4] w-full object-cover"
               />
             </button>
           ))}

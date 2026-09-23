@@ -10,6 +10,7 @@
 export type SortKey = "newest" | "price-asc" | "price-desc" | "name" | "stock";
 
 export type ViewMode = "grid" | "table";
+export type ScentPresence = "any" | "yes" | "no";
 
 /**
  * Filter / sort / view state — exactly what the catalog page exposes through
@@ -22,18 +23,21 @@ export type CatalogFilterState = {
   categoryIds: string[];
   onlyInStock: boolean;
   colorIds: string[];
-  materialIds: string[];
-  scentIds: string[];
-  shapeIds: string[];
+  manufacturingMethods: string[];
+  scentPresence: ScentPresence;
   priceMin: string;
   priceMax: string;
   // Габариты товара (мм)
-  lengthMin: string;
-  lengthMax: string;
-  widthMin: string;
-  widthMax: string;
+  lengthMin?: string;
+  lengthMax?: string;
+  widthMin?: string;
+  widthMax?: string;
+  diameterMin: string;
+  diameterMax: string;
   heightMin: string;
   heightMax: string;
+  burnTimeMin: string;
+  burnTimeMax: string;
   sort: SortKey;
   view: ViewMode;
 };
@@ -82,17 +86,16 @@ export const DEFAULT_FILTER_STATE: CatalogFilterState = {
   categoryIds: [],
   onlyInStock: true,
   colorIds: [],
-  materialIds: [],
-  scentIds: [],
-  shapeIds: [],
+  manufacturingMethods: [],
+  scentPresence: "any",
   priceMin: "",
   priceMax: "",
-  lengthMin: "",
-  lengthMax: "",
-  widthMin: "",
-  widthMax: "",
+  diameterMin: "",
+  diameterMax: "",
   heightMin: "",
   heightMax: "",
+  burnTimeMin: "",
+  burnTimeMax: "",
   sort: "newest",
   view: "grid",
 };

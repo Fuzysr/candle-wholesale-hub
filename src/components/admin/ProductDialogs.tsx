@@ -11,15 +11,21 @@ import {
   uploadsApi,
   type AttributeOut,
   type CategoryOut,
+  type ManufacturingMethod,
   type ProductOut,
   type ProductVariantOut,
   type VariantImageOut,
 } from "@/lib/api";
 import { toast } from "sonner";
+import {
+  imageUploadErrorMessage,
+  validateImageFile,
+} from "@/lib/imageUploadErrors";
 
 type EditableVariant = Partial<ProductVariantOut> & { product_id: string };
 type VariantDiscount = { min_boxes: number; discount_percent: number };
 type BulkVariant = { product_id: string };
+const MANUFACTURING_METHODS: ManufacturingMethod[] = ["Пресованные", "Экструзионные", "Литые"];
 
 interface ProductDialogsProps {
   editingProduct: Partial<ProductOut> | null;
@@ -177,14 +183,41 @@ export function ProductDialogs({
               <Field label="Внешний ID (1С/МойСклад)" value={editingVariant.external_id ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, external_id: e.target.value })} />
               <Field label="Размер" value={editingVariant.size ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, size: e.target.value })} />
               <Field label="Цвет" value={editingVariant.color ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, color: e.target.value })} />
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Способ изготовления
+                </span>
+                <select
+                  value={editingVariant.manufacturing_method ?? ""}
+                  onChange={(e) => setEditingVariant({ ...editingVariant, manufacturing_method: (e.target.value || null) as ManufacturingMethod | null })}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">—</option>
+                  {MANUFACTURING_METHODS.map((method) => (
+                    <option key={method} value={method}>{method}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex min-h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(editingVariant.has_scent)}
+                  onChange={(e) => setEditingVariant({ ...editingVariant, has_scent: e.target.checked })}
+                  className="h-4 w-4 accent-primary"
+                />
+                Есть аромат
+              </label>
               <Field label="Шт. в коробке" type="number" min={1} value={editingVariant.pieces_per_box ?? 1} onChange={(e) => setEditingVariant({ ...editingVariant, pieces_per_box: Number(e.target.value) })} />
               <Field label="Остаток (коробок)" type="number" min={0} value={editingVariant.stock_boxes ?? 0} onChange={(e) => setEditingVariant({ ...editingVariant, stock_boxes: Number(e.target.value) })} />
               <Field label="Цена за шт. (RUB)" type="number" min={0} step={0.01} value={editingVariant.price_per_piece_rub ?? 0} onChange={(e) => setEditingVariant({ ...editingVariant, price_per_piece_rub: Number(e.target.value) })} />
-              <Field label="Длина (мм)" type="number" min={0} value={editingVariant.length_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, length_mm: e.target.value ? Number(e.target.value) : null })} />
-              <Field label="Ширина (мм)" type="number" min={0} value={editingVariant.width_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, width_mm: e.target.value ? Number(e.target.value) : null })} />
+              <Field label="Диаметр (мм)" type="number" min={0} value={editingVariant.width_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, width_mm: e.target.value ? Number(e.target.value) : null })} />
               <Field label="Высота (мм)" type="number" min={0} value={editingVariant.height_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, height_mm: e.target.value ? Number(e.target.value) : null })} />
               <Field label="Вес (г)" type="number" min={0} value={editingVariant.weight_gr ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, weight_gr: e.target.value ? Number(e.target.value) : null })} />
               <Field label="Время горения (ч)" type="number" min={0} value={editingVariant.burn_time_hours ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, burn_time_hours: e.target.value ? Number(e.target.value) : null })} />
+              <div className="md:col-span-2 rounded-md border border-border bg-muted/40 px-3 py-2">
+                <p className="text-xs font-semibold text-foreground">Транспортная коробка (ТК)</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Параметры внешней коробки для склада и доставки.</p>
+              </div>
               <Field label="Упаковок в ТК" type="number" min={1} value={editingVariant.packages_per_box ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, packages_per_box: e.target.value ? Number(e.target.value) : null })} />
               <Field label="Длина ТК (мм)" type="number" min={0} value={editingVariant.box_length_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, box_length_mm: e.target.value ? Number(e.target.value) : null })} />
               <Field label="Ширина ТК (мм)" type="number" min={0} value={editingVariant.box_width_mm ?? ""} onChange={(e) => setEditingVariant({ ...editingVariant, box_width_mm: e.target.value ? Number(e.target.value) : null })} />
@@ -209,14 +242,15 @@ export function ProductDialogs({
                             setVariantImgUploading(true);
                             let added = 0;
                             for (const file of Array.from(files)) {
-                              if (file.size > 5 * 1024 * 1024) { toast.error(`${file.name}: больше 5 МБ`); continue; }
+                              const validationError = validateImageFile(file);
+                              if (validationError) { toast.error(`${file.name}: ${validationError}`); continue; }
                               try {
                                 const { url } = await uploadsApi.uploadProductImage(file);
                                 const img = await catalogApi.createVariantImage(editingVariant.id, { url, sort_order: variantImages.length + added });
                                 setVariantImages((prev) => [...prev, img]);
                                 added++;
                               } catch (err) {
-                                toast.error(apiErrorMessage(err, `${file.name}: ошибка`));
+                                toast.error(imageUploadErrorMessage(err, file.name));
                               }
                             }
                             setVariantImgUploading(false);

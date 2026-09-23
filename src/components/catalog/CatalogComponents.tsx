@@ -175,7 +175,7 @@ export const ProductCard = ({
       ref={(el) => registerRef?.(v.id, el)}
       data-variant-id={v.id}
       className={cn(
-        "group relative flex h-full flex-col overflow-hidden rounded-lg border bg-surface transition-all duration-300 ease-out",
+        "group relative flex flex-col overflow-hidden rounded-lg border bg-surface transition-all duration-300 ease-out",
         stock > 0 && !selectMode
           ? "border-border hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/15"
           : stock > 0 && selectMode && selected
@@ -203,7 +203,7 @@ export const ProductCard = ({
 
       <Link
         to={`/product/${p.slug}?variant=${v.id}`}
-        className="relative block aspect-square overflow-hidden bg-muted"
+        className="relative block aspect-[3/4] overflow-hidden bg-muted"
         aria-label={productName(p, lang)}
         tabIndex={selectable ? -1 : 0}
       >
@@ -211,7 +211,7 @@ export const ProductCard = ({
           src={getProductImage(cover)}
           alt={productName(p, lang)}
           loading="lazy"
-          className="h-full w-full bg-muted object-contain p-2 transition-transform duration-500 group-hover:scale-[1.03]"
+          className="h-full w-full bg-muted object-cover"
         />
         {inCart && !selectMode && (
           <span className="absolute right-3 top-3 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground shadow-md">
@@ -233,20 +233,20 @@ export const ProductCard = ({
         )}
       </Link>
 
-      <div className="flex flex-1 flex-col p-2.5 sm:p-4">
+      <div className="flex flex-col p-2.5 sm:p-3.5">
         <div className="flex items-start justify-between gap-2">
           <span className="num text-[11px] text-muted-foreground">{v.sku}</span>
           <StockIndicator stockBoxes={stock} />
         </div>
         <Link
           to={`/product/${p.slug}?variant=${v.id}`}
-          className="mt-1 line-clamp-2 h-[2.5em] text-sm font-bold leading-snug text-foreground transition-colors hover:text-primary"
+          className="mt-1 line-clamp-2 text-sm font-bold leading-snug text-foreground transition-colors hover:text-primary"
         >
           {productName(p, lang)}
         </Link>
         <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">{variantLabel(v)}</div>
 
-        <div className="mt-auto flex items-baseline justify-between pt-2 sm:pt-3">
+        <div className="mt-2 flex items-baseline justify-between">
           <div>
             <div className="price text-base font-bold sm:text-lg">{formatMoney(variantBoxPrice(v, currency), currency)}</div>
             <div className="text-[11px] text-muted-foreground">
@@ -393,7 +393,7 @@ export const MobileListRow = ({
       )}
       <Link
         to={`/product/${p.slug}?variant=${v.id}`}
-        className="block h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
+        className="block aspect-[3/4] w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
         aria-label={productName(p, lang)}
         tabIndex={selectable ? -1 : 0}
       >
@@ -401,7 +401,7 @@ export const MobileListRow = ({
           src={getProductImage(cover)}
           alt={productName(p, lang)}
           loading="lazy"
-          className="h-full w-full bg-muted object-contain p-1"
+          className="h-full w-full bg-muted object-cover"
         />
       </Link>
 
@@ -532,7 +532,7 @@ export const TableRow = ({
       {/* Thumbnail */}
       <Link
         to={`/product/${p.slug}?variant=${v.id}`}
-        className="block h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
+        className="block aspect-[3/4] w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
         aria-label={productName(p, lang)}
         tabIndex={selectable ? -1 : 0}
       >
@@ -540,7 +540,7 @@ export const TableRow = ({
           src={getProductImage(cover)}
           alt={productName(p, lang)}
           loading="lazy"
-          className="h-full w-full bg-muted object-contain p-1 transition-transform duration-300 hover:scale-[1.04]"
+          className="h-full w-full bg-muted object-cover"
         />
       </Link>
 

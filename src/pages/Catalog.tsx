@@ -47,7 +47,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Reveal from "@/components/ui/reveal";
-import { catalogApi } from "@/lib/api";
+import { catalogApi, type ManufacturingMethod } from "@/lib/api";
 import { getProductImage } from "@/lib/productImages";
 import { useAppStore } from "@/store/appStore";
 import { useCartStore } from "@/store/cartStore";
@@ -64,9 +64,6 @@ import {
   type Product,
   type ProductVariant,
   type Category,
-  type Material,
-  type Scent,
-  type Shape,
 } from "@/lib/catalog";
 import { formatMoney, type Currency, type Lang } from "@/lib/format";
 import StockIndicator from "@/components/shop/StockIndicator";
@@ -104,6 +101,8 @@ const SORT_LABEL: Record<SortKey, string> = Object.fromEntries(
 ) as Record<SortKey, string>;
 
 const PAGE_SIZE = 20;
+const MANUFACTURING_METHODS: ManufacturingMethod[] = ["Пресованные", "Экструзионные", "Литые"];
+type ScentPresence = "any" | "yes" | "no";
 
 /**
  * Produce a compact list of page numbers to render in the pagination bar,
@@ -153,9 +152,6 @@ const renderHighlighted = (text: string, query: string): ReactNode => {
 const FILTERS_KEY = "catalog_filters";
 const EMPTY_CATEGORIES: Category[] = [];
 const EMPTY_PRODUCTS: Product[] = [];
-const EMPTY_MATERIALS: Material[] = [];
-const EMPTY_SCENTS: Scent[] = [];
-const EMPTY_SHAPES: Shape[] = [];
 const EMPTY_COLORS: string[] = [];
 
 const readSavedFilters = (): Record<string, unknown> | null => {
@@ -219,21 +215,22 @@ const Catalog = () => {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [onlyInStock, setOnlyInStock] = useState(() => initial?.onlyInStock ?? (saved?.onlyInStock as boolean | undefined) ?? true);
   const [colorIds, setColorIds] = useState<Set<string>>(() => new Set((initial?.colorIds) ?? []));
-  const [materialIds, setMaterialIds] = useState<Set<string>>(() => new Set((initial?.materialIds) ?? []));
-  const [scentIds, setScentIds] = useState<Set<string>>(() => new Set((initial?.scentIds) ?? []));
-  const [shapeIds, setShapeIds] = useState<Set<string>>(() => new Set((initial?.shapeIds) ?? []));
+  const [manufacturingMethods, setManufacturingMethods] = useState<Set<string>>(
+    () => new Set((initial?.manufacturingMethods) ?? []),
+  );
+  const [scentPresence, setScentPresence] = useState<ScentPresence>(() => initial?.scentPresence ?? "any");
   const [sort, setSort] = useState<SortKey>(() => (initial?.sort ?? saved?.sort as SortKey) ?? "newest");
   const [openCats, setOpenCats] = useState<Set<string>>(new Set());
   const [categoryIds, setCategoryIds] = useState<Set<string>>(() => new Set((initial?.categoryIds) ?? []));
   const [priceMin, setPriceMin] = useState(() => initial?.priceMin ?? "");
   const [priceMax, setPriceMax] = useState(() => initial?.priceMax ?? "");
   // Габариты товара (мм)
-  const [lengthMin, setLengthMin] = useState(() => initial?.lengthMin ?? "");
-  const [lengthMax, setLengthMax] = useState(() => initial?.lengthMax ?? "");
-  const [widthMin, setWidthMin] = useState(() => initial?.widthMin ?? "");
-  const [widthMax, setWidthMax] = useState(() => initial?.widthMax ?? "");
+  const [diameterMin, setDiameterMin] = useState(() => initial?.diameterMin ?? initial?.widthMin ?? "");
+  const [diameterMax, setDiameterMax] = useState(() => initial?.diameterMax ?? initial?.widthMax ?? "");
   const [heightMin, setHeightMin] = useState(() => initial?.heightMin ?? "");
   const [heightMax, setHeightMax] = useState(() => initial?.heightMax ?? "");
+  const [burnTimeMin, setBurnTimeMin] = useState(() => initial?.burnTimeMin ?? "");
+  const [burnTimeMax, setBurnTimeMax] = useState(() => initial?.burnTimeMax ?? "");
 
   /*
     Live search: `searchInput` drives the filter instantly on every keystroke,
@@ -397,19 +394,13 @@ const Catalog = () => {
     }
   };
 
-  const [catQ, matQ, scentQ, shapeQ, colorsQ] = useQueries({
+  const [catQ, colorsQ] = useQueries({
     queries: [
       { queryKey: ["categories"], queryFn: () => catalogApi.listCategories(), retry: 1, retryDelay: 500 },
-      { queryKey: ["attributes", "materials"], queryFn: () => catalogApi.listAttributes("materials"), retry: 1, retryDelay: 500 },
-      { queryKey: ["attributes", "scents"], queryFn: () => catalogApi.listAttributes("scents"), retry: 1, retryDelay: 500 },
-      { queryKey: ["attributes", "shapes"], queryFn: () => catalogApi.listAttributes("shapes"), retry: 1, retryDelay: 500 },
       { queryKey: ["products", "colors"], queryFn: () => catalogApi.listProductColors(), retry: 1, retryDelay: 500 },
     ],
   });
   const categories = catQ.data ?? EMPTY_CATEGORIES;
-  const materials = matQ.data ?? EMPTY_MATERIALS;
-  const scents = scentQ.data ?? EMPTY_SCENTS;
-  const shapes = shapeQ.data ?? EMPTY_SHAPES;
   const allColors = colorsQ.data ?? EMPTY_COLORS;
 
   // Category tree
@@ -453,20 +444,19 @@ const Catalog = () => {
       category_ids: activeCategoryAndDescendants
         ? Array.from(activeCategoryAndDescendants)
         : undefined,
-      material_ids: materialIds.size ? Array.from(materialIds) : undefined,
-      scent_ids: scentIds.size ? Array.from(scentIds) : undefined,
-      shape_ids: shapeIds.size ? Array.from(shapeIds) : undefined,
       colors: colorIds.size ? Array.from(colorIds) : undefined,
+      manufacturing_methods: manufacturingMethods.size ? (Array.from(manufacturingMethods) as ManufacturingMethod[]) : undefined,
+      has_scent: scentPresence === "any" ? undefined : scentPresence === "yes",
       q: search || undefined,
       in_stock: onlyInStock || undefined,
       price_min: priceMin ? Number(priceMin) : undefined,
       price_max: priceMax ? Number(priceMax) : undefined,
-      length_min: lengthMin ? Number(lengthMin) : undefined,
-      length_max: lengthMax ? Number(lengthMax) : undefined,
-      width_min: widthMin ? Number(widthMin) : undefined,
-      width_max: widthMax ? Number(widthMax) : undefined,
+      width_min: diameterMin ? Number(diameterMin) : undefined,
+      width_max: diameterMax ? Number(diameterMax) : undefined,
       height_min: heightMin ? Number(heightMin) : undefined,
       height_max: heightMax ? Number(heightMax) : undefined,
+      burn_time_min: burnTimeMin ? Number(burnTimeMin) : undefined,
+      burn_time_max: burnTimeMax ? Number(burnTimeMax) : undefined,
       sort,
       language: lang,
       currency,
@@ -474,20 +464,19 @@ const Catalog = () => {
     [
       page,
       activeCategoryAndDescendants,
-      materialIds,
-      scentIds,
-      shapeIds,
       colorIds,
+      manufacturingMethods,
+      scentPresence,
       search,
       onlyInStock,
       priceMin,
       priceMax,
-      lengthMin,
-      lengthMax,
-      widthMin,
-      widthMax,
+      diameterMin,
+      diameterMax,
       heightMin,
       heightMax,
+      burnTimeMin,
+      burnTimeMax,
       sort,
       lang,
       currency,
@@ -507,9 +496,6 @@ const Catalog = () => {
     void Promise.all([
       catQ.refetch(),
       prodQ.refetch(),
-      matQ.refetch(),
-      scentQ.refetch(),
-      shapeQ.refetch(),
       colorsQ.refetch(),
     ]);
   };
@@ -523,12 +509,12 @@ const Catalog = () => {
   const filtered = useMemo(() => {
     const pMin = priceMin ? Number(priceMin) : null;
     const pMax = priceMax ? Number(priceMax) : null;
-    const lMin = lengthMin ? Number(lengthMin) : null;
-    const lMax = lengthMax ? Number(lengthMax) : null;
-    const wMin = widthMin ? Number(widthMin) : null;
-    const wMax = widthMax ? Number(widthMax) : null;
+    const dMin = diameterMin ? Number(diameterMin) : null;
+    const dMax = diameterMax ? Number(diameterMax) : null;
     const hMin = heightMin ? Number(heightMin) : null;
     const hMax = heightMax ? Number(heightMax) : null;
+    const bMin = burnTimeMin ? Number(burnTimeMin) : null;
+    const bMax = burnTimeMax ? Number(burnTimeMax) : null;
     const list = products
       .filter((p) => activeCategoryAndDescendants ? (p.category_id ? activeCategoryAndDescendants.has(p.category_id) : false) : true)
       .filter((p) =>
@@ -537,24 +523,24 @@ const Catalog = () => {
             p.variants?.some((v) => v.sku.toLowerCase().includes(search))
           : true,
       )
-      .filter((p) => (materialIds.size ? p.material_id && materialIds.has(p.material_id) : true))
-      .filter((p) => (scentIds.size ? p.scent_id && scentIds.has(p.scent_id) : true))
-      .filter((p) => (shapeIds.size ? p.shape_id && shapeIds.has(p.shape_id) : true))
       .map((p) => ({
         ...p,
         variants: (p.variants ?? []).filter((v) => {
           if (onlyInStock && availableBoxes(v) <= 0) return false;
           if (colorIds.size && !(v.color && colorIds.has(v.color))) return false;
+          if (manufacturingMethods.size && !(v.manufacturing_method && manufacturingMethods.has(v.manufacturing_method))) return false;
+          if (scentPresence === "yes" && !v.has_scent) return false;
+          if (scentPresence === "no" && v.has_scent) return false;
           const box = variantBoxPrice(v, currency);
           if (pMin !== null && box < pMin) return false;
           if (pMax !== null && box > pMax) return false;
           // Габариты товара: если фильтр задан, у варианта должно быть значение и попадать в диапазон
-          if (lMin !== null && (v.length_mm == null || v.length_mm < lMin)) return false;
-          if (lMax !== null && (v.length_mm == null || v.length_mm > lMax)) return false;
-          if (wMin !== null && (v.width_mm == null || v.width_mm < wMin)) return false;
-          if (wMax !== null && (v.width_mm == null || v.width_mm > wMax)) return false;
+          if (dMin !== null && (v.width_mm == null || v.width_mm < dMin)) return false;
+          if (dMax !== null && (v.width_mm == null || v.width_mm > dMax)) return false;
           if (hMin !== null && (v.height_mm == null || v.height_mm < hMin)) return false;
           if (hMax !== null && (v.height_mm == null || v.height_mm > hMax)) return false;
+          if (bMin !== null && (v.burn_time_hours == null || v.burn_time_hours < bMin)) return false;
+          if (bMax !== null && (v.burn_time_hours == null || v.burn_time_hours > bMax)) return false;
           return true;
         }),
       }))
@@ -577,20 +563,19 @@ const Catalog = () => {
     search,
     onlyInStock,
     colorIds,
+    manufacturingMethods,
+    scentPresence,
     lang,
-    materialIds,
-    scentIds,
-    shapeIds,
     sort,
     currency,
     priceMin,
     priceMax,
-    lengthMin,
-    lengthMax,
-    widthMin,
-    widthMax,
+    diameterMin,
+    diameterMax,
     heightMin,
     heightMax,
+    burnTimeMin,
+    burnTimeMax,
   ]);
 
   /*
@@ -623,15 +608,14 @@ const Catalog = () => {
     colorIds,
     priceMin,
     priceMax,
-    lengthMin,
-    lengthMax,
-    widthMin,
-    widthMax,
+    diameterMin,
+    diameterMax,
     heightMin,
     heightMax,
-    materialIds,
-    scentIds,
-    shapeIds,
+    burnTimeMin,
+    burnTimeMax,
+    manufacturingMethods,
+    scentPresence,
     sort,
   ]);
 
@@ -659,17 +643,16 @@ const Catalog = () => {
       categoryIds: Array.from(categoryIds),
       onlyInStock,
       colorIds: Array.from(colorIds),
-      materialIds: Array.from(materialIds),
-      scentIds: Array.from(scentIds),
-      shapeIds: Array.from(shapeIds),
+      manufacturingMethods: Array.from(manufacturingMethods),
+      scentPresence,
       priceMin,
       priceMax,
-      lengthMin,
-      lengthMax,
-      widthMin,
-      widthMax,
+      diameterMin,
+      diameterMax,
       heightMin,
       heightMax,
+      burnTimeMin,
+      burnTimeMax,
       sort,
       view,
     }),
@@ -679,17 +662,16 @@ const Catalog = () => {
       categoryIds,
       onlyInStock,
       colorIds,
-      materialIds,
-      scentIds,
-      shapeIds,
+      manufacturingMethods,
+      scentPresence,
       priceMin,
       priceMax,
-      lengthMin,
-      lengthMax,
-      widthMin,
-      widthMax,
+      diameterMin,
+      diameterMax,
       heightMin,
       heightMax,
+      burnTimeMin,
+      burnTimeMax,
       sort,
       view,
     ],
@@ -918,26 +900,26 @@ const Catalog = () => {
   };
 
   const activeFiltersCount =
-    materialIds.size + scentIds.size + shapeIds.size + colorIds.size + categoryIds.size +
+    colorIds.size + categoryIds.size + manufacturingMethods.size +
+    (scentPresence === "any" ? 0 : 1) +
     (priceMin ? 1 : 0) + (priceMax ? 1 : 0) +
-    (lengthMin ? 1 : 0) + (lengthMax ? 1 : 0) +
-    (widthMin ? 1 : 0) + (widthMax ? 1 : 0) +
-    (heightMin ? 1 : 0) + (heightMax ? 1 : 0);
+    (diameterMin ? 1 : 0) + (diameterMax ? 1 : 0) +
+    (heightMin ? 1 : 0) + (heightMax ? 1 : 0) +
+    (burnTimeMin ? 1 : 0) + (burnTimeMax ? 1 : 0);
 
   const clearAllFilters = () => {
-    setMaterialIds(new Set());
-    setScentIds(new Set());
-    setShapeIds(new Set());
     setColorIds(new Set());
+    setManufacturingMethods(new Set());
+    setScentPresence("any");
     setCategoryIds(new Set());
     setPriceMin("");
     setPriceMax("");
-    setLengthMin("");
-    setLengthMax("");
-    setWidthMin("");
-    setWidthMax("");
+    setDiameterMin("");
+    setDiameterMax("");
     setHeightMin("");
     setHeightMax("");
+    setBurnTimeMin("");
+    setBurnTimeMax("");
     if (categorySlug) navigate("/catalog", { replace: true });
   };
 
@@ -1121,20 +1103,19 @@ const Catalog = () => {
             <RangeFilter min={priceMin} max={priceMax} onMin={setPriceMin} onMax={setPriceMax} />
           </FilterCard>
 
-          {/* Dimensions: length / width / height (mm) — as on rucandle.ru */}
-          <FilterCard title="Длина, мм" count={(lengthMin ? 1 : 0) + (lengthMax ? 1 : 0)}>
-            <RangeFilter min={lengthMin} max={lengthMax} onMin={setLengthMin} onMax={setLengthMax} unit="мм" />
-          </FilterCard>
-          <FilterCard title="Ширина, мм" count={(widthMin ? 1 : 0) + (widthMax ? 1 : 0)}>
-            <RangeFilter min={widthMin} max={widthMax} onMin={setWidthMin} onMax={setWidthMax} unit="мм" />
+          <FilterCard title="Диаметр, мм" count={(diameterMin ? 1 : 0) + (diameterMax ? 1 : 0)}>
+            <RangeFilter min={diameterMin} max={diameterMax} onMin={setDiameterMin} onMax={setDiameterMax} unit="мм" />
           </FilterCard>
           <FilterCard title="Высота, мм" count={(heightMin ? 1 : 0) + (heightMax ? 1 : 0)}>
             <RangeFilter min={heightMin} max={heightMax} onMin={setHeightMin} onMax={setHeightMax} unit="мм" />
           </FilterCard>
+          <FilterCard title="Время горения, ч" count={(burnTimeMin ? 1 : 0) + (burnTimeMax ? 1 : 0)}>
+            <RangeFilter min={burnTimeMin} max={burnTimeMax} onMin={setBurnTimeMin} onMax={setBurnTimeMax} unit="ч" />
+          </FilterCard>
 
           {/* Color chips — multi-select */}
-          {allColors.length > 0 && (
-            <FilterCard title="Цвет" count={colorIds.size}>
+          <FilterCard title="Цвет" count={colorIds.size}>
+            {allColors.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {allColors.map((c) => (
                     <button
@@ -1150,37 +1131,44 @@ const Catalog = () => {
                       {c}
                     </button>
                   ))}
-              </div>
-            </FilterCard>
-          )}
+                </div>
+            ) : (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Цвета появятся после добавления товаров.
+              </p>
+            )}
+          </FilterCard>
 
-          {materials.length > 0 && (
-            <FilterCard title="Материал" count={materialIds.size}>
-              <FilterCheckList
-                items={materials.map((m) => ({ id: m.id, label: lang === "ru" ? m.name_ru : m.name_en }))}
-                selected={materialIds}
-                onToggle={(id) => setMaterialIds((s) => toggleSet(s, id))}
-              />
-            </FilterCard>
-          )}
-          {scents.length > 0 && (
-            <FilterCard title="Аромат" count={scentIds.size}>
-              <FilterCheckList
-                items={scents.map((sc) => ({ id: sc.id, label: lang === "ru" ? sc.name_ru : sc.name_en }))}
-                selected={scentIds}
-                onToggle={(id) => setScentIds((s) => toggleSet(s, id))}
-              />
-            </FilterCard>
-          )}
-          {shapes.length > 0 && (
-            <FilterCard title="Форма" count={shapeIds.size}>
-              <FilterCheckList
-                items={shapes.map((sh) => ({ id: sh.id, label: lang === "ru" ? sh.name_ru : sh.name_en }))}
-                selected={shapeIds}
-                onToggle={(id) => setShapeIds((s) => toggleSet(s, id))}
-              />
-            </FilterCard>
-          )}
+          <FilterCard title="Способ изготовления" count={manufacturingMethods.size}>
+            <FilterCheckList
+              items={MANUFACTURING_METHODS.map((method) => ({ id: method, label: method }))}
+              selected={manufacturingMethods}
+              onToggle={(id) => setManufacturingMethods((s) => toggleSet(s, id))}
+            />
+          </FilterCard>
+          <FilterCard title="Наличие аромата" count={scentPresence === "any" ? 0 : 1}>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                ["any", "Любой"],
+                ["yes", "Да"],
+                ["no", "Нет"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setScentPresence(value as ScentPresence)}
+                  className={cn(
+                    "h-9 rounded-md border px-2 text-xs font-medium transition-colors",
+                    scentPresence === value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-foreground/80 hover:bg-accent",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </FilterCard>
         </aside>
         )}
 
@@ -1290,40 +1278,59 @@ const Catalog = () => {
                   <RangeFilter min={priceMin} max={priceMax} onMin={setPriceMin} onMax={setPriceMax} />
                 </FilterCard>
 
-                <FilterCard title="Длина, мм" count={(lengthMin ? 1 : 0) + (lengthMax ? 1 : 0)}>
-                  <RangeFilter min={lengthMin} max={lengthMax} onMin={setLengthMin} onMax={setLengthMax} unit="мм" />
-                </FilterCard>
-                <FilterCard title="Ширина, мм" count={(widthMin ? 1 : 0) + (widthMax ? 1 : 0)}>
-                  <RangeFilter min={widthMin} max={widthMax} onMin={setWidthMin} onMax={setWidthMax} unit="мм" />
+                <FilterCard title="Диаметр, мм" count={(diameterMin ? 1 : 0) + (diameterMax ? 1 : 0)}>
+                  <RangeFilter min={diameterMin} max={diameterMax} onMin={setDiameterMin} onMax={setDiameterMax} unit="мм" />
                 </FilterCard>
                 <FilterCard title="Высота, мм" count={(heightMin ? 1 : 0) + (heightMax ? 1 : 0)}>
                   <RangeFilter min={heightMin} max={heightMax} onMin={setHeightMin} onMax={setHeightMax} unit="мм" />
                 </FilterCard>
+                <FilterCard title="Время горения, ч" count={(burnTimeMin ? 1 : 0) + (burnTimeMax ? 1 : 0)}>
+                  <RangeFilter min={burnTimeMin} max={burnTimeMax} onMin={setBurnTimeMin} onMax={setBurnTimeMax} unit="ч" />
+                </FilterCard>
 
-                {allColors.length > 0 && (
-                  <FilterCard title="Цвет" count={colorIds.size}>
+                <FilterCard title="Цвет" count={colorIds.size}>
+                  {allColors.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
                       {allColors.map((c) => (
                         <button key={c} onClick={() => setColorIds((s) => toggleSet(s, c))} className={cn("rounded-md border px-2 py-1 text-xs transition-colors", colorIds.has(c) ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-accent")}>{c}</button>
                       ))}
                     </div>
-                  </FilterCard>
-                )}
-                {materials.length > 0 && (
-                  <FilterCard title="Материал" count={materialIds.size}>
-                    <FilterCheckList items={materials.map((m) => ({ id: m.id, label: lang === "ru" ? m.name_ru : m.name_en }))} selected={materialIds} onToggle={(id) => setMaterialIds((s) => toggleSet(s, id))} />
-                  </FilterCard>
-                )}
-                {scents.length > 0 && (
-                  <FilterCard title="Аромат" count={scentIds.size}>
-                    <FilterCheckList items={scents.map((sc) => ({ id: sc.id, label: lang === "ru" ? sc.name_ru : sc.name_en }))} selected={scentIds} onToggle={(id) => setScentIds((s) => toggleSet(s, id))} />
-                  </FilterCard>
-                )}
-                {shapes.length > 0 && (
-                  <FilterCard title="Форма" count={shapeIds.size}>
-                    <FilterCheckList items={shapes.map((sh) => ({ id: sh.id, label: lang === "ru" ? sh.name_ru : sh.name_en }))} selected={shapeIds} onToggle={(id) => setShapeIds((s) => toggleSet(s, id))} />
-                  </FilterCard>
-                )}
+                  ) : (
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Цвета появятся после добавления товаров.
+                    </p>
+                  )}
+                </FilterCard>
+                <FilterCard title="Способ изготовления" count={manufacturingMethods.size}>
+                  <FilterCheckList
+                    items={MANUFACTURING_METHODS.map((method) => ({ id: method, label: method }))}
+                    selected={manufacturingMethods}
+                    onToggle={(id) => setManufacturingMethods((s) => toggleSet(s, id))}
+                  />
+                </FilterCard>
+                <FilterCard title="Наличие аромата" count={scentPresence === "any" ? 0 : 1}>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      ["any", "Любой"],
+                      ["yes", "Да"],
+                      ["no", "Нет"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setScentPresence(value as ScentPresence)}
+                        className={cn(
+                          "h-9 rounded-md border px-2 text-xs font-medium transition-colors",
+                          scentPresence === value
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-foreground/80 hover:bg-accent",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </FilterCard>
 
                 {activeFiltersCount > 0 && (
                   <Button variant="outline" className="w-full" onClick={() => { clearAllFilters(); setFiltersOpen(false); }}>
@@ -1708,14 +1715,14 @@ const Catalog = () => {
               }}
             >
               {view === "grid" ? (
-                <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-2 items-start gap-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
                   {pagedItems.map(({ p, v }, i) => {
                     const cartItem = cartItems.find((ci) => ci.variantId === v.id);
                     // Cap stagger so large catalogs don't feel sluggish —
                     // cards after the 12th reveal almost simultaneously.
                     const delay = Math.min(i, 11) * 20;
                     return (
-                      <Reveal key={v.id} delay={delay} className="h-full">
+                      <Reveal key={v.id} delay={delay} className="self-start">
                         <ProductCard
                           p={p}
                           v={v}
