@@ -119,6 +119,7 @@ const Admin = () => {
   const [bulkColors, setBulkColors] = useState("");
   const [bulkPiecesPerBox, setBulkPiecesPerBox] = useState(1);
   const [bulkPrice, setBulkPrice] = useState(0);
+  const [bulkStock, setBulkStock] = useState(0);
   const [bulkSkuPrefix, setBulkSkuPrefix] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
   const [stockOpVariant, setStockOpVariant] = useState<StockOpVariant | null>(null);
@@ -405,7 +406,7 @@ const Admin = () => {
           pieces_per_box: bulkPiecesPerBox,
           price_per_piece_rub: bulkPrice,
           price_per_piece_usd: 0,
-          stock_boxes: 0,
+          stock_boxes: bulkStock,
           image_url: null,
           external_id: null,
         });
@@ -423,6 +424,7 @@ const Admin = () => {
     setBulkSkuPrefix("");
     setBulkPrice(0);
     setBulkPiecesPerBox(1);
+    setBulkStock(0);
     reloadProducts();
   };
 
@@ -1233,6 +1235,11 @@ const Admin = () => {
           onDeleteProduct={deleteProduct}
           onOpenBulkGenerator={(productId, skuPrefix) => {
             setBulkSkuPrefix(skuPrefix);
+            setBulkSizes("");
+            setBulkColors("");
+            setBulkPiecesPerBox(1);
+            setBulkPrice(0);
+            setBulkStock(0);
             setBulkVariant({ product_id: productId });
           }}
           onCreateVariant={(productId) => {
@@ -1323,6 +1330,7 @@ const Admin = () => {
         bulkColors={bulkColors}
         bulkPiecesPerBox={bulkPiecesPerBox}
         bulkPrice={bulkPrice}
+        bulkStock={bulkStock}
         bulkSkuPrefix={bulkSkuPrefix}
         bulkSaving={bulkSaving}
         categories={categories}
@@ -1340,6 +1348,7 @@ const Admin = () => {
         setBulkColors={setBulkColors}
         setBulkPiecesPerBox={setBulkPiecesPerBox}
         setBulkPrice={setBulkPrice}
+        setBulkStock={setBulkStock}
         setBulkSkuPrefix={setBulkSkuPrefix}
         onSaveProduct={saveProduct}
         onSaveVariant={saveVariant}

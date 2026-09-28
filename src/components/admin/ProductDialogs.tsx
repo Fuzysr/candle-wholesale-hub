@@ -39,6 +39,7 @@ interface ProductDialogsProps {
   bulkColors: string;
   bulkPiecesPerBox: number;
   bulkPrice: number;
+  bulkStock: number;
   bulkSkuPrefix: string;
   bulkSaving: boolean;
   categories: CategoryOut[];
@@ -56,6 +57,7 @@ interface ProductDialogsProps {
   setBulkColors: Dispatch<SetStateAction<string>>;
   setBulkPiecesPerBox: Dispatch<SetStateAction<number>>;
   setBulkPrice: Dispatch<SetStateAction<number>>;
+  setBulkStock: Dispatch<SetStateAction<number>>;
   setBulkSkuPrefix: Dispatch<SetStateAction<string>>;
   onSaveProduct: () => void;
   onSaveVariant: () => void;
@@ -75,6 +77,7 @@ export function ProductDialogs({
   bulkColors,
   bulkPiecesPerBox,
   bulkPrice,
+  bulkStock,
   bulkSkuPrefix,
   bulkSaving,
   categories,
@@ -92,6 +95,7 @@ export function ProductDialogs({
   setBulkColors,
   setBulkPiecesPerBox,
   setBulkPrice,
+  setBulkStock,
   setBulkSkuPrefix,
   onSaveProduct: saveProduct,
   onSaveVariant: saveVariant,
@@ -381,8 +385,13 @@ export function ProductDialogs({
       </Dialog>
 
       {/* BULK VARIANT GENERATOR DIALOG */}
-      <Dialog open={!!bulkVariant} onOpenChange={(o) => { if (!o) { setBulkVariant(null); setBulkSizes(""); setBulkColors(""); setBulkSkuPrefix(""); setBulkPrice(0); setBulkPiecesPerBox(1); } }}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={!!bulkVariant} onOpenChange={(o) => { if (!o) { setBulkVariant(null); setBulkSizes(""); setBulkColors(""); setBulkSkuPrefix(""); setBulkPrice(0); setBulkPiecesPerBox(1); setBulkStock(0); } }}>
+        <DialogContent
+          className="max-w-lg"
+          onInteractOutside={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onEscapeKeyDown={(event) => event.preventDefault()}
+        >
           <DialogHeader><DialogTitle>Генератор вариаций</DialogTitle></DialogHeader>
           {bulkVariant && (
             <div className="grid gap-4">
@@ -406,10 +415,11 @@ export function ProductDialogs({
                 />
                 <p className="mt-0.5 text-[11px] text-muted-foreground">Оставьте пустым, если цвет один или не нужен</p>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Field label="SKU-префикс *" value={bulkSkuPrefix} onChange={(e) => setBulkSkuPrefix(e.target.value)} />
                 <Field label="Шт. в коробке" type="number" min={1} value={bulkPiecesPerBox} onChange={(e) => setBulkPiecesPerBox(Number(e.target.value))} />
                 <Field label="Цена за шт. (₽)" type="number" min={0} step={0.01} value={bulkPrice} onChange={(e) => setBulkPrice(Number(e.target.value))} />
+                <Field label="Остаток (коробок)" type="number" min={0} value={bulkStock} onChange={(e) => setBulkStock(Number(e.target.value))} />
               </div>
               {(() => {
                 const sizes = bulkSizes.split(",").map((s) => s.trim()).filter(Boolean);
@@ -427,7 +437,15 @@ export function ProductDialogs({
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setBulkVariant(null); setBulkSizes(""); setBulkColors(""); }}>Отмена</Button>
+            <Button variant="outline" onClick={() => {
+              setBulkVariant(null);
+              setBulkSizes("");
+              setBulkColors("");
+              setBulkSkuPrefix("");
+              setBulkPrice(0);
+              setBulkPiecesPerBox(1);
+              setBulkStock(0);
+            }}>Отмена</Button>
             <Button onClick={saveBulkVariants} disabled={bulkSaving}>
               {bulkSaving ? "Создание..." : "Создать"}
             </Button>
