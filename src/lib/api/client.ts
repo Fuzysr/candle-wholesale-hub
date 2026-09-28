@@ -57,7 +57,7 @@ api.interceptors.request.use((config) => {
 let refreshPromise: Promise<boolean> | null = null;
 
 const refreshAccessToken = async (): Promise<boolean> => {
-  try {
+  const requestRefresh = async (): Promise<void> => {
     const csrf = getCsrfToken();
     await axios.post<RefreshOut>(
       `${BASE_URL}/auth/refresh`,
@@ -67,9 +67,26 @@ const refreshAccessToken = async (): Promise<boolean> => {
         headers: csrf ? { [CSRF_HEADER]: csrf } : undefined,
       },
     );
+  };
+
+  try {
+    await requestRefresh();
     notifyAuthChanged(true);
     return true;
   } catch {
+    // Another tab can rotate the refresh cookie at the same time. The first
+    // request then receives 401 for the old token, while the browser already
+    // has the replacement cookie. Retry once so a harmless cross-tab race
+    // does not log the administrator out.
+    await new Promise((resolve) => window.setTimeout(resolve, 150));
+    try {
+      await requestRefresh();
+      notifyAuthChanged(true);
+      return true;
+    } catch {
+      // Fall through to a clean probe below. A real expiry/revocation should
+      // still sign the user out instead of looping forever.
+    }
     // Another tab may have completed rotation first. HttpOnly cookies are
     // invisible to JS, so verify the shared access cookie with a clean probe.
     try {
