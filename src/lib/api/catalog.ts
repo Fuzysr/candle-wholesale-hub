@@ -91,7 +91,10 @@ export const catalogApi = {
     }),
   listProductColors: () => http.get<string[]>("/products/colors"),
   listProducts: () => listAllProducts("/products"),
-  getProductBySlug: (slug: string) => http.get<ProductOut>(`/products/${slug}`),
+  getProductBySlug: (slug: string, color?: string | null) =>
+    http.get<ProductOut>(`/products/${slug}`, {
+      params: color == null ? undefined : { color },
+    }),
   adminListProducts: () => listAllProducts("/admin/products"),
   createProduct: (body: ProductCreate) => http.post<ProductOut>("/admin/products", body),
   updateProduct: (id: string, body: ProductUpdate) =>

@@ -9,11 +9,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { getProductImage } from "@/lib/productImages";
 import {
-  availableBoxes,
   productName,
+  productMinBoxPrice,
+  productTotalStock,
   variantBoxPrice,
   variantCoverUrl,
-  variantLabel,
   type Product,
   type ProductVariant,
 } from "@/lib/catalog";
@@ -166,7 +166,10 @@ export const ProductCard = ({
   onToggleSelect?: () => void;
 }) => {
   const cover = variantCoverUrl(p, v);
-  const stock = availableBoxes(v);
+  const stock = productTotalStock(p);
+  const hasSizes = (p.variants?.length ?? 0) > 1;
+  const productColor = v.color ?? "__none__";
+  const productHref = `/product/${p.slug}?variant=${v.id}&color=${encodeURIComponent(productColor)}`;
   const inCart = cartBoxes > 0;
   const selectable = selectMode && stock > 0;
 
@@ -202,7 +205,7 @@ export const ProductCard = ({
       )}
 
       <Link
-        to={`/product/${p.slug}?variant=${v.id}`}
+        to={productHref}
         className="relative block aspect-[3/4] overflow-hidden bg-muted"
         aria-label={productName(p, lang)}
         tabIndex={selectable ? -1 : 0}
@@ -239,18 +242,23 @@ export const ProductCard = ({
           <StockIndicator stockBoxes={stock} />
         </div>
         <Link
-          to={`/product/${p.slug}?variant=${v.id}`}
+          to={productHref}
           className="mt-1 line-clamp-2 text-sm font-bold leading-snug text-foreground transition-colors hover:text-primary"
         >
           {productName(p, lang)}
         </Link>
-        <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">{variantLabel(v)}</div>
+        <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+          {v.color || "Без цвета"}{hasSizes ? ` · ${p.variants.length} размера` : v.size ? ` · ${v.size}` : ""}
+        </div>
 
         <div className="mt-2 flex items-baseline justify-between">
           <div>
-            <div className="price text-base font-bold sm:text-lg">{formatMoney(variantBoxPrice(v, currency), currency)}</div>
+            <div className="price text-base font-bold sm:text-lg">
+              {hasSizes && <span className="mr-1 text-xs font-normal text-muted-foreground">от</span>}
+              {formatMoney(productMinBoxPrice(p, currency), currency)}
+            </div>
             <div className="text-[11px] text-muted-foreground">
-              за коробку · {v.pieces_per_box} шт
+              {hasSizes ? "за коробку · выберите размер" : `за коробку · ${v.pieces_per_box} шт`}
             </div>
           </div>
         </div>
@@ -258,7 +266,7 @@ export const ProductCard = ({
         {/* Volume-discount mini-table — only when product has tiered pricing,
             mirrors the rucandle.ru pattern where buyers see the price-by-volume
             ladder directly in the grid without opening the product page. */}
-        {v.volume_discounts && v.volume_discounts.length > 0 && (() => {
+        {!hasSizes && v.volume_discounts && v.volume_discounts.length > 0 && (() => {
           const base = variantBoxPrice(v, currency);
           const tiers = [...v.volume_discounts]
             .sort((a, b) => a.min_boxes - b.min_boxes)
@@ -310,13 +318,19 @@ export const ProductCard = ({
               </button>
             </div>
           ) : (
-            <Button
-              onClick={onAdd}
-              disabled={stock <= 0}
-              className="w-full transition-all duration-200 hover:shadow-md hover:shadow-primary/25"
-            >
-              {stock > 0 ? "+ В корзину" : "Нет в наличии"}
-            </Button>
+            hasSizes && stock > 0 ? (
+              <Button asChild className="w-full transition-all duration-200 hover:shadow-md hover:shadow-primary/25">
+                <Link to={productHref}>Выбрать размер</Link>
+              </Button>
+            ) : (
+              <Button
+                onClick={onAdd}
+                disabled={stock <= 0}
+                className="w-full transition-all duration-200 hover:shadow-md hover:shadow-primary/25"
+              >
+                {stock > 0 ? "+ В корзину" : "Нет в наличии"}
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -351,8 +365,11 @@ export const MobileListRow = ({
   const cartItem = useCartStore((s) => s.items.find((i) => i.variantId === v.id));
   const setCartBoxes = useCartStore((s) => s.setBoxes);
   const removeFromCart = useCartStore((s) => s.remove);
-  const stock = availableBoxes(v);
+  const stock = productTotalStock(p);
+  const hasSizes = (p.variants?.length ?? 0) > 1;
   const cover = variantCoverUrl(p, v);
+  const productColor = v.color ?? "__none__";
+  const productHref = `/product/${p.slug}?variant=${v.id}&color=${encodeURIComponent(productColor)}`;
   const inCart = Boolean(cartItem);
   const delayMs = Math.min(index, 13) * 20;
   const selectable = selectMode && stock > 0;
@@ -392,7 +409,7 @@ export const MobileListRow = ({
         </div>
       )}
       <Link
-        to={`/product/${p.slug}?variant=${v.id}`}
+        to={productHref}
         className="block aspect-[3/4] w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
         aria-label={productName(p, lang)}
         tabIndex={selectable ? -1 : 0}
@@ -407,16 +424,17 @@ export const MobileListRow = ({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="price text-base font-bold">
-          {formatMoney(variantBoxPrice(v, currency), currency)}
+          {hasSizes && <span className="mr-1 text-xs font-normal text-muted-foreground">от</span>}
+          {formatMoney(productMinBoxPrice(p, currency), currency)}
         </div>
         <Link
-          to={`/product/${p.slug}?variant=${v.id}`}
+          to={productHref}
           className="mt-0.5 line-clamp-2 text-sm font-medium leading-snug text-foreground transition-colors hover:text-primary"
         >
           {productName(p, lang)}
         </Link>
         <div className="mt-0.5 text-xs text-muted-foreground">
-          {variantLabel(v)} · {v.pieces_per_box} шт/кор
+          {v.color || "Без цвета"}{hasSizes ? ` · ${p.variants.length} размера` : ` · ${v.size || ""} · ${v.pieces_per_box} шт/кор`}
         </div>
 
         <div
@@ -445,6 +463,8 @@ export const MobileListRow = ({
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
+          ) : hasSizes && stock > 0 ? (
+            <Button asChild size="sm" className="h-8 text-xs"><Link to={productHref}>Выбрать размер</Link></Button>
           ) : (
             <Button size="sm" className="h-8 text-xs" onClick={() => onAdd(p, v, 1)} disabled={stock <= 0}>
               {stock > 0 ? "В корзину" : "Нет"}
@@ -489,8 +509,11 @@ export const TableRow = ({
   const setCartBoxes = useCartStore((s) => s.setBoxes);
   const removeFromCart = useCartStore((s) => s.remove);
   const [qty, setQty] = useState(1);
-  const stock = availableBoxes(v);
+  const stock = productTotalStock(p);
+  const hasSizes = (p.variants?.length ?? 0) > 1;
   const cover = variantCoverUrl(p, v);
+  const productColor = v.color ?? "__none__";
+  const productHref = `/product/${p.slug}?variant=${v.id}&color=${encodeURIComponent(productColor)}`;
   const inCart = Boolean(cartItem);
   const delayMs = Math.min(index, 13) * 20;
   const selectable = selectMode && stock > 0;
@@ -531,7 +554,7 @@ export const TableRow = ({
       )}
       {/* Thumbnail */}
       <Link
-        to={`/product/${p.slug}?variant=${v.id}`}
+        to={productHref}
         className="block aspect-[3/4] w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
         aria-label={productName(p, lang)}
         tabIndex={selectable ? -1 : 0}
@@ -547,16 +570,17 @@ export const TableRow = ({
       {/* Info — middle */}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="text-lg font-bold">
-          {formatMoney(variantBoxPrice(v, currency), currency)}
+          {hasSizes && <span className="mr-1 text-xs font-normal text-muted-foreground">от</span>}
+          {formatMoney(productMinBoxPrice(p, currency), currency)}
         </div>
         <Link
-          to={`/product/${p.slug}?variant=${v.id}`}
+          to={productHref}
           className="line-clamp-1 text-sm font-medium text-foreground transition-colors hover:text-primary"
         >
           {productName(p, lang)}
         </Link>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          <span>{variantLabel(v)}</span>
+          <span>{v.color || "Без цвета"}{hasSizes ? ` · ${p.variants.length} размера` : v.size ? ` · ${v.size}` : ""}</span>
           <span>·</span>
           <span>{v.pieces_per_box} шт/кор</span>
           <span>·</span>
@@ -593,6 +617,8 @@ export const TableRow = ({
               <Trash2 className="mr-1 h-3.5 w-3.5" /> Убрать
             </Button>
           </>
+        ) : hasSizes && stock > 0 ? (
+          <Button asChild size="sm"><Link to={productHref}>Выбрать размер</Link></Button>
         ) : (
           <>
             {stock > 0 && <NumberStepper value={qty} onChange={setQty} min={1} max={stock} size="sm" />}

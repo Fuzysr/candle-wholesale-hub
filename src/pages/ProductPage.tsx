@@ -11,6 +11,7 @@ import { useAppStore } from "@/store/appStore";
 import { useCartStore } from "@/store/cartStore";
 import {
   productName,
+  productGalleryUrls,
   variantGalleryUrls,
   variantBoxPrice,
   variantLabel,
@@ -33,6 +34,7 @@ const ProductPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const urlVariantId = searchParams.get("variant");
+  const urlColor = searchParams.get("color");
   const { currency, lang } = useAppStore();
   const addItem = useCartStore((s) => s.addItem);
   const { push } = useRecentlyViewed();
@@ -41,8 +43,8 @@ const ProductPage = () => {
   const [showConfirm, setShowConfirm] = useState(false);
 
   const productQuery = useQuery({
-    queryKey: ["product", slug],
-    queryFn: () => catalogApi.getProductBySlug(slug!),
+    queryKey: ["product", slug, urlColor],
+    queryFn: () => catalogApi.getProductBySlug(slug!, urlColor),
     enabled: !!slug,
     retry: (_count, err) => !(axios.isAxiosError(err) && err.response?.status === 404),
   });
@@ -95,7 +97,11 @@ const ProductPage = () => {
 
   const stock = variant ? availableBoxes(variant) : 0;
 
-  const gallery = variantGalleryUrls(product, variant);
+  // A color card owns one shared gallery. Keep the legacy variant fallback so
+  // older records without product-level photos still render correctly.
+  const sharedGallery = productGalleryUrls(product);
+  const colorGallery = variantGalleryUrls(product, product.variants?.[0]);
+  const gallery = colorGallery.length ? colorGallery : sharedGallery;
 
   const handleAdd = () => {
     if (!variant) return;
@@ -197,11 +203,11 @@ const ProductPage = () => {
 
           {product.variants?.length > 1 && (
             <div className="mt-6">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Вариация</div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Размер</div>
               <div className="flex flex-wrap gap-2">
                 {product.variants.map((v) => {
                   const active = v.id === variant?.id;
-                  const label = variantLabel(v) || v.sku;
+                  const label = v.size || v.sku;
                   return (
                     <button
                       key={v.id}

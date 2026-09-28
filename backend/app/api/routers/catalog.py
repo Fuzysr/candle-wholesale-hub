@@ -85,6 +85,62 @@ CatalogLanguage = Literal["ru", "en"]
 CatalogCurrency = Literal["RUB", "USD"]
 
 
+def _catalog_group_key(product: Product, variant: ProductVariant) -> tuple[str, UUID | None, str]:
+    """Group a public card by product name, category and color.
+
+    Size remains a variant, while a color gets its own catalog card. The
+    normalized key makes the grouping tolerant of accidental casing/spaces in
+    imported color values without changing the stored SKU data.
+    """
+    color = (variant.color or "").strip().casefold()
+    return (product.name_ru.strip().casefold(), product.category_id, color)
+
+
+def _group_catalog_products(products: list[Product]) -> list[ProductOut]:
+    """Build color cards from legacy products that were split by size.
+
+    The first product in a group supplies the shared card metadata/gallery;
+    every matching size variant is retained with its own SKU, price and stock.
+    """
+    grouped: dict[tuple[str, UUID | None, str], ProductOut] = {}
+    for product in products:
+        for variant in product.variants:
+            key = _catalog_group_key(product, variant)
+            card = grouped.get(key)
+            if card is None:
+                card = ProductOut.model_validate(product)
+                card.variants = []
+                grouped[key] = card
+            card.variants.append(ProductVariantOut.model_validate(variant))
+            # If the first legacy product has no gallery, use the first one
+            # available in the group so the color card is never blank solely
+            # because the size records were stored separately.
+            if not card.image_url and product.image_url:
+                card.image_url = product.image_url
+            if not card.images and product.images:
+                card.images = [ProductImageOut.model_validate(image) for image in product.images]
+    return list(grouped.values())
+
+
+def _group_color_sort_key(card: ProductOut, sort: ProductSort, language: CatalogLanguage, currency: CatalogCurrency):
+    prices = [
+        (variant.price_per_piece_rub if currency == "RUB" else variant.price_per_piece_usd)
+        * variant.pieces_per_box
+        for variant in card.variants
+    ]
+    stock = sum(max(0, variant.stock_boxes - variant.reserved_boxes) for variant in card.variants)
+    name = card.name_ru if language == "ru" else card.name_en
+    if sort == "price-asc":
+        return (min(prices, default=0), name.casefold())
+    if sort == "price-desc":
+        return (-max(prices, default=0), name.casefold())
+    if sort == "stock":
+        return (-stock, name.casefold())
+    if sort == "name":
+        return (name.casefold(),)
+    return (-card.created_at.timestamp(), card.id)
+
+
 def _apply_product_filters(
     stmt,
     *,
@@ -294,20 +350,22 @@ async def search_products(
     base = _apply_product_filters(
         select(Product).where(Product.is_published.is_(True)), **filters
     )
-    total = int(
-        await session.scalar(select(func.count()).select_from(base.subquery())) or 0
-    )
-    pages = (total + page_size - 1) // page_size
+    # A public card is now a color group, not an individual legacy product.
+    # Load the already-filtered product set, merge it in memory, then paginate
+    # the resulting cards so a group can never be split across two pages.
     rows = await session.scalars(
         _apply_product_filters(
             _product_query().where(Product.is_published.is_(True)), **filters
-        )
-        .order_by(*_product_order(sort, language, currency))
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        ).order_by(*_product_order(sort, language, currency))
     )
+    grouped = _group_catalog_products(list(rows.unique().all()))
+    grouped.sort(key=lambda card: _group_color_sort_key(card, sort, language, currency))
+    total = len(grouped)
+    pages = (total + page_size - 1) // page_size
+    start = (page - 1) * page_size
+    items = grouped[start : start + page_size]
     return ProductPageOut(
-        items=list(rows.unique().all()),
+        items=items,
         total=total,
         page=page,
         page_size=page_size,
@@ -331,11 +389,40 @@ async def list_product_colors(session: AsyncSession = Depends(db_session)) -> li
 
 
 @router.get("/products/{slug}", response_model=ProductOut)
-async def get_product_by_slug(slug: str, session: AsyncSession = Depends(db_session)) -> Product:
+async def get_product_by_slug(
+    slug: str,
+    color: str | None = Query(None),
+    session: AsyncSession = Depends(db_session),
+) -> ProductOut | Product:
     product = await session.scalar(_product_query().where(Product.slug == slug))
     if product is None or not product.is_published:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product not found")
-    return product
+    if color is None:
+        return product
+
+    # The catalog links to the first legacy product's slug and carries the
+    # selected color. Collect sibling products with the same product identity,
+    # then return one color card containing all of its sizes.
+    siblings = await session.scalars(
+        _product_query()
+        .where(
+            Product.is_published.is_(True),
+            Product.name_ru == product.name_ru,
+            Product.category_id == product.category_id,
+        )
+        .order_by(Product.created_at, Product.id)
+    )
+    wanted = "" if color == "__none__" else color.strip().casefold()
+    grouped = _group_catalog_products(list(siblings.unique().all()))
+    for card in grouped:
+        card_color = next(
+            ((variant.color or "").strip().casefold() for variant in card.variants),
+            "",
+        )
+        if card_color == wanted:
+            card.slug = product.slug
+            return card
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="product color not found")
 
 
 # ========================================================================

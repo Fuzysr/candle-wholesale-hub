@@ -579,16 +579,28 @@ const Catalog = () => {
   ]);
 
   /*
-    Pagination — each product may have multiple variants and every variant is
-    rendered as its own card/row, so we paginate over the *flattened* list
-    rather than the product list. `page` is plain local state (not URL) so
+    Pagination — the API now returns one color card with multiple size
+    variants. We render one representative card per color and keep the
+    variants for the detail page. `page` is plain local state (not URL) so
     that filter changes can cleanly reset to page 1 without racing the other
     URL-writing effects. The user's filter/sort/search state is already in the
     URL, which is what matters for sharing.
   */
   const flatFiltered = useMemo(
-    () => filtered.flatMap((p) => (p.variants ?? []).map((v) => ({ p, v }))),
-    [filtered],
+    () => filtered.flatMap((p) => {
+      const variants = p.variants ?? [];
+      if (!variants.length) return [];
+      // The API returns one card per color. Keep one representative variant
+      // for the card; all sizes remain available after opening the color page.
+      const representative = [...variants].sort((a, b) => {
+        const aStock = availableBoxes(a);
+        const bStock = availableBoxes(b);
+        if (aStock !== bStock) return bStock - aStock;
+        return variantBoxPrice(a, currency) - variantBoxPrice(b, currency);
+      })[0];
+      return [{ p, v: representative }];
+    }),
+    [filtered, currency],
   );
   const totalItems = prodQ.data?.total ?? 0;
   const totalPages = Math.max(1, prodQ.data?.pages ?? 0);
