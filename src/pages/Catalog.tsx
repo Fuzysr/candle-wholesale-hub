@@ -403,18 +403,72 @@ const Catalog = () => {
   const categories = catQ.data ?? EMPTY_CATEGORIES;
   const allColors = colorsQ.data ?? EMPTY_COLORS;
 
-  // Category tree
-  const rootCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
+  // Category tree. Keep every level visible by default; users can collapse
+  // any branch with its chevron. This avoids hiding grandchildren in the
+  // filter when the admin creates nested categories.
   const childrenOf = (id: string) => categories.filter((c) => c.parent_id === id);
 
   // Auto-open the parent of the active category
   useEffect(() => {
+    setOpenCats((current) => {
+      const next = new Set(current);
+      categories.forEach((category) => {
+        if (categories.some((child) => child.parent_id === category.id)) next.add(category.id);
+      });
+      return next;
+    });
     if (!categorySlug) return;
     const active = categories.find((c) => c.slug === categorySlug);
     if (active?.parent_id) {
       setOpenCats((s) => new Set(s).add(active.parent_id!));
     }
   }, [categorySlug, categories]);
+
+  const renderCategoryNodes = (parentId: string | null, depth = 0, path = new Set<string>()): ReactNode[] =>
+    categories
+      .filter((category) => (category.parent_id ?? null) === parentId && !path.has(category.id))
+      .map((category) => {
+        const children = childrenOf(category.id);
+        const isOpen = openCats.has(category.id);
+        const checked = categoryIds.has(category.id) || categorySlug === category.slug;
+        const nextPath = new Set(path).add(category.id);
+        return (
+          <li key={category.id}>
+            <div className="flex min-h-9 items-center gap-1 rounded-md">
+              <label className={cn(
+                "flex flex-1 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-accent/60",
+                depth > 0 && "text-[13px] text-muted-foreground",
+                checked && "bg-accent font-medium text-foreground",
+              )}>
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={() => {
+                    if (categorySlug === category.slug) navigate("/catalog", { replace: true });
+                    else setCategoryIds((selected) => toggleSet(selected, category.id));
+                  }}
+                  className="border-muted-foreground/40 data-[state=checked]:border-primary"
+                />
+                {category.name_ru}
+              </label>
+              {children.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOpenCats((selected) => toggleSet(selected, category.id))}
+                  className="rounded-md p-1 transition-colors hover:bg-accent"
+                  aria-label={`${isOpen ? "Свернуть" : "Развернуть"} категорию ${category.name_ru}`}
+                >
+                  <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-300", isOpen && "rotate-180")} />
+                </button>
+              )}
+            </div>
+            {children.length > 0 && isOpen && (
+              <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-border pl-3">
+                {renderCategoryNodes(category.id, depth + 1, nextPath)}
+              </ul>
+            )}
+          </li>
+        );
+      });
 
   const activeCategoryAndDescendants = useMemo(() => {
     // Combine URL slug with manually picked categoryIds
@@ -1031,79 +1085,7 @@ const Catalog = () => {
 
           {/* Category tree — multi-select via checkboxes */}
           <FilterCard title="Категория" defaultOpen count={categoryIds.size + (categorySlug ? 1 : 0)}>
-              <ul className="space-y-0.5 text-sm">
-                {rootCategories.map((c) => {
-                  const subs = childrenOf(c.id);
-                  const isOpen = openCats.has(c.id);
-                  const checked = categoryIds.has(c.id) || categorySlug === c.slug;
-                  return (
-                    <li key={c.id}>
-                      <div className="flex items-center gap-1 rounded-md">
-                        <label className={cn(
-                          "flex flex-1 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-accent/60",
-                          checked && "bg-accent font-medium",
-                        )}>
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={() => {
-                              if (categorySlug === c.slug) {
-                                navigate("/catalog", { replace: true });
-                              } else {
-                                setCategoryIds((s) => toggleSet(s, c.id));
-                              }
-                            }}
-                            className="border-muted-foreground/40 data-[state=checked]:border-primary"
-                          />
-                          {c.name_ru}
-                        </label>
-                        {subs.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setOpenCats((s) => toggleSet(s, c.id))}
-                            className="rounded-md p-1 transition-colors hover:bg-accent"
-                            aria-label="Развернуть"
-                          >
-                            <ChevronDown
-                              className={cn(
-                                "h-3.5 w-3.5 transition-transform duration-300",
-                                isOpen && "rotate-180",
-                              )}
-                            />
-                          </button>
-                        )}
-                      </div>
-                      {subs.length > 0 && isOpen && (
-                        <ul className="ml-3 mt-0.5 space-y-0.5 border-l border-border pl-2">
-                          {subs.map((sub) => {
-                            const subChecked = categoryIds.has(sub.id) || categorySlug === sub.slug;
-                            return (
-                              <li key={sub.id}>
-                                <label className={cn(
-                                  "flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1 text-[13px] transition-colors hover:bg-accent/60",
-                                  subChecked ? "bg-accent font-medium" : "text-muted-foreground",
-                                )}>
-                                  <Checkbox
-                                    checked={subChecked}
-                                    onCheckedChange={() => {
-                                      if (categorySlug === sub.slug) {
-                                        navigate("/catalog", { replace: true });
-                                      } else {
-                                        setCategoryIds((s) => toggleSet(s, sub.id));
-                                      }
-                                    }}
-                                    className="border-muted-foreground/40 data-[state=checked]:border-primary"
-                                  />
-                                  {sub.name_ru}
-                                </label>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </li>
-                  );
-                })}
-            </ul>
+            <ul className="space-y-0.5 text-sm">{renderCategoryNodes(null)}</ul>
           </FilterCard>
 
           {/* Price range filter */}
@@ -1216,74 +1198,7 @@ const Catalog = () => {
                 </label>
 
                 <FilterCard title="Категория" defaultOpen count={categoryIds.size + (categorySlug ? 1 : 0)}>
-                  <ul className="space-y-0.5 text-sm">
-                    {rootCategories.map((c) => {
-                      const subs = childrenOf(c.id);
-                      const isOpen = openCats.has(c.id);
-                      const checked = categoryIds.has(c.id) || categorySlug === c.slug;
-                      return (
-                        <li key={c.id}>
-                          <div className="flex items-center gap-1 rounded-md">
-                            <label className={cn(
-                              "flex flex-1 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-accent/60",
-                              checked && "bg-accent font-medium",
-                            )}>
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={() => {
-                                  if (categorySlug === c.slug) {
-                                    navigate("/catalog", { replace: true });
-                                  } else {
-                                    setCategoryIds((s) => toggleSet(s, c.id));
-                                  }
-                                }}
-                                className="border-muted-foreground/40 data-[state=checked]:border-primary"
-                              />
-                              {c.name_ru}
-                            </label>
-                            {subs.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => setOpenCats((s) => toggleSet(s, c.id))}
-                                className="rounded-md p-1.5 transition-colors hover:bg-accent"
-                                aria-label="Развернуть"
-                              >
-                                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-300", isOpen && "rotate-180")} />
-                              </button>
-                            )}
-                          </div>
-                          {subs.length > 0 && isOpen && (
-                            <ul className="ml-3 mt-0.5 space-y-0.5 border-l border-border pl-2">
-                              {subs.map((sub) => {
-                                const subChecked = categoryIds.has(sub.id) || categorySlug === sub.slug;
-                                return (
-                                  <li key={sub.id}>
-                                    <label className={cn(
-                                      "flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1 text-[13px] transition-colors hover:bg-accent/60",
-                                      subChecked ? "bg-accent font-medium" : "text-muted-foreground",
-                                    )}>
-                                      <Checkbox
-                                        checked={subChecked}
-                                        onCheckedChange={() => {
-                                          if (categorySlug === sub.slug) {
-                                            navigate("/catalog", { replace: true });
-                                          } else {
-                                            setCategoryIds((s) => toggleSet(s, sub.id));
-                                          }
-                                        }}
-                                        className="border-muted-foreground/40 data-[state=checked]:border-primary"
-                                      />
-                                      {sub.name_ru}
-                                    </label>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <ul className="space-y-0.5 text-sm">{renderCategoryNodes(null)}</ul>
                 </FilterCard>
 
                 <FilterCard title="Цена за коробку" defaultOpen count={(priceMin ? 1 : 0) + (priceMax ? 1 : 0)}>
