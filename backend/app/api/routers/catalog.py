@@ -119,6 +119,16 @@ def _group_catalog_products(products: list[Product]) -> list[ProductOut]:
                 card.image_url = product.image_url
             if not card.images and product.images:
                 card.images = [ProductImageOut.model_validate(image) for image in product.images]
+            # Legacy data may have the only uploaded photo attached to a
+            # variant (for example, just the smallest size), while the
+            # product-level gallery is empty.  A catalog color card represents
+            # all sizes of that color, so use the first available variant photo
+            # as the shared fallback gallery for every size in the group.
+            if not card.image_url and not card.images:
+                if variant.image_url:
+                    card.image_url = variant.image_url
+                elif variant.images:
+                    card.image_url = min(variant.images, key=lambda item: item.sort_order).url
     return list(grouped.values())
 
 

@@ -580,7 +580,10 @@ const Catalog = () => {
       .map((p) => ({
         ...p,
         variants: (p.variants ?? []).filter((v) => {
-          if (onlyInStock && availableBoxes(v) <= 0) return false;
+          // `in_stock` is applied by the API at card level: a color card is
+          // shown when at least one of its sizes is available. Keep all sizes
+          // in the card afterwards, including temporarily empty ones, so the
+          // catalog count matches the size picker on the product page.
           if (colorIds.size && !(v.color && colorIds.has(v.color))) return false;
           if (manufacturingMethods.size && !(v.manufacturing_method && manufacturingMethods.has(v.manufacturing_method))) return false;
           if (scentPresence === "yes" && !v.has_scent) return false;
@@ -615,7 +618,6 @@ const Catalog = () => {
     products,
     activeCategoryAndDescendants,
     search,
-    onlyInStock,
     colorIds,
     manufacturingMethods,
     scentPresence,
