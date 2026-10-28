@@ -1,4 +1,5 @@
 import { http } from "./client";
+import { mockCatalogApi } from "./catalogMock";
 import type {
   AttributeCreate,
   AttributeKind,
@@ -26,6 +27,7 @@ import type {
 
 const PRODUCT_PAGE_SIZE = 200;
 const MAX_PRODUCT_PAGES = 250;
+const USE_MOCK_CATALOG = import.meta.env.VITE_MOCK_CATALOG === "true";
 
 /**
  * The backend intentionally caps list responses. Catalog screens currently
@@ -66,7 +68,7 @@ const listAllProducts = async (url: string): Promise<ProductOut[]> => {
 
 export const catalogApi = {
   // ---------- categories ----------
-  listCategories: () => http.get<CategoryOut[]>("/categories"),
+  listCategories: () => USE_MOCK_CATALOG ? mockCatalogApi.listCategories() : http.get<CategoryOut[]>("/categories"),
   createCategory: (body: CategoryCreate) => http.post<CategoryOut>("/admin/categories", body),
   updateCategory: (id: string, body: CategoryUpdate) =>
     http.patch<CategoryOut>(`/admin/categories/${id}`, body),
@@ -82,14 +84,15 @@ export const catalogApi = {
     http.delete<void>(`/admin/attributes/${kind}/${id}`),
 
   // ---------- products ----------
-  searchProducts: (params: ProductListParams = {}) =>
-    http.get<ProductPageOut>("/products/search", {
+  searchProducts: (params: ProductListParams = {}) => USE_MOCK_CATALOG
+    ? mockCatalogApi.searchProducts(params)
+    : http.get<ProductPageOut>("/products/search", {
       params,
       // FastAPI parses repeated keys (`category_ids=a&category_ids=b`). Axios
       // uses bracketed array keys by default, so make the wire format explicit.
       paramsSerializer: { indexes: null },
     }),
-  listProductColors: () => http.get<string[]>("/products/colors"),
+  listProductColors: () => USE_MOCK_CATALOG ? mockCatalogApi.listProductColors() : http.get<string[]>("/products/colors"),
   listProducts: () => listAllProducts("/products"),
   getProductBySlug: (slug: string, color?: string | null) =>
     http.get<ProductOut>(`/products/${slug}`, {

@@ -471,18 +471,42 @@ const Catalog = () => {
       });
 
   const activeCategoryAndDescendants = useMemo(() => {
-    // Combine URL slug with manually picked categoryIds
+    // Combine URL slug with manually picked categoryIds. When a parent and
+    // one of its descendants are selected, only the deepest selected branch
+    // should drive the result: "Интерьерные + Цилиндры" means cylinders
+    // inside interiors, not every item from the whole interiors branch.
     const seeds = new Set<string>(categoryIds);
     if (categorySlug) {
       const root = categories.find((c) => c.slug === categorySlug);
       if (root) seeds.add(root.id);
     }
     if (seeds.size === 0) return null;
-    const ids = new Set<string>(seeds);
-    const queue = Array.from(seeds);
+
+    const byId = new Map(categories.map((category) => [category.id, category]));
+    const isAncestor = (ancestorId: string, descendantId: string) => {
+      let parentId = byId.get(descendantId)?.parent_id ?? null;
+      const visited = new Set<string>();
+      while (parentId && !visited.has(parentId)) {
+        if (parentId === ancestorId) return true;
+        visited.add(parentId);
+        parentId = byId.get(parentId)?.parent_id ?? null;
+      }
+      return false;
+    };
+
+    // Drop selected ancestors when a more specific selected category exists.
+    // Sibling categories remain an OR group, so selecting two siblings still
+    // shows both branches of the catalog.
+    const effectiveSeeds = Array.from(seeds).filter(
+      (id) => !Array.from(seeds).some((otherId) => otherId !== id && isAncestor(id, otherId)),
+    );
+    const ids = new Set<string>();
+    const queue = [...effectiveSeeds];
     while (queue.length) {
       const id = queue.shift()!;
-      categories.filter((c) => c.parent_id === id).forEach((c) => { ids.add(c.id); queue.push(c.id); });
+      if (ids.has(id)) continue;
+      ids.add(id);
+      categories.filter((category) => category.parent_id === id).forEach((child) => queue.push(child.id));
     }
     return ids;
   }, [categorySlug, categoryIds, categories]);
