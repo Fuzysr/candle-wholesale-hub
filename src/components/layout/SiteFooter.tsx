@@ -67,7 +67,7 @@ const SiteFooter = () => {
       style={{ "--footer-hairline": `${hairline}px` } as CSSProperties}
     >
 
-      <div className="container grid gap-8 py-10 sm:grid-cols-2 sm:gap-10 md:py-14 lg:flex lg:items-start lg:justify-between lg:gap-8">
+      <div className="container grid gap-8 py-10 sm:grid-cols-2 sm:gap-10 md:py-14 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.8fr)] lg:items-start lg:gap-10 xl:gap-16">
 
         {/* Brand + description */}
 
@@ -138,7 +138,7 @@ const SiteFooter = () => {
 
                 </span>
 
-                <span className="leading-8">+7 (800) 555-12-34</span>
+                <span className="leading-8">+7 (967) 340-13-58</span>
 
               </a>
 
@@ -160,21 +160,21 @@ const SiteFooter = () => {
 
                 </span>
 
-                <span className="leading-8">info@candwax.ru</span>
+                <span className="leading-8">amoroz@mirsvechi.by</span>
 
               </a>
 
             </li>
 
-            <li className="grid min-h-8 grid-cols-[2rem_minmax(0,1fr)] items-center gap-2.5 text-muted-foreground">
+            <li className="grid min-h-8 grid-cols-[2rem_minmax(0,1fr)] items-start gap-2.5 text-muted-foreground">
 
-              <span className="grid h-8 w-8 place-items-center rounded-md bg-accent/60 text-muted-foreground">
+              <span className="mt-0.5 grid h-8 w-8 place-items-center rounded-md bg-accent/60 text-muted-foreground">
 
                 <FlaticonIcon name="marker" className="text-xs" />
 
               </span>
 
-              <span className="leading-8">г. Москва, ул. Свечная, 15</span>
+              <span className="max-w-[34rem] leading-6">МО, Одинцовский ГО, РП Новоиванковское, ул. Западная, д. 85 (М1 Сколково, Можайское шоссе) метро «Немчиновка»</span>
 
             </li>
 

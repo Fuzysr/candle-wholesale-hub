@@ -48,23 +48,21 @@ import { contactApi } from "@/lib/api/contact";
 
 const CONTACT = {
 
-  phone: "+7 (800) 555-12-34",
+  phone: "+7 (967) 340-13-58",
 
-  email: "info@mirsvechi.ru",
+  email: "amoroz@mirsvechi.by",
 
-  address: "г. Москва, ул. Свечная, 15",
+  address: "МО, Одинцовский ГО, РП Новоивановское, ул. Западная, д. 85 (М1 Сколково, Можайское шоссе) метро «Немчиновка»",
 
   hours: "Пн–Пт: 9:00–18:00",
 
-  // Approx. Red-Square area — used for the OpenStreetMap iframe below. Update
+  // Новоивановское, ул. Западная, д. 85 — used for the OpenStreetMap iframe.
 
-  // once the actual warehouse coordinates are known.
+  mapLat: 55.712568,
 
-  mapLat: 55.7558,
+  mapLon: 37.369704,
 
-  mapLon: 37.6173,
-
-  mapBbox: "37.58,55.745,37.66,55.77",
+  mapBbox: "37.34,55.69,37.40,55.73",
 
 };
 
@@ -248,7 +246,7 @@ const InfoRow = ({ icon: Icon, label, value, copy, copyLabel }: InfoRowProps) =>
 
         </span>
 
-        <span className="truncate text-base font-semibold text-foreground">
+        <span className="break-words text-base font-semibold text-foreground">
 
           {value}
 
@@ -488,7 +486,11 @@ const Contacts = () => {
 
                 {/* Work hours are informational only — no copy action. */}
 
-                <InfoRow icon={Clock} label="Режим работы" value={CONTACT.hours} />
+                <InfoRow
+                  icon={Clock}
+                  label="Режим работы"
+                  value={`${CONTACT.hours} · ${CONTACT.phone} · ${CONTACT.email}`}
+                />
 
               </div>
 

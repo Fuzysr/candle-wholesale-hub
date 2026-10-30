@@ -10,7 +10,7 @@ const TopBar = () => (
         <span className="flex items-center gap-1.5"><FlaticonIcon name="box-check" className="text-xs text-primary" />Минимум — 1 коробка</span>
       </div>
       <div className="flex items-center gap-5">
-        <a href="tel:+78005551234" className="font-semibold hover:text-primary">+7 (800) 555-12-34</a>
+        <a href="tel:+78005551234" className="font-semibold hover:text-primary">+7 (967) 340-13-58</a>
         <Link to="/contacts" className="text-background/70 hover:text-background">Помощь менеджера</Link>
       </div>
     </div>
