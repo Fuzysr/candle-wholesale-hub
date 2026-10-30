@@ -23,8 +23,6 @@ const nav = [
 
   { label: "Условия опта", to: "/wholesale-terms" },
 
-  { label: "Галерея", to: "/gallery" },
-
   { label: "О компании", to: "/contacts" },
 
 ];

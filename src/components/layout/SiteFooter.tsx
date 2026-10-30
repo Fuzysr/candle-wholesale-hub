@@ -34,8 +34,6 @@ const companyLinks: FooterLink[] = [
 
   { label: "О нас", to: "/contacts" },
 
-  { label: "Галерея", to: "/gallery" },
-
   { label: "Условия и оплата", to: "/wholesale-terms" },
 
 ];
@@ -184,30 +182,6 @@ const SiteFooter = () => {
 
 
 
-          {/* Social */}
-
-          <div className="mt-5 flex items-center gap-2">
-
-            <SocialButton href="https://t.me/" label="Telegram">
-
-              <FlaticonIcon name="telegram" brand className="translate-y-[0px] text-base" />
-
-            </SocialButton>
-
-            <SocialButton href="https://vk.com/" label="ВКонтакте">
-
-              <FlaticonIcon name="vk" brand className="translate-y-[0px] text-base" />
-
-            </SocialButton>
-
-            <SocialButton href="https://wa.me/" label="WhatsApp">
-
-              <FlaticonIcon name="whatsapp" brand className="translate-y-[0px] text-base" />
-
-            </SocialButton>
-
-          </div>
-
         </div>
 
       </div>
@@ -304,63 +278,6 @@ const FooterColumn = ({ title, links }: { title: string; links: FooterLink[] }) 
 
 );
 
-
-
-/** Circular social icon button with amber-glow hover. */
-
-const SocialButton = ({
-
-  href,
-
-  label,
-
-  children,
-
-  className,
-
-}: {
-
-  href: string;
-
-  label: string;
-
-  children: React.ReactNode;
-
-  className?: string;
-
-}) => (
-
-  <a
-
-    href={href}
-
-    target="_blank"
-
-    rel="noreferrer noopener"
-
-    aria-label={label}
-
-    title={label}
-
-    className={cn(
-
-      "group grid h-9 w-9 place-items-center rounded-full border border-border bg-background text-muted-foreground transition-all duration-300 ease-out",
-
-      "hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary hover:text-primary-foreground hover:shadow-md hover:shadow-primary/30",
-
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
-
-      className,
-
-    )}
-
-  >
-
-    <span className="grid h-full w-full place-items-center leading-none transition-transform duration-300 group-hover:scale-110">{children}</span>
-
-  </a>
-
-);
 
 
 

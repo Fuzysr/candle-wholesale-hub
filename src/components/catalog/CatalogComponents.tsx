@@ -10,7 +10,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { getProductImage } from "@/lib/productImages";
 import {
   productName,
-  productMinBoxPrice,
   productTotalStock,
   variantBoxPrice,
   variantCoverUrl,
@@ -251,18 +250,6 @@ export const ProductCard = ({
           {v.color || "Без цвета"}{hasSizes ? ` · ${p.variants.length} размера` : v.size ? ` · ${v.size}` : ""}
         </div>
 
-        <div className="mt-2 flex items-baseline justify-between">
-          <div>
-            <div className="price text-base font-bold sm:text-lg">
-              {hasSizes && <span className="mr-1 text-xs font-normal text-muted-foreground">от</span>}
-              {formatMoney(productMinBoxPrice(p, currency), currency)}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              {hasSizes ? "за коробку · выберите размер" : `за коробку · ${v.pieces_per_box} шт`}
-            </div>
-          </div>
-        </div>
-
         {/* Volume-discount mini-table — only when product has tiered pricing,
             mirrors the rucandle.ru pattern where buyers see the price-by-volume
             ladder directly in the grid without opening the product page. */}
@@ -423,10 +410,6 @@ export const MobileListRow = ({
       </Link>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="price text-base font-bold">
-          {hasSizes && <span className="mr-1 text-xs font-normal text-muted-foreground">от</span>}
-          {formatMoney(productMinBoxPrice(p, currency), currency)}
-        </div>
         <Link
           to={productHref}
           className="mt-0.5 line-clamp-2 text-sm font-medium leading-snug text-foreground transition-colors hover:text-primary"
@@ -569,10 +552,6 @@ export const TableRow = ({
 
       {/* Info — middle */}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="text-lg font-bold">
-          {hasSizes && <span className="mr-1 text-xs font-normal text-muted-foreground">от</span>}
-          {formatMoney(productMinBoxPrice(p, currency), currency)}
-        </div>
         <Link
           to={productHref}
           className="line-clamp-1 text-sm font-medium text-foreground transition-colors hover:text-primary"
