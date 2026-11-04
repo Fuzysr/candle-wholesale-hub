@@ -408,7 +408,31 @@ const Contacts = () => {
 
     <PublicLayout>
 
-      <div className="container max-w-6xl py-10 md:py-16">
+      <div className="container flex max-w-6xl flex-col gap-12 py-10 md:py-16">
+
+        <Reveal delay={0} y={20}>
+          <section className="max-w-4xl">
+            <div className="eyebrow">О нас</div>
+            <h1 className="mt-3 font-semibold tracking-tight text-[clamp(1.5rem,4vw,2.25rem)]">
+              ООО «18 ВЕК»
+            </h1>
+            <div className="mt-5 space-y-4 text-sm leading-relaxed text-foreground/80 md:text-base">
+              <p className="font-medium text-foreground">Добро пожаловать на нашу фабрику свечей!</p>
+              <p>
+                Мы — команда профессионалов, которая создает свечи, наполняя каждый дом теплом, уютом и атмосферой гармонии.
+              </p>
+              <p>
+                Наша фабрика занимается производством свечей уже более 10 лет, и за это время мы стали экспертами в своем деле. Мы предлагаем широкий ассортимент продукции: от классических восковых свечей до ароматизированных и декоративных вариантов.
+              </p>
+              <p>
+                Кроме того, мы предлагаем услуги производства свечей по OEM (Original Equipment Manufacturer). Это означает, что мы можем создать продукцию под вашим брендом, учитывая все ваши пожелания и требования. Наши специалисты помогут разработать дизайн, подобрать материалы и воплотить вашу идею в жизнь.
+              </p>
+              <p>
+                Спасибо, что выбираете нас! Мы всегда рады помочь вам найти идеальную свечу для любого случая или стать вашим надежным партнером в создании продукции под вашим брендом.
+              </p>
+            </div>
+          </section>
+        </Reveal>
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
 

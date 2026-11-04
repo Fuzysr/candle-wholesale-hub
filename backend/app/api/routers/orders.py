@@ -79,9 +79,6 @@ from app.schemas.order import (
     OrderUpdateAdmin,
 )
 from app.services.orders.inventory import (
-    assert_stock_available as _assert_stock_available_canonical,
-)
-from app.services.orders.inventory import (
     release_reservation as _release_reservation,
 )
 from app.services.orders.inventory import (
@@ -148,7 +145,8 @@ async def quote_order(
         payload.currency,
         lock_variants=False,
     )
-    _assert_stock_available_canonical(canonical)
+    # Orders are requests rather than instant stock reservations. The manager
+    # confirms the available quantity after reviewing the submitted request.
     (
         total_boxes,
         subtotal,
@@ -221,7 +219,8 @@ async def create_order(
     # locks rows for the stock-availability check and ignores any tampered
     # `unit_price`/`pieces_per_box` coming from the client (#price-canonicalisation).
     canonical = await _resolve_canonical_items(session, payload.items, payload.currency)
-    _assert_stock_available_canonical(canonical)
+    # Do not reject a request because it exceeds the current warehouse
+    # snapshot; availability is confirmed by the manager after submission.
 
     (
         total_boxes,
@@ -272,12 +271,8 @@ async def create_order(
                 line_total=line_total,
             )
         )
-        # Reserve boxes on the variant in the same transaction. The variant
-        # row is already FOR-UPDATE-locked from `_resolve_canonical_items`,
-        # so two concurrent checkouts cannot both succeed and over-sell.
-        v = r.get("variant_obj")
-        if v is not None:
-            v.reserved_boxes = (v.reserved_boxes or 0) + r["boxes"]
+        # This flow creates a request only. Inventory is not reserved until
+        # the manager confirms the order and its actual availability.
 
     # Update profile snapshot so next checkout is pre-filled.
     if payload.company_name:

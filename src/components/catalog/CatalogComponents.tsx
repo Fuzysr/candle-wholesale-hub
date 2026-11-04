@@ -19,7 +19,7 @@ import {
 import { formatMoney, type Currency, type Lang } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/appStore";
-import { useCartStore } from "@/store/cartStore";
+import { MAX_REQUEST_BOXES, useCartStore } from "@/store/cartStore";
 
 export const FilterCard = ({
   title,
@@ -290,7 +290,7 @@ export const ProductCard = ({
                 value={cartBoxes}
                 onChange={onSetBoxes}
                 min={1}
-                max={stock}
+                max={MAX_REQUEST_BOXES}
                 size="sm"
                 block
                 className="flex-1"
@@ -305,17 +305,16 @@ export const ProductCard = ({
               </button>
             </div>
           ) : (
-            hasSizes && stock > 0 ? (
+            hasSizes ? (
               <Button asChild className="w-full transition-all duration-200 hover:shadow-md hover:shadow-primary/25">
                 <Link to={productHref}>Выбрать размер</Link>
               </Button>
             ) : (
               <Button
                 onClick={onAdd}
-                disabled={stock <= 0}
                 className="w-full transition-all duration-200 hover:shadow-md hover:shadow-primary/25"
               >
-                {stock > 0 ? "+ В корзину" : "Нет в наличии"}
+                + В корзину
               </Button>
             )
           )}
@@ -433,7 +432,7 @@ export const MobileListRow = ({
                 value={cartItem!.boxes}
                 onChange={(n) => setCartBoxes(v.id, n)}
                 min={1}
-                max={stock}
+                max={MAX_REQUEST_BOXES}
                 size="sm"
                 className="flex-1"
               />
@@ -446,11 +445,11 @@ export const MobileListRow = ({
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
-          ) : hasSizes && stock > 0 ? (
+          ) : hasSizes ? (
             <Button asChild size="sm" className="h-8 text-xs"><Link to={productHref}>Выбрать размер</Link></Button>
           ) : (
-            <Button size="sm" className="h-8 text-xs" onClick={() => onAdd(p, v, 1)} disabled={stock <= 0}>
-              {stock > 0 ? "В корзину" : "Нет"}
+            <Button size="sm" className="h-8 text-xs" onClick={() => onAdd(p, v, 1)}>
+              В корзину
             </Button>
           )}
           <StockIndicator stockBoxes={stock} />
@@ -584,7 +583,7 @@ export const TableRow = ({
               value={cartItem!.boxes}
               onChange={(n) => setCartBoxes(v.id, n)}
               min={1}
-              max={stock}
+              max={MAX_REQUEST_BOXES}
               size="sm"
             />
             <Button
@@ -596,13 +595,13 @@ export const TableRow = ({
               <Trash2 className="mr-1 h-3.5 w-3.5" /> Убрать
             </Button>
           </>
-        ) : hasSizes && stock > 0 ? (
+        ) : hasSizes ? (
           <Button asChild size="sm"><Link to={productHref}>Выбрать размер</Link></Button>
         ) : (
           <>
-            {stock > 0 && <NumberStepper value={qty} onChange={setQty} min={1} max={stock} size="sm" />}
-            <Button size="sm" onClick={() => onAdd(p, v, qty)} disabled={stock <= 0}>
-              {stock > 0 ? "В корзину" : "Нет в наличии"}
+            <NumberStepper value={qty} onChange={setQty} min={1} max={MAX_REQUEST_BOXES} size="sm" />
+            <Button size="sm" onClick={() => onAdd(p, v, qty)}>
+              В корзину
             </Button>
           </>
         )}

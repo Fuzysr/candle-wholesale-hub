@@ -43,26 +43,25 @@ describe("cartStore", () => {
       expect(items[0].boxes).toBe(5);
     });
 
-    it("clamps to stockBoxes when adding", () => {
+    it("allows adding more than the current stock snapshot", () => {
       useCartStore.getState().addItem(makeItem({ stockBoxes: 3 }), 10);
-      expect(useCartStore.getState().items[0].boxes).toBe(3);
+      expect(useCartStore.getState().items[0].boxes).toBe(10);
     });
 
-    it("clamps increment to stockBoxes for existing item", () => {
+    it("allows incrementing beyond the current stock snapshot", () => {
       useCartStore.getState().addItem(makeItem({ stockBoxes: 5 }), 3);
       useCartStore.getState().addItem(makeItem({ stockBoxes: 5 }), 10);
+      expect(useCartStore.getState().items[0].boxes).toBe(13);
+    });
+
+    it("allows a request when stockBoxes=0", () => {
+      useCartStore.getState().addItem(makeItem({ stockBoxes: 0 }), 5);
       expect(useCartStore.getState().items[0].boxes).toBe(5);
     });
 
-    // BUG-8 fix: addItem with stockBoxes=0 should NOT add to cart
-    it("does not add item when stockBoxes=0", () => {
-      useCartStore.getState().addItem(makeItem({ stockBoxes: 0 }), 5);
-      expect(useCartStore.getState().items).toHaveLength(0);
-    });
-
-    it("does not add item when stockBoxes is negative", () => {
+    it("allows a request when stockBoxes is negative", () => {
       useCartStore.getState().addItem(makeItem({ stockBoxes: -1 }), 1);
-      expect(useCartStore.getState().items).toHaveLength(0);
+      expect(useCartStore.getState().items[0].boxes).toBe(1);
     });
   });
 
@@ -79,10 +78,10 @@ describe("cartStore", () => {
       expect(useCartStore.getState().items[0].boxes).toBe(1);
     });
 
-    it("clamps to stockBoxes", () => {
+    it("does not clamp to stockBoxes", () => {
       useCartStore.getState().addItem(makeItem({ stockBoxes: 10 }), 5);
       useCartStore.getState().setBoxes("v-1", 999);
-      expect(useCartStore.getState().items[0].boxes).toBe(10);
+      expect(useCartStore.getState().items[0].boxes).toBe(999);
     });
 
     it("does nothing for non-existent variant", () => {
@@ -160,21 +159,21 @@ describe("cartStore", () => {
       expect(item.volumeDiscounts).toEqual([{ min_boxes: 10, discount_percent: 5 }]);
     });
 
-    it("clamps boxes when stockBoxes decreases below current boxes", () => {
+    it("preserves requested boxes when stockBoxes decreases", () => {
       useCartStore.getState().addItem(makeItem({ variantId: "v-1", stockBoxes: 50 }), 20);
       useCartStore.getState().syncFromApi({
         "v-1": { stockBoxes: 5, discounts: [] },
       });
       const item = useCartStore.getState().items[0];
       expect(item.stockBoxes).toBe(5);
-      expect(item.boxes).toBe(5); // clamped to new stock
+      expect(item.boxes).toBe(20); // request quantity is independent from stock
     });
 
-    it("sets stockBoxes=0 and boxes=0 for variants missing from API", () => {
+    it("keeps a request when a variant is missing from the stock snapshot", () => {
       useCartStore.getState().addItem(makeItem({ variantId: "v-1", stockBoxes: 50 }));
       useCartStore.getState().syncFromApi({});
       expect(useCartStore.getState().items[0].stockBoxes).toBe(0);
-      expect(useCartStore.getState().items[0].boxes).toBe(0);
+      expect(useCartStore.getState().items[0].boxes).toBe(1);
     });
   });
 

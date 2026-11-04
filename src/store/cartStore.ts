@@ -21,6 +21,9 @@ export type CartItem = {
   volumeDiscounts?: CartVolumeDiscount[];
 };
 
+/** Request mode intentionally allows quantities above the current warehouse snapshot. */
+export const MAX_REQUEST_BOXES = 9999;
+
 type CartState = {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "boxes">, boxes?: number) => void;
@@ -46,20 +49,17 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       items: [],
       addItem: (item, boxes = 1) => {
-        if (item.stockBoxes <= 0) return;
+        const requested = Math.max(1, Math.min(MAX_REQUEST_BOXES, Math.floor(boxes) || 1));
         const existing = get().items.find((i) => i.variantId === item.variantId);
         if (existing) {
-          const next = Math.min(existing.boxes + boxes, item.stockBoxes);
-          if (next <= 0) return;
+          const next = Math.min(existing.boxes + requested, MAX_REQUEST_BOXES);
           set({
             items: get().items.map((i) =>
               i.variantId === item.variantId ? { ...i, boxes: next } : i,
             ),
           });
         } else {
-          const safe = Math.min(boxes, item.stockBoxes);
-          if (safe <= 0) return;
-          set({ items: [...get().items, { ...item, boxes: safe }] });
+          set({ items: [...get().items, { ...item, boxes: requested }] });
         }
       },
       setBoxes: (variantId, boxes) => {
@@ -67,7 +67,7 @@ export const useCartStore = create<CartState>()(
           items: get()
             .items.map((i) =>
               i.variantId === variantId
-                ? { ...i, boxes: Math.max(1, Math.min(boxes, i.stockBoxes)) }
+                ? { ...i, boxes: Math.max(1, Math.min(MAX_REQUEST_BOXES, Math.floor(boxes) || 1)) }
                 : i,
             )
             .filter((i) => i.boxes > 0),
@@ -87,13 +87,11 @@ export const useCartStore = create<CartState>()(
         set({
           items: get().items.map((i) => {
             const fresh = available[i.variantId];
-            if (!fresh) return { ...i, stockBoxes: 0, boxes: 0 };
-            const clamped = Math.min(i.boxes, fresh.stockBoxes);
+            if (!fresh) return { ...i, stockBoxes: 0 };
             return {
               ...i,
               stockBoxes: fresh.stockBoxes,
               volumeDiscounts: fresh.discounts,
-              boxes: Math.max(clamped, fresh.stockBoxes > 0 ? 1 : 0),
             };
           }),
         }),

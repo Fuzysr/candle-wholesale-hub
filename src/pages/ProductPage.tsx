@@ -8,18 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { catalogApi } from "@/lib/api";
 import { useAppStore } from "@/store/appStore";
-import { useCartStore } from "@/store/cartStore";
+import { MAX_REQUEST_BOXES, useCartStore } from "@/store/cartStore";
 import {
   productName,
   productGalleryUrls,
   variantGalleryUrls,
-  variantBoxPrice,
   variantLabel,
-  variantPrice,
   availableBoxes,
   type ProductVariant,
 } from "@/lib/catalog";
-import { formatMoney } from "@/lib/format";
 import StockIndicator from "@/components/shop/StockIndicator";
 import NumberStepper from "@/components/shop/NumberStepper";
 import ProductGallery from "@/components/shop/ProductGallery";
@@ -35,7 +32,7 @@ const ProductPage = () => {
   const [searchParams] = useSearchParams();
   const urlVariantId = searchParams.get("variant");
   const urlColor = searchParams.get("color");
-  const { currency, lang } = useAppStore();
+  const { lang } = useAppStore();
   const addItem = useCartStore((s) => s.addItem);
   const { push } = useRecentlyViewed();
   const [variantId, setVariantId] = useState<string>(urlVariantId ?? "");
@@ -226,10 +223,6 @@ const ProductPage = () => {
             <>
               <div className="mt-6 flex items-baseline justify-between">
                 <StockIndicator stockBoxes={stock} />
-                <div className="text-right">
-                  <div className="price text-2xl">{formatMoney(variantBoxPrice(variant, currency), currency)}</div>
-                  <div className="text-xs text-muted-foreground">{formatMoney(variantPrice(variant, currency), currency)} × {variant.pieces_per_box} шт / коробка</div>
-                </div>
               </div>
 
               {variant.volume_discounts?.length > 0 && (
@@ -249,15 +242,15 @@ const ProductPage = () => {
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div>
                   <div className="mb-1 text-xs text-muted-foreground">Количество коробок</div>
-                  <NumberStepper value={qty} onChange={setQty} min={1} max={stock || 1} />
+                <NumberStepper value={qty} onChange={setQty} min={1} max={MAX_REQUEST_BOXES} />
                 </div>
-                <Button size="lg" disabled={stock <= 0} onClick={handleAdd} className="w-full sm:flex-1">
+                <Button size="lg" onClick={handleAdd} className="w-full sm:flex-1">
                   Добавить в корзину
                 </Button>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {[5, 10, 25].map((n) => (
-                  <button key={n} onClick={() => setQty(Math.min(n, stock || 1))}
+                  <button key={n} onClick={() => setQty(Math.min(n, MAX_REQUEST_BOXES))}
                     className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent">+{n} кор</button>
                 ))}
               </div>

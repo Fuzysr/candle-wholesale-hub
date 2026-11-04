@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Link, useNavigate } from "react-router-dom";
 
@@ -8,21 +8,13 @@ import PublicLayout from "@/components/layout/PublicLayout";
 
 import { Button } from "@/components/ui/button";
 
-import { useCartStore } from "@/store/cartStore";
-
-import { useAppStore } from "@/store/appStore";
-
-import { formatMoney } from "@/lib/format";
+import { MAX_REQUEST_BOXES, useCartStore } from "@/store/cartStore";
 
 import { getProductImage } from "@/lib/productImages";
 
 import NumberStepper from "@/components/shop/NumberStepper";
 
-import { computeLineVolumeDiscount } from "@/lib/catalog";
-
 import { catalogApi } from "@/lib/api";
-
-import { cn } from "@/lib/utils";
 import FlaticonIcon from "@/components/ui/flaticon-icon";
 
 
@@ -32,8 +24,6 @@ const Cart = () => {
   const navigate = useNavigate();
 
   const { items, setBoxes, remove, clear, syncFromApi } = useCartStore();
-
-  const { currency } = useAppStore();
 
 
 
@@ -83,33 +73,7 @@ const Cart = () => {
 
 
 
-  const totals = useMemo(() => {
-
-    const totalBoxes = items.reduce((s, i) => s + i.boxes, 0);
-
-    let subtotalBefore = 0;
-
-    let subtotalAfter = 0;
-
-    for (const i of items) {
-
-      const price = currency === "RUB" ? i.priceRub : i.priceUsd;
-
-      const line = price * i.piecesPerBox * i.boxes;
-
-      subtotalBefore += line;
-
-      const vdPercent = computeLineVolumeDiscount(i.boxes, i.volumeDiscounts);
-
-      subtotalAfter += vdPercent > 0 ? line * (100 - vdPercent) / 100 : line;
-
-    }
-
-    const discountAmount = subtotalBefore - subtotalAfter;
-
-    return { totalBoxes, subtotal: subtotalBefore, discountAmount, total: subtotalAfter };
-
-  }, [items, currency]);
+  const totalBoxes = items.reduce((s, i) => s + i.boxes, 0);
 
 
 
@@ -118,14 +82,6 @@ const Cart = () => {
   // складе или которых меньше, чем заказано. Сервер тоже блокирует это
 
   // (POST /orders → 409), но кнопку лучше отключить заранее.
-
-  const hasStockIssues = items.some(
-
-    (i) => i.stockBoxes <= 0 || i.boxes > i.stockBoxes,
-
-  );
-
-
 
   // Track whether the main "Оформить заявку" button is visible on screen.
 
@@ -201,7 +157,7 @@ const Cart = () => {
 
         <h1 className="font-semibold tracking-tight text-[clamp(1.5rem,4vw,1.875rem)]">Корзина</h1>
 
-        <p className="mt-1 text-sm text-muted-foreground">{items.length} позиц. · {totals.totalBoxes} кор.</p>
+        <p className="mt-1 text-sm text-muted-foreground">{items.length} позиц. · {totalBoxes} кор.</p>
 
 
 
@@ -211,21 +167,9 @@ const Cart = () => {
 
             {items.map((i) => {
 
-              const price = currency === "RUB" ? i.priceRub : i.priceUsd;
-
-              const lineBefore = price * i.piecesPerBox * i.boxes;
-
-              const vdPercent = computeLineVolumeDiscount(i.boxes, i.volumeDiscounts);
-
-              const lineTotal = vdPercent > 0 ? lineBefore * (100 - vdPercent) / 100 : lineBefore;
-
-              const outOfStock = i.stockBoxes <= 0;
-
-              const overStock = !outOfStock && i.boxes > i.stockBoxes;
-
               return (
 
-                <div key={i.variantId} className={cn("flex gap-3 border-b border-border p-3 last:border-b-0 sm:gap-4 sm:p-4", outOfStock && "opacity-50 grayscale")}>
+                <div key={i.variantId} className="flex gap-3 border-b border-border p-3 last:border-b-0 sm:gap-4 sm:p-4">
 
                   <img src={getProductImage(i.image)} alt={i.productName} className="h-16 w-16 shrink-0 rounded-md object-cover sm:h-20 sm:w-20" loading="lazy" />
 
@@ -251,51 +195,9 @@ const Cart = () => {
 
                     </div>
 
-                    {(outOfStock || overStock) && (
+                    <div className="mt-3 flex items-center justify-between gap-3">
 
-                      <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-[11px] text-destructive">
-
-                        {outOfStock
-
-                          ? "Нет в наличии — удалите позицию, чтобы оформить заявку"
-
-                          : `Доступно только ${i.stockBoxes} кор. — уменьшите количество`}
-
-                      </div>
-
-                    )}
-
-                    <div className="mt-3 flex items-end justify-between gap-3">
-
-                      <NumberStepper value={i.boxes} onChange={(n) => setBoxes(i.variantId, n)} min={1} max={Math.max(1, i.stockBoxes)} />
-
-                      <div className="text-right">
-
-                        {vdPercent > 0 ? (
-
-                          <>
-
-                            <div className="price text-base">{formatMoney(lineTotal, currency)}</div>
-
-                            <div className="text-[11px] text-muted-foreground line-through">{formatMoney(lineBefore, currency)}</div>
-
-                            <div className="text-[11px] font-medium text-amber">−{vdPercent}%</div>
-
-                          </>
-
-                        ) : (
-
-                          <>
-
-                            <div className="price text-base">{formatMoney(lineTotal, currency)}</div>
-
-                            <div className="text-[11px] text-muted-foreground">{formatMoney(price * i.piecesPerBox, currency)} × {i.boxes} кор</div>
-
-                          </>
-
-                        )}
-
-                      </div>
+                      <NumberStepper value={i.boxes} onChange={(n) => setBoxes(i.variantId, n)} min={1} max={MAX_REQUEST_BOXES} />
 
                     </div>
 
@@ -325,23 +227,7 @@ const Cart = () => {
 
                 <div className="flex justify-between"><span className="text-muted-foreground">Товаров</span><span className="num">{items.length}</span></div>
 
-                <div className="flex justify-between"><span className="text-muted-foreground">Коробок</span><span className="num">{totals.totalBoxes}</span></div>
-
-                <div className="flex justify-between"><span className="text-muted-foreground">Сумма</span><span className="price">{formatMoney(totals.subtotal, currency)}</span></div>
-
-                {totals.discountAmount > 0 && (
-
-                  <div className="flex justify-between text-amber"><span>Скидка</span><span className="price">−{formatMoney(totals.discountAmount, currency)}</span></div>
-
-                )}
-
-              </div>
-
-              <div className="mt-4 flex items-baseline justify-between border-t border-border pt-4">
-
-                <span className="font-semibold">Итого</span>
-
-                <span className="price text-2xl">{formatMoney(totals.total, currency)}</span>
+                <div className="flex justify-between"><span className="text-muted-foreground">Коробок</span><span className="num">{totalBoxes}</span></div>
 
               </div>
 
@@ -353,7 +239,7 @@ const Cart = () => {
 
                 className="mt-5 w-full"
 
-                disabled={hasStockIssues}
+
 
                 onClick={() => navigate("/checkout")}
 
@@ -362,16 +248,6 @@ const Cart = () => {
                 Оформить заявку
 
               </Button>
-
-              {hasStockIssues && (
-
-                <p className="mt-3 text-[11px] text-destructive">
-
-                  Часть позиций недоступна на складе — поправьте корзину, чтобы продолжить.
-
-                </p>
-
-              )}
 
               <p className="mt-3 text-[11px] text-muted-foreground">
 
@@ -401,7 +277,7 @@ const Cart = () => {
 
           className="w-full gap-2"
 
-          disabled={hasStockIssues}
+
 
           onClick={() => navigate("/checkout")}
 
@@ -411,7 +287,7 @@ const Cart = () => {
 
           <span className="ml-1 rounded-md bg-primary-foreground/20 px-2 py-0.5 text-xs">
 
-            {totals.totalBoxes} кор. · {formatMoney(totals.total, currency)}
+            {totalBoxes} кор.
 
           </span>
 
