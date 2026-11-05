@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, Check, Clock3, MapPin, PackageCheck, Percent } from "lucide-react";
+import { ArrowRight, Check, Clock3, MapPin, PackageCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import heroImage from "@/assets/hero-candles.jpg";
@@ -9,7 +9,6 @@ import heroImage from "@/assets/hero-candles.jpg";
 const facts = ["Заказ от 1 коробки", "Оптовая цена сразу", "Остатки онлайн"];
 const terms = [
   { icon: PackageCheck, value: "1 коробка", label: "минимальный заказ" },
-  { icon: Percent, value: "до 15%", label: "скидка от объёма" },
   { icon: Clock3, value: "1–2 дня", label: "срок отгрузки" },
 ];
 
@@ -112,7 +111,7 @@ const Hero = () => {
           </motion.h1>
 
           <motion.p {...enter(0.12)} className="mt-7 max-w-2xl text-base leading-relaxed text-white/75 sm:text-lg">
-            Соберите ассортимент для магазина, студии или кофейни без закупки «на склад». Начните с одной коробки — наличие и оптовая выгода видны сразу.
+            Соберите ассортимент для магазина, студии или кофейни без закупки «на склад». Начните с одной коробки — наличие и условия заказа видны сразу.
           </motion.p>
 
           <motion.div {...enter(0.18)} className="mt-8 flex flex-col gap-3 sm:flex-row">

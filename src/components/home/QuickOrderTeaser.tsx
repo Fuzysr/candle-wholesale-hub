@@ -33,7 +33,7 @@ const QuickOrderTeaser = () => {
               variant="ghost"
               className="text-background hover:bg-background/10 hover:text-background"
             >
-              <Link to="/wholesale-terms">Условия и скидки</Link>
+              <Link to="/wholesale-terms">Условия заказа</Link>
             </Button>
           </div>
         </div>
@@ -63,7 +63,7 @@ const QuickOrderTeaser = () => {
             </div>
           ))}
           <div className="mt-2 flex items-center justify-between border-t border-background/15 px-2 pt-3">
-            <span className="text-xs text-background/60">Скидка 5% применена</span>
+            <span className="text-xs text-background/60">Условия подтверждаются менеджером</span>
             <span className="price text-base">Итого 28 747 ₽</span>
           </div>
         </div>

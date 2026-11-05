@@ -1,11 +1,10 @@
 import { useRef } from "react";
-import { Building2, Percent, RefreshCcw, Truck } from "lucide-react";
+import { Building2, RefreshCcw, Truck } from "lucide-react";
 import { motion, useReducedMotion, useScroll, useSpring, useTransform } from "framer-motion";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const items = [
   { icon: Building2, title: "Небольшой старт", text: "Тестируйте новые формы и ароматы от одной коробки — без замороженных денег в остатках." },
-  { icon: Percent, title: "Выгода растёт с объёмом", text: "Скидки до 15% применяются автоматически и видны до отправки заявки." },
   { icon: RefreshCcw, title: "Легко повторить заказ", text: "Сохраняем историю и состав заказов, чтобы пополнение полки занимало минуты." },
   { icon: Truck, title: "Предсказуемая отгрузка", text: "Подтверждаем наличие, резервируем товар и отгружаем за 1–2 рабочих дня." },
 ];

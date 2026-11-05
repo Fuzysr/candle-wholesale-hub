@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import PublicLayout from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,7 +9,6 @@ import { AUTH_ME_KEY } from "@/hooks/useAuth";
 import { useAppStore } from "@/store/appStore";
 import { useCartStore } from "@/store/cartStore";
 import { useAuth } from "@/hooks/useAuth";
-import { formatMoney } from "@/lib/format";
 import { toast } from "sonner";
 
 const Field = ({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
@@ -28,10 +27,8 @@ const Checkout = () => {
   const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({
-    company_name: "",
     contact_name: "",
     phone: "",
-    inn: "",
     email: "",
     delivery_date: "",
     customer_comment: "",
@@ -41,10 +38,8 @@ const Checkout = () => {
     if (user) {
       setForm((f) => ({
         ...f,
-        company_name: user.profile?.company_name ?? f.company_name,
         contact_name: user.profile?.contact_name ?? f.contact_name,
         phone: user.profile?.phone ?? f.phone,
-        inn: user.profile?.inn ?? f.inn,
         email: user.user.email ?? f.email,
       }));
     }
@@ -64,13 +59,7 @@ const Checkout = () => {
     [items],
   );
 
-  const quoteQuery = useQuery({
-    queryKey: ["orders", "quote", currency, orderItems],
-    queryFn: () => ordersApi.quote({ currency, items: orderItems }),
-    enabled: orderItems.length > 0 && !hasStockIssues,
-    retry: false,
-  });
-  const totals = quoteQuery.data;
+  const totalBoxes = orderItems.reduce((sum, item) => sum + item.boxes, 0);
 
   if (authLoading) {
     return (
@@ -116,10 +105,6 @@ const Checkout = () => {
       toast.error("Часть позиций недоступна на складе — поправьте корзину");
       return;
     }
-    if (!totals) {
-      toast.error("Не удалось рассчитать итоговую сумму. Повторите попытку.");
-      return;
-    }
     setSubmitting(true);
 
     try {
@@ -129,22 +114,17 @@ const Checkout = () => {
         delivery_address: null,
         delivery_date: form.delivery_date || null,
         customer_comment: form.customer_comment || null,
-        company_name: form.company_name,
         contact_name: form.contact_name,
         phone: form.phone,
-        inn: form.inn,
         email: form.email,
-        quoted_total: totals.total,
         items: orderItems,
       });
 
       // Keep the profile snapshot in sync for next checkout.
       try {
         await profileApi.update({
-          company_name: form.company_name || null,
           contact_name: form.contact_name || null,
           phone: form.phone || null,
-          inn: form.inn || null,
         });
         queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY });
       } catch {
@@ -157,7 +137,6 @@ const Checkout = () => {
       navigate(`/order/success/${order.id}`, { state: { order, guest: !user } });
     } catch (err) {
       toast.error(apiErrorMessage(err, "Не удалось создать заявку"));
-      quoteQuery.refetch();
     } finally {
       setSubmitting(false);
     }
@@ -170,10 +149,8 @@ const Checkout = () => {
         <form onSubmit={handleSubmit} className="mt-6 grid gap-6 sm:mt-8 sm:gap-8 lg:grid-cols-[1fr_340px]">
           <div className="space-y-6 rounded-lg border border-border bg-surface p-6">
             <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Реквизиты компании</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Контактные данные</h2>
               <div className="mt-3 grid gap-4 md:grid-cols-2">
-                <Field label="Название компании *" required value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} />
-                <Field label="ИНН" value={form.inn} onChange={(e) => setForm({ ...form, inn: e.target.value })} />
                 <Field label="Контактное лицо *" required value={form.contact_name} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} />
                 <Field label="Телефон *" required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
                 <Field label="Email *" required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
@@ -204,7 +181,7 @@ const Checkout = () => {
 
           <aside className="lg:sticky lg:top-24 lg:self-start">
             <div className="rounded-lg border border-border bg-surface p-5">
-              <h3 className="text-sm font-semibold">Итого по заявке</h3>
+              <h3 className="text-sm font-semibold">Состав заявки</h3>
               <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1 text-sm">
                 {items.map((i) => (
                   <div key={i.variantId} className="flex justify-between gap-2">
@@ -212,45 +189,19 @@ const Checkout = () => {
                       <div className="num text-[11px] text-muted-foreground">{i.sku}</div>
                       <div className="truncate">{i.productName}</div>
                     </div>
-                    <div className="price text-xs whitespace-nowrap">{i.boxes} × {formatMoney((currency === "RUB" ? i.priceRub : i.priceUsd) * i.piecesPerBox, currency)}</div>
+                    <div className="num text-xs whitespace-nowrap">{i.boxes} кор.</div>
                   </div>
                 ))}
               </div>
               <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
-                {quoteQuery.isPending ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-5 w-full" />
-                    <Skeleton className="h-8 w-full" />
-                  </div>
-                ) : quoteQuery.isError || !totals ? (
-                  <div className="space-y-2 text-xs text-destructive">
-                    <p>{apiErrorMessage(quoteQuery.error, "Не удалось рассчитать сумму")}</p>
-                    <Button type="button" size="sm" variant="outline" onClick={() => quoteQuery.refetch()}>
-                      Повторить расчёт
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Коробок</span><span className="num">{totals.total_boxes}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Сумма</span><span className="price">{formatMoney(totals.subtotal, currency)}</span></div>
-                    {totals.discount_amount > 0 && (
-                      <div className="flex justify-between text-amber">
-                        <span>{totals.discount_percent > 0 ? `Скидка ${totals.discount_percent}%` : "Скидка"}</span>
-                        <span className="price">−{formatMoney(totals.discount_amount, currency)}</span>
-                      </div>
-                    )}
-                    <div className="flex items-baseline justify-between border-t border-border pt-3">
-                      <span className="font-semibold">К оплате</span>
-                      <span className="price text-2xl">{formatMoney(totals.total, currency)}</span>
-                    </div>
-                  </>
-                )}
+                <div className="flex justify-between"><span className="text-muted-foreground">Коробок</span><span className="num">{totalBoxes}</span></div>
+                <p className="text-xs text-muted-foreground">Стоимость и условия менеджер подтвердит после отправки заявки.</p>
               </div>
               <Button
                 type="submit"
                 size="lg"
                 className="mt-5 w-full"
-                disabled={submitting || hasStockIssues || !totals || quoteQuery.isFetching}
+                disabled={submitting || hasStockIssues}
               >
                 {submitting ? "Отправка..." : "Отправить заявку"}
               </Button>
