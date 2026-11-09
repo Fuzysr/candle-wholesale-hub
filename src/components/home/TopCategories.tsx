@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "framer-motion";
 import { catalogApi } from "@/lib/api/catalog";
+import ResponsiveProductImage from "@/components/catalog/ResponsiveProductImage";
 
 const TopCategories = () => {
   const reduceMotion = useReducedMotion();
@@ -39,9 +40,12 @@ const TopCategories = () => {
             >
               <Link to={`/catalog/${category.slug}`} className="group relative block h-full overflow-hidden rounded-3xl bg-muted">
                 {category.home_image_url ? (
-                  <img
+                  <ResponsiveProductImage
                     src={category.home_image_url}
                     alt=""
+                    loading={index < 2 ? "eager" : "lazy"}
+                    fetchPriority={index < 2 ? "high" : "auto"}
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                     className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
                   />
                 ) : (

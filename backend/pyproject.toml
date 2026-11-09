@@ -17,6 +17,7 @@ dependencies = [
     "cryptography>=44.0.0",
     "python-multipart>=0.0.12",
     "email-validator>=2.2.0",
+    "Pillow>=11.0.0",
     # Rate-limiting middleware. Default in-memory storage works for a
     # single-uvicorn-worker deploy; multi-worker / multi-process setups
     # should configure SLOWAPI_STORAGE_URI to point at Redis.

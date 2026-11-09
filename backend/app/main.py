@@ -25,6 +25,7 @@ from app.api.routers import (  # imports must follow the email-validator patch a
     discounts,
     email,
     inventory,
+    media,
     orders,
     profile,
     stock,
@@ -154,13 +155,20 @@ def create_app() -> FastAPI:
 
     from fastapi.staticfiles import StaticFiles
 
+    class CachedStaticFiles(StaticFiles):
+        async def get_response(self, path: str, scope):  # type: ignore[no-untyped-def]
+            response = await super().get_response(path, scope)
+            if response.status_code == 200:
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return response
+
     storage_root = settings.local_storage_root
     for category in (settings.storage_category_products, settings.storage_category_company):
         category_dir = os.path.join(storage_root, category)
         os.makedirs(category_dir, exist_ok=True)
         app.mount(
             f"/uploads/{category}",
-            StaticFiles(directory=category_dir),
+            CachedStaticFiles(directory=category_dir),
             name=f"uploads-{category}",
         )
 
@@ -177,6 +185,7 @@ def create_app() -> FastAPI:
     app.include_router(company.router)
     app.include_router(stock.router)
     app.include_router(inventory.router)
+    app.include_router(media.router)
     app.include_router(uploads.router)
     app.include_router(users.router)
     app.include_router(email.router)

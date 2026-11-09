@@ -61,13 +61,15 @@ server {
     location ^~ /uploads/product-images/ {
         alias /var/lib/candwax/storage/product-images/;
         add_header X-Content-Type-Options nosniff always;
-        expires 7d;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
     }
 
     location ^~ /uploads/company-assets/ {
         alias /var/lib/candwax/storage/company-assets/;
         add_header X-Content-Type-Options nosniff always;
-        expires 7d;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
     }
 
     location ^~ /uploads/payment-receipts/ {

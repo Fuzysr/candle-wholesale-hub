@@ -1689,6 +1689,7 @@ const Catalog = () => {
                           selectMode={selectMode}
                           selected={selectedVariantIds.has(v.id)}
                           onToggleSelect={() => toggleSelected(v.id)}
+                          priority={i < 4}
                         />
                       </Reveal>
                     );
@@ -1709,6 +1710,7 @@ const Catalog = () => {
                       selectMode={selectMode}
                       selected={selectedVariantIds.has(v.id)}
                       onToggleSelect={() => toggleSelected(v.id)}
+                      priority={i < 4}
                     />
                   ))}
                 </div>
@@ -1725,6 +1727,7 @@ const Catalog = () => {
                       selectMode={selectMode}
                       selected={selectedVariantIds.has(v.id)}
                       onToggleSelect={() => toggleSelected(v.id)}
+                      priority={i < 4}
                     />
                   ))}
                 </div>

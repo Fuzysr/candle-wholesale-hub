@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Check, ChevronDown, Trash2 } from "lucide-react";
 
 import NumberStepper from "@/components/shop/NumberStepper";
+import ResponsiveProductImage from "@/components/catalog/ResponsiveProductImage";
 import StockIndicator from "@/components/shop/StockIndicator";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -150,6 +151,7 @@ export const ProductCard = ({
   selectMode = false,
   selected = false,
   onToggleSelect,
+  priority = false,
 }: {
   p: Product;
   v: ProductVariant;
@@ -163,6 +165,7 @@ export const ProductCard = ({
   selectMode?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
+  priority?: boolean;
 }) => {
   const cover = variantCoverUrl(p, v);
   const stock = productTotalStock(p);
@@ -209,10 +212,11 @@ export const ProductCard = ({
         aria-label={productName(p, lang)}
         tabIndex={selectable ? -1 : 0}
       >
-        <img
+        <ResponsiveProductImage
           src={getProductImage(cover)}
           alt={productName(p, lang)}
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
           className="h-full w-full bg-muted object-cover"
         />
         {inCart && !selectMode && (
@@ -337,6 +341,7 @@ export const MobileListRow = ({
   selectMode = false,
   selected = false,
   onToggleSelect,
+  priority = false,
 }: {
   p: Product;
   v: ProductVariant;
@@ -346,6 +351,7 @@ export const MobileListRow = ({
   selectMode?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
+  priority?: boolean;
 }) => {
   const { currency, lang } = useAppStore();
   const cartItem = useCartStore((s) => s.items.find((i) => i.variantId === v.id));
@@ -400,10 +406,11 @@ export const MobileListRow = ({
         aria-label={productName(p, lang)}
         tabIndex={selectable ? -1 : 0}
       >
-        <img
+        <ResponsiveProductImage
           src={getProductImage(cover)}
           alt={productName(p, lang)}
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
           className="h-full w-full bg-muted object-cover"
         />
       </Link>
@@ -476,6 +483,7 @@ export const TableRow = ({
   selectMode = false,
   selected = false,
   onToggleSelect,
+  priority = false,
 }: {
   p: Product;
   v: ProductVariant;
@@ -485,6 +493,7 @@ export const TableRow = ({
   selectMode?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
+  priority?: boolean;
 }) => {
   const { currency, lang } = useAppStore();
   const cartItem = useCartStore((s) => s.items.find((i) => i.variantId === v.id));
@@ -541,10 +550,11 @@ export const TableRow = ({
         aria-label={productName(p, lang)}
         tabIndex={selectable ? -1 : 0}
       >
-        <img
+        <ResponsiveProductImage
           src={getProductImage(cover)}
           alt={productName(p, lang)}
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
           className="h-full w-full bg-muted object-cover"
         />
       </Link>

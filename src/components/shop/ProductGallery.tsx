@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import ResponsiveProductImage from "@/components/catalog/ResponsiveProductImage";
 import { getProductImage } from "@/lib/productImages";
 
 type Props = { images: string[]; alt: string };
@@ -264,10 +265,13 @@ const ProductGallery = ({ images, alt }: Props) => {
         onTouchEnd={handleTouchEnd}
       >
         {/* Current image */}
-        <img
+        <ResponsiveProductImage
           src={getProductImage(current)}
           alt={alt}
           className="aspect-[3/4] w-full bg-muted object-cover"
+          sizes="(max-width: 768px) 100vw, 50vw"
+          loading="eager"
+          fetchPriority="high"
           draggable={false}
           style={{
             transform: mainImgTransform,
@@ -363,10 +367,11 @@ const ProductGallery = ({ images, alt }: Props) => {
               }`}
               aria-label={`Фото ${i + 1}`}
             >
-              <img
+              <ResponsiveProductImage
                 src={getProductImage(src)}
                 alt=""
                 className="aspect-[3/4] w-full object-cover"
+                sizes="(max-width: 768px) 25vw, 160px"
               />
             </button>
           ))}

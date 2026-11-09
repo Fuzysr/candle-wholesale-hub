@@ -11,11 +11,14 @@ endpoints which enforce:
   StaticFiles, that would land a stored XSS one click away.
 * `UPLOAD_MAX_BYTES` size cap (5 MB by default)
 """
+import asyncio
+import logging
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
 from app.api.deps import require_admin
-from app.core import storage
+from app.core import image_optimizer, storage
 from app.core.config import settings
 from app.core.mime_sniff import detect_mime
 
@@ -24,6 +27,8 @@ router = APIRouter(
     tags=["uploads"],
     dependencies=[Depends(require_admin)],
 )
+
+logger = logging.getLogger(__name__)
 
 _ALLOWED_IMAGE_TYPES = frozenset(
     {"image/jpeg", "image/png", "image/webp", "image/avif"}
@@ -93,6 +98,18 @@ async def _store_image(file: UploadFile, category: str) -> UploadOut:
 
     key = storage.generate_key(file.filename or "upload")
     url = await storage.upload_bytes(category, key, body, detected)
+    # Product/category images are public catalog media. Generate responsive
+    # derivatives once at upload time so the first customer request does not
+    # pay the image-processing cost. The original remains available as a safe
+    # fallback if a decoder cannot handle a particular legacy image.
+    if category == settings.storage_category_products:
+        try:
+            await asyncio.to_thread(
+                image_optimizer.generate_variants,
+                storage.local_path(category, key),
+            )
+        except Exception:  # pragma: no cover - depends on uploaded bytes
+            logger.warning("Could not generate image derivatives for %s", key, exc_info=True)
     return UploadOut(url=url)
 
 

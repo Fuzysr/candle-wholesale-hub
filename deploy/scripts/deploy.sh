@@ -32,6 +32,7 @@ test -f dist/index.html
 
 cd "${APP_ROOT}/backend"
 "${APP_ROOT}/backend/.venv/bin/python" -m alembic upgrade head
+"${APP_ROOT}/backend/.venv/bin/python" -m scripts.optimize_product_images
 
 sudo install -d -o www-data -g www-data "${FRONTEND_ROOT}"
 sudo rsync -a --delete "${APP_ROOT}/dist/" "${FRONTEND_ROOT}/"
