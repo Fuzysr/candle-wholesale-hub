@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { getResponsiveImageSources } from "@/lib/responsiveImages";
 
 type Props = {
@@ -22,16 +22,43 @@ const ResponsiveProductImage = ({
   style,
   draggable,
 }: Props) => {
+  const [useOriginal, setUseOriginal] = useState(false);
   const sources = getResponsiveImageSources(src);
+  useEffect(() => setUseOriginal(false), [src]);
+
+  const fallbackImage = (
+    <img
+      src={src}
+      alt={alt}
+      loading={loading}
+      decoding="async"
+      fetchPriority={fetchPriority}
+      className={className}
+      style={style}
+      draggable={draggable}
+    />
+  );
+
+  if (useOriginal) return fallbackImage;
   if (!sources) {
-    return <img src={src} alt={alt} loading={loading} decoding="async" fetchPriority={fetchPriority} className={className} style={style} draggable={draggable} />;
+    return fallbackImage;
   }
 
   return (
     <picture className="block h-full w-full">
       <source type="image/webp" srcSet={sources.webp} sizes={sizes} />
       <source type="image/jpeg" srcSet={sources.jpeg} sizes={sizes} />
-      <img src={src} alt={alt} loading={loading} decoding="async" fetchPriority={fetchPriority} className={className} style={style} draggable={draggable} />
+      <img
+        src={src}
+        alt={alt}
+        loading={loading}
+        decoding="async"
+        fetchPriority={fetchPriority}
+        className={className}
+        style={style}
+        draggable={draggable}
+        onError={() => setUseOriginal(true)}
+      />
     </picture>
   );
 };
